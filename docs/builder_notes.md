@@ -109,6 +109,7 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - `make profile-scaffold PROFILE_NAME=demo_profile` -> PASS (prints scaffold YAML snippet without file writes)
 - `make check-fixture` -> PASS (fixture lint/audit/build plus fixture golden checks passed)
 - `python3 -m py_compile scripts/build_profile.py scripts/csl_resolver.py scripts/profile_scaffold.py scripts/fixture_golden_check.py scripts/lint_manuscript.py scripts/refs_audit.py` -> PASS
+- `gh run watch 21974286056 --repo BWBrook/makedoc --exit-status` -> PASS (CI run with cached apt setup and fixture golden checks green across all jobs)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
