@@ -52,12 +52,14 @@ Out of scope for this iteration:
 - [x] Plan and builder notes scaffolding
 - [x] Makefile and gitignore implementation
 - [x] Build verification
-- [ ] GitHub private remote setup and push
+- [x] GitHub private remote setup and push
 
 ## Latest Execution Notes
 - 2026-02-13: `make check-tools`, `make all`, and `make check` all passed.
 - 2026-02-13: Build outputs created at `dist/manuscript.pdf` and `dist/manuscript.docx`.
 - 2026-02-13: Non-blocking warning observed during PDF build for Unicode em-space (`U+2003`) in manuscript text.
+- 2026-02-13: Git initialized on branch `main` and first commit created (`67e6938`).
+- 2026-02-13: Private GitHub remote created and pushed: `https://github.com/BWBrook/makedoc`.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
