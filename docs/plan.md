@@ -12,17 +12,17 @@ In scope for this iteration:
 - Basic environment/tool checks
 - Git repository initialization and first push to a private GitHub remote
 - Planning and decision documentation
+- Citation token migration (`(Author year)` -> `[@citekey]`) with ambiguity reporting
 
 Out of scope for this iteration:
-- Full citation token migration (`(Author year)` -> `[@citekey]`)
 - Figure/cross-reference wiring and numbering conventions
 - Journal-specific Word style template (`reference.docx`) tuning
 - CI automation
 
 ## Milestones
 1. Phase 1 (completed): Build scaffold and repository bootstrap
-2. Phase 2 (current): Manuscript normalization (table/math/unicode cleanup)
-3. Phase 3: Citation migration and unresolved-citation reporting
+2. Phase 2 (completed): Manuscript normalization (table/math/unicode cleanup)
+3. Phase 3 (completed): Citation migration and unresolved-citation reporting
 4. Phase 4: Figure/caption integration + cross-references
 5. Phase 5: CI/reproducibility guardrails
 
@@ -53,6 +53,19 @@ Out of scope for this iteration:
 - PDF build no longer emits the previous `U+2003` warning
 - Table row for `positive-matched control` is valid markdown and renders correctly
 
+## Phase 3 Work Package
+### Deliverables
+- `Makefile` lint target `lint-manuscript` for unresolved placeholders/manual citations
+- Manual citation conversion in `manuscript/text/draft_ms_v2.md`
+- Ambiguity and inference log at `docs/citation_conversion_report.md`
+- Updated execution evidence in `docs/builder_notes.md`
+
+### Acceptance Criteria
+- `make lint-manuscript` passes
+- `make check` passes with lint and build stages
+- No manual author-year citations remain in converted manuscript sections
+- Citation conversion caveats are documented
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -75,6 +88,9 @@ Out of scope for this iteration:
 - 2026-02-13: Private GitHub remote created and pushed: `https://github.com/BWBrook/makedoc`.
 - 2026-02-13: Phase 2 normalization edits applied to manuscript source (removed standalone em-space and corrected malformed table row).
 - 2026-02-13: `make clean && make all` and `make check` passed after normalization with no previous em-space warning.
+- 2026-02-13: Added `lint-manuscript` target and integrated it into `make check`.
+- 2026-02-13: Converted manual author-year citations in manuscript to Pandoc citekeys and removed `[REF]` placeholder.
+- 2026-02-13: Recorded citation mapping caveats in `docs/citation_conversion_report.md` and revalidated with `make lint-manuscript` + `make check`.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
