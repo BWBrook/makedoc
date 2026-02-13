@@ -142,6 +142,7 @@ Out of scope for this iteration:
 - 2026-02-13: Hardened CI into three jobs (`guard-tests`, `build-main`, `build-fixture`) with artifact summaries and uploads.
 - 2026-02-13: Suppressed GitHub error annotations for expected-failure guard fixtures via `DISABLE_GHA_ANNOTATIONS=1`.
 - 2026-02-13: Verified hardened CI passed on GitHub (`manuscript-ci` run `21972670054`) with all three jobs green.
+- 2026-02-13: Revalidated hardened CI on GitHub (`manuscript-ci` run `21972735861`) with `guard-tests`, `build-main`, and `build-fixture` all succeeding.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

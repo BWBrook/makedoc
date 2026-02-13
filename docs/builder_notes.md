@@ -78,6 +78,7 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `gh run watch 21972231252 --repo BWBrook/makedoc --exit-status` -> PASS (CI run with fixture pipeline steps completed successfully)
 - `make check-fixture-guards` (after annotation suppression fix) -> PASS (expected failures still detected; no shell invocation errors)
 - `gh run watch 21972670054 --repo BWBrook/makedoc --exit-status` -> PASS (hardened CI with `guard-tests`, `build-main`, and `build-fixture` all succeeded)
+- `gh run watch 21972735861 --repo BWBrook/makedoc --exit-status` -> PASS (repeat validation of hardened CI on latest `main` commit)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
