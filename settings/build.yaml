@@ -17,6 +17,7 @@ profiles:
       - csl
     output_dir: dist
     output_stem: manuscript
+    golden_contract: testbed/expected/golden_contract.yaml
 
   fixture:
     description: Dedicated regression fixture profile used by CI hardening checks.
@@ -34,6 +35,7 @@ profiles:
       - csl
     output_dir: dist/testbed
     output_stem: fixture_manuscript
+    golden_contract: testbed/expected/golden_contract.yaml
     edgecases:
       unknown_cite: testbed/edgecases/unknown_cite_main.md
       manual_cite: testbed/edgecases/manual_cite_main.md

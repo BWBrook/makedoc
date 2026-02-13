@@ -30,6 +30,7 @@ class Profile:
     output_stem: str
     pdf_out: str
     docx_out: str
+    golden_contract: str
     edgecase_unknown_cite: str
     edgecase_manual_cite: str
     edgecase_malformed_table: str
@@ -48,6 +49,7 @@ class Profile:
             "output_stem": self.output_stem,
             "pdf_out": self.pdf_out,
             "docx_out": self.docx_out,
+            "golden_contract": self.golden_contract,
             "edgecases": {
                 "unknown_cite": self.edgecase_unknown_cite,
                 "manual_cite": self.edgecase_manual_cite,
@@ -180,6 +182,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
     output_dir = expect_str(raw_profile, "output_dir")
     output_stem = expect_str(raw_profile, "output_stem")
     description = expect_str(raw_profile, "description", required=False)
+    golden_contract = expect_str(raw_profile, "golden_contract", required=False)
 
     csl_search_dirs = expect_list_of_str(raw_profile, "csl_search_dirs", required=False, default=[])
     if not csl_search_dirs:
@@ -221,6 +224,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         output_stem=output_stem,
         pdf_out=pdf_out,
         docx_out=docx_out,
+        golden_contract=golden_contract,
         edgecase_unknown_cite=edge_unknown.strip(),
         edgecase_manual_cite=edge_manual.strip(),
         edgecase_malformed_table=edge_table.strip(),
@@ -258,6 +262,7 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_OUTPUT_STEM": profile.output_stem,
         f"{base}_PDF_OUT": profile.pdf_out,
         f"{base}_DOCX_OUT": profile.docx_out,
+        f"{base}_GOLDEN_CONTRACT": profile.golden_contract,
         f"{base}_EDGECASE_UNKNOWN_CITE": profile.edgecase_unknown_cite,
         f"{base}_EDGECASE_MANUAL_CITE": profile.edgecase_manual_cite,
         f"{base}_EDGECASE_MALFORMED_TABLE": profile.edgecase_malformed_table,

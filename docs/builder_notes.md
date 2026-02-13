@@ -1,7 +1,7 @@
 # Builder Notes
 
 Last updated: 2026-02-13
-Context: Phase 1-7 implementation (build scaffold through config-driven and onboarding automation hardening)
+Context: Phase 1-8 implementation (build scaffold through pre-iteration hardening)
 
 ## Decision Log
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
@@ -30,6 +30,10 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - 2026-02-13: Keep cached apt setup in CI, but add explicit `apt-get install` verification in build jobs to avoid TeX font availability drift.
 - 2026-02-13: Add `wsl-smoke` aggregate Make target to validate bootstrap, profile resolution, local CSL lookup, builds, fixture golden checks, and guard tests in one command.
 - 2026-02-13: Generate profile cache include files atomically in `Makefile` to avoid parse-time race failures during concurrent make invocations.
+- 2026-02-13: Add strict config-contract validation before builds to catch schema/path regressions early.
+- 2026-02-13: Emit machine-readable build manifests for active and fixture profiles to improve reproducibility and evidence capture.
+- 2026-02-13: Keep fixture expectations in a versioned YAML contract and treat `fixture-golden-check` as a compatibility alias to `fixture-contract-check`.
+- 2026-02-13: Collect diagnostics bundles on CI failure for faster triage without rerunning jobs locally.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -73,6 +77,12 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - 2026-02-13: Added explicit build-job dependency verification step (`apt-get install -y ...`) after cache restore and revalidated green CI.
 - 2026-02-13: Added `make wsl-smoke` target and documented WSL clone options (HTTPS and SSH) in README.
 - 2026-02-13: Switched profile cache generation writes to temp-file-and-rename for concurrency safety.
+- 2026-02-13: Added `scripts/validate_build_config.py` and integrated `make validate-config` into `check` and `check-fixture`.
+- 2026-02-13: Added `scripts/build_manifest.py` and `scripts/diagnose_build.py`.
+- 2026-02-13: Added `Makefile` targets for manifests (`manifest`, `fixture-manifest`, `show-manifest`) and diagnostics (`diagnose`, `fixture-diagnose`).
+- 2026-02-13: Added fixture contract file `testbed/expected/golden_contract.yaml` and wired contract-aware fixture checks.
+- 2026-02-13: Updated CI to run config validation, publish manifest artifacts, and upload diagnostics bundles on failure.
+- 2026-02-13: Updated README and fixture expectation docs for contract/manifests/diagnostics workflows.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -121,11 +131,21 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - `gh run watch 21974394354 --repo BWBrook/makedoc --exit-status` -> PASS (cached restore + explicit apt verification produced clean green CI)
 - `make wsl-smoke` -> PASS (all bootstrap and build/guard checks completed successfully in one run)
 - `(make profile-show >/tmp/makedoc_profile_a.out & make profile-show >/tmp/makedoc_profile_b.out & wait)` -> PASS (concurrent profile cache generation remained stable)
+- `python3 -m py_compile scripts/build_profile.py scripts/validate_build_config.py scripts/build_manifest.py scripts/diagnose_build.py scripts/fixture_golden_check.py scripts/lint_manuscript.py scripts/refs_audit.py scripts/csl_resolver.py scripts/profile_scaffold.py` -> PASS
+- `python3 - <<'PY' ... yaml.safe_load('.github/workflows/ci.yml') ...` -> PASS (updated workflow YAML parses)
+- `make validate-config` -> PASS (`Build config validation passed for selected profile(s): default, fixture`)
+- `make check` (Phase 8 hardening) -> PASS (includes config validation and writes `dist/build_manifest.json`)
+- `make check-fixture` (Phase 8 hardening) -> PASS (includes config validation, fixture manifest, and contract checks)
+- `make check-fixture-guards` (Phase 8 hardening) -> PASS (all three expected-failure guards still observed)
+- `make show-manifest` -> PASS (pretty-printed active manifest JSON)
+- `make diagnose` -> PASS (created `dist/diagnostics/<timestamp>_default` bundle)
+- `make fixture-diagnose` -> PASS (created `dist/diagnostics/<timestamp>_fixture` bundle)
+- `make fixture-golden-check` -> PASS (backward-compatible alias to contract check remains valid)
+- `make manifest && make fixture-manifest` -> PASS (manifests present; make reports up-to-date)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
 
 ## Open Issues
-- 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
 - Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.
 - Further CI hardening options remain (for example richer PR annotations), now supported by both real and synthetic guard suites.

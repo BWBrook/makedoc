@@ -22,6 +22,10 @@ In scope for this iteration:
 - Lightweight fixture golden checks to detect structural regressions in rendered outputs
 - Ubuntu/WSL dependency installer script with minimal/full install tiers and size estimation
 - CI package-install caching to reduce repeated dependency provisioning time
+- Build-config contract validation and path checks
+- Build manifest generation for reproducibility (active + fixture profiles)
+- Failure diagnostics bundling for CI/local triage
+- Fixture golden-check contract externalized to YAML
 
 Out of scope for this iteration:
 - Journal-specific Word style template (`reference.docx`) tuning
@@ -34,6 +38,7 @@ Out of scope for this iteration:
 5. Phase 5 (completed): CI/reproducibility guardrails
 6. Phase 6 (completed): Config-driven orchestration + onboarding docs
 7. Phase 7 (completed): Onboarding automation + fixture golden hardening
+8. Phase 8 (completed): Pre-iteration hardening (config validation, manifests, diagnostics)
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -142,6 +147,31 @@ Out of scope for this iteration:
 - CI `build-fixture` job runs fixture golden checks after build
 - CI provisioning uses cached apt package setup across jobs
 
+## Phase 8 Work Package
+### Deliverables
+- Build config validator script at `scripts/validate_build_config.py`
+- Build manifest generator script at `scripts/build_manifest.py`
+- Build diagnostics bundle collector at `scripts/diagnose_build.py`
+- Contract-driven fixture expectations file at `testbed/expected/golden_contract.yaml`
+- `Makefile` integration for:
+  - `validate-config`
+  - `manifest` / `fixture-manifest` / `show-manifest`
+  - `diagnose` / `fixture-diagnose`
+  - `fixture-contract-check` (with backward-compatible `fixture-golden-check` alias)
+- CI updates to:
+  - run config validation in guard stage
+  - include manifest files in build artifacts
+  - collect and upload diagnostics bundles on failure
+- Documentation updates in `README.md`, `testbed/expected/README.md`, and builder notes
+
+### Acceptance Criteria
+- `make validate-config` passes for active + fixture profiles
+- `make all` writes `dist/build_manifest.json`
+- `make fixture-all` writes `dist/testbed/build_manifest.json`
+- `make diagnose` and `make fixture-diagnose` produce timestamped bundles under `dist/diagnostics/`
+- `make check-fixture` runs contract-based fixture checks using `golden_contract` path
+- CI workflow uploads manifests with build artifacts and uploads diagnostics bundles when jobs fail
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -197,6 +227,11 @@ Out of scope for this iteration:
 - 2026-02-13: Hardened cached CI dependency provisioning by adding explicit build-job package verification after cache restore.
 - 2026-02-13: Verified hardened cached CI passed on GitHub (`manuscript-ci` run `21974394354`) after resolving transient TeX font readiness regression.
 - 2026-02-13: Added `make wsl-smoke` aggregation target and README cloning/bootstrap guidance for WSL onboarding.
+- 2026-02-13: Added preflight config validation (`scripts/validate_build_config.py` + `make validate-config`).
+- 2026-02-13: Added reproducibility manifests (`scripts/build_manifest.py`) and Make targets (`manifest`, `fixture-manifest`, `show-manifest`).
+- 2026-02-13: Added diagnostics bundling (`scripts/diagnose_build.py`) and Make targets (`diagnose`, `fixture-diagnose`).
+- 2026-02-13: Externalized fixture golden expectations to `testbed/expected/golden_contract.yaml` and wired `make fixture-contract-check`.
+- 2026-02-13: Updated CI to validate config, publish manifest artifacts, and upload diagnostics bundles on failure.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

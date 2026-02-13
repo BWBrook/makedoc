@@ -9,11 +9,14 @@ PROFILE ?=
 FIXTURE_PROFILE ?= fixture
 
 CONFIG_SCRIPT ?= scripts/build_profile.py
+VALIDATE_CONFIG ?= scripts/validate_build_config.py
 PROFILE_SCAFFOLD ?= scripts/profile_scaffold.py
 LINT_SCRIPT ?= scripts/lint_manuscript.py
 REFS_AUDIT ?= scripts/refs_audit.py
 CSL_RESOLVER ?= scripts/csl_resolver.py
 GOLDEN_CHECK ?= scripts/fixture_golden_check.py
+MANIFEST_SCRIPT ?= scripts/build_manifest.py
+DIAGNOSE_SCRIPT ?= scripts/diagnose_build.py
 INSTALLER ?= scripts/install_ubuntu_deps.sh
 
 CSL_DEST_DIR ?= csl
@@ -30,6 +33,7 @@ PROFILE_OUTPUT_STEM ?=manuscript
 PROFILE_APPEND ?=0
 PROFILE_SET_DEFAULT ?=0
 PROFILE_OVERWRITE ?=0
+DIAG_OUTPUT_ROOT ?=dist/diagnostics
 
 PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
 FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
@@ -54,16 +58,19 @@ endif
 
 PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
 FIXTURE_PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
+ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/build_manifest.json
+FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/build_manifest.json
+FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
-all: pdf docx
+all: pdf docx manifest
 
 pdf: $(ACTIVE_PDF_OUT)
 
 docx: $(ACTIVE_DOCX_OUT)
 
-fixture-all: fixture-pdf fixture-docx
+fixture-all: fixture-pdf fixture-docx fixture-manifest
 
 fixture-pdf: $(FIXTURE_PDF_OUT)
 
@@ -84,11 +91,34 @@ $(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXT
 $(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
 	$(PANDOC) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_PANDOC_COMMON) -o $@
 
+$(ACTIVE_MANIFEST_OUT): $(ACTIVE_PDF_OUT) $(ACTIVE_DOCX_OUT) $(MANIFEST_SCRIPT) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(if $(strip $(ACTIVE_GOLDEN_CONTRACT)),$(ACTIVE_GOLDEN_CONTRACT),)
+	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output "$@" --pdf "$(ACTIVE_PDF_OUT)" --docx "$(ACTIVE_DOCX_OUT)"
+
+$(FIXTURE_MANIFEST_OUT): $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT) $(MANIFEST_SCRIPT) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),)
+	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
+
 check-tools:
 	@for cmd in "$(PANDOC)" "$(PDF_ENGINE)"; do \
 		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required tool: $$cmd"; exit 1; }; \
 	done
 	@echo "Tool check passed."
+
+validate-config:
+	@echo "Validating build profile config..."
+	@python3 "$(VALIDATE_CONFIG)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --profile "$(FIXTURE_PROFILE)"
+
+manifest: $(ACTIVE_MANIFEST_OUT)
+
+fixture-manifest: $(FIXTURE_MANIFEST_OUT)
+
+show-manifest: manifest
+	@python3 -c 'import json, pathlib; p=pathlib.Path("$(ACTIVE_MANIFEST_OUT)"); print(json.dumps(json.loads(p.read_text(encoding="utf-8")), indent=2))'
+
+diagnose:
+	@python3 "$(DIAGNOSE_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output-root "$(DIAG_OUTPUT_ROOT)" --manifest "$(ACTIVE_MANIFEST_OUT)"
+
+fixture-diagnose:
+	@python3 "$(DIAGNOSE_SCRIPT)" --config "$(CONFIG)" --profile "$(FIXTURE_PROFILE)" --output-root "$(DIAG_OUTPUT_ROOT)" --manifest "$(FIXTURE_MANIFEST_OUT)"
 
 profiles:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" list-profiles
@@ -146,9 +176,12 @@ fixture-refs-audit:
 	done; \
 	python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" "$${args[@]}"
 
-fixture-golden-check: $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
-	@echo "Running fixture golden-output checks..."
-	@python3 "$(GOLDEN_CHECK)" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
+fixture-contract-check: $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
+	@echo "Running fixture contract checks..."
+	@python3 "$(GOLDEN_CHECK)" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)" --contract "$(FIXTURE_CONTRACT_PATH)"
+
+fixture-golden-check: fixture-contract-check
+	@:
 
 check-fixture-guards:
 	@echo "Running fixture guard regression tests..."
@@ -193,13 +226,13 @@ csl-source:
 	done; \
 	python3 "$(CSL_RESOLVER)" source --journal "$(JOURNAL)" --dest-dir "$(CSL_DEST_DIR)" "$${args[@]}"
 
-check: check-tools lint-manuscript refs-audit
+check: check-tools validate-config lint-manuscript refs-audit
 	@$(MAKE) --no-print-directory all
 	@echo "Build check passed."
 
-check-fixture: check-tools fixture-lint fixture-refs-audit
+check-fixture: check-tools validate-config fixture-lint fixture-refs-audit
 	@$(MAKE) --no-print-directory fixture-all
-	@$(MAKE) --no-print-directory fixture-golden-check
+	@$(MAKE) --no-print-directory fixture-contract-check
 	@echo "Fixture build check passed."
 
 wsl-smoke:

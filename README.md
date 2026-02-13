@@ -70,6 +70,7 @@ cd makedoc
 ## Quick Start
 
 ```bash
+make validate-config
 make check
 make all
 ls -lh dist/
@@ -131,6 +132,7 @@ Each profile supports:
 - `csl_search_dirs`: directories scanned by CSL discovery tools
 - `output_dir`: output folder
 - `output_stem`: output basename (without extension)
+- `golden_contract`: optional fixture/contract expectations file used by structure checks
 - `edgecases` (optional):
   - `unknown_cite`
   - `manual_cite`
@@ -183,6 +185,7 @@ make csl-source JOURNAL="Ecology Letters" CSL_DEST_DIR="path/to/csl"
 Main profile:
 
 ```bash
+make validate-config
 make check
 ```
 
@@ -191,6 +194,7 @@ Fixture profile:
 ```bash
 make check-fixture
 make check-fixture-guards
+make fixture-contract-check
 make wsl-smoke
 ```
 
@@ -199,18 +203,48 @@ make wsl-smoke
 - manual author-year citations
 - malformed Markdown tables
 
-`check-fixture` now includes a lightweight fixture golden check (`scripts/fixture_golden_check.py`) that verifies:
+`check-fixture` now includes a lightweight fixture contract check (`scripts/fixture_golden_check.py`) that verifies:
 - DOCX structure includes expected table and image counts
 - PDF remains parseable and contains expected marker headings/text
+
+Contract source:
+- defaults to `testbed/expected/golden_contract.yaml`
+- can be overridden per profile via `golden_contract` in `settings/build.yaml`
+
+## Reproducibility and Diagnostics
+
+Generate build manifests:
+
+```bash
+make manifest
+make fixture-manifest
+make show-manifest
+```
+
+Manifest outputs:
+- `dist/build_manifest.json` (active profile)
+- `dist/testbed/build_manifest.json` (fixture profile)
+
+Collect diagnostics bundles (useful for CI failures and local triage):
+
+```bash
+make diagnose
+make fixture-diagnose
+```
+
+Default diagnostics root:
+- `dist/diagnostics/<timestamp>_<profile>/`
+- includes metadata, profile snapshot, manifest copy (if present), source excerpts, and logs
 
 ## CI
 
 GitHub Actions workflow: `.github/workflows/ci.yml`
 
 Jobs:
-- `guard-tests`: lint/audit/negative-guard checks
-- `build-main`: build active profile outputs + upload artifacts
-- `build-fixture`: build fixture outputs, run golden checks, upload artifacts
+- `guard-tests`: config validation + lint/audit/negative-guard checks
+- `build-main`: build active profile outputs + manifest + upload artifacts
+- `build-fixture`: build fixture outputs + manifest + contract checks + upload artifacts
+- both build jobs collect and upload diagnostics bundles when failures occur
 
 Dependency caching:
 - CI uses cached apt package installs through `awalsh128/cache-apt-pkgs-action` to reduce repeated provisioning time.

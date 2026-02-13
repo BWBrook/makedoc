@@ -1,0 +1,8 @@
+expect_tables: 1
+expect_drawings: 3
+min_pdf_pages: 1
+required_text:
+  - Fixture Manuscript Title
+  - Fixture Table
+  - Fixture Figures
+  - Discussion

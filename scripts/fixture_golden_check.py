@@ -11,6 +11,8 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+import yaml
+
 
 DEFAULT_REQUIRED_TEXT = [
     "Fixture Manuscript Title",
@@ -18,6 +20,10 @@ DEFAULT_REQUIRED_TEXT = [
     "Fixture Figures",
     "Discussion",
 ]
+DEFAULT_EXPECT_TABLES = 1
+DEFAULT_EXPECT_DRAWINGS = 3
+DEFAULT_MIN_PDF_PAGES = 1
+DEFAULT_CONTRACT_PATH = Path("testbed/expected/golden_contract.yaml")
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,24 +31,48 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--docx", required=True, help="Path to fixture DOCX output.")
     parser.add_argument("--pdf", required=True, help="Path to fixture PDF output.")
     parser.add_argument(
+        "--contract",
+        default=str(DEFAULT_CONTRACT_PATH),
+        help=(
+            "Path to fixture golden contract YAML. Defaults to "
+            "testbed/expected/golden_contract.yaml."
+        ),
+    )
+    parser.add_argument(
         "--expect-tables",
         type=int,
-        default=1,
-        help="Minimum number of table elements expected in DOCX (default: 1).",
+        default=None,
+        help="Minimum number of table elements expected in DOCX (overrides contract).",
     )
     parser.add_argument(
         "--expect-drawings",
         type=int,
-        default=3,
-        help="Minimum number of drawing/image elements expected in DOCX (default: 3).",
+        default=None,
+        help="Minimum number of drawing/image elements expected in DOCX (overrides contract).",
+    )
+    parser.add_argument(
+        "--min-pdf-pages",
+        type=int,
+        default=None,
+        help="Minimum page count expected in generated PDF (overrides contract).",
     )
     parser.add_argument(
         "--require-text",
         action="append",
-        default=[],
-        help="Text marker expected in both DOCX and PDF output (repeatable).",
+        default=None,
+        help="Text marker expected in both DOCX and PDF output (repeatable; overrides contract).",
     )
     return parser.parse_args()
+
+
+def load_contract(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Contract file must contain mapping root: {path}")
+    return data
 
 
 def normalize_text(text: str) -> str:
@@ -94,9 +124,40 @@ def main() -> int:
     args = parse_args()
     docx_path = Path(args.docx)
     pdf_path = Path(args.pdf)
+    contract_path = Path(args.contract)
 
     errors: list[str] = []
-    required_text = args.require_text or DEFAULT_REQUIRED_TEXT
+    try:
+        contract = load_contract(contract_path)
+    except (ValueError, yaml.YAMLError) as exc:
+        print(f"ERROR: unable to read contract: {exc}")
+        return 1
+
+    contract_required_text = contract.get("required_text", DEFAULT_REQUIRED_TEXT)
+    if not isinstance(contract_required_text, list) or not all(
+        isinstance(item, str) for item in contract_required_text
+    ):
+        print("ERROR: contract key 'required_text' must be a list of strings.")
+        return 1
+
+    contract_expect_tables = contract.get("expect_tables", DEFAULT_EXPECT_TABLES)
+    contract_expect_drawings = contract.get("expect_drawings", DEFAULT_EXPECT_DRAWINGS)
+    contract_min_pdf_pages = contract.get("min_pdf_pages", DEFAULT_MIN_PDF_PAGES)
+    for key, value in {
+        "expect_tables": contract_expect_tables,
+        "expect_drawings": contract_expect_drawings,
+        "min_pdf_pages": contract_min_pdf_pages,
+    }.items():
+        if not isinstance(value, int):
+            print(f"ERROR: contract key '{key}' must be an integer.")
+            return 1
+
+    expect_tables = args.expect_tables if args.expect_tables is not None else int(contract_expect_tables)
+    expect_drawings = (
+        args.expect_drawings if args.expect_drawings is not None else int(contract_expect_drawings)
+    )
+    min_pdf_pages = args.min_pdf_pages if args.min_pdf_pages is not None else int(contract_min_pdf_pages)
+    required_text = args.require_text if args.require_text is not None else list(contract_required_text)
 
     if not docx_path.exists():
         errors.append(f"DOCX file missing: {docx_path}")
@@ -113,11 +174,11 @@ def main() -> int:
         print(f"ERROR: unable to inspect DOCX structure: {exc}")
         return 1
 
-    if table_count < args.expect_tables:
-        errors.append(f"DOCX table count {table_count} is below expected minimum {args.expect_tables}.")
-    if drawing_count < args.expect_drawings:
+    if table_count < expect_tables:
+        errors.append(f"DOCX table count {table_count} is below expected minimum {expect_tables}.")
+    if drawing_count < expect_drawings:
         errors.append(
-            f"DOCX drawing count {drawing_count} is below expected minimum {args.expect_drawings}."
+            f"DOCX drawing count {drawing_count} is below expected minimum {expect_drawings}."
         )
 
     try:
@@ -126,8 +187,10 @@ def main() -> int:
         errors.append(str(exc))
         pdf_pages = 0
     else:
-        if pdf_pages < 1:
-            errors.append("PDF page count is zero.")
+        if pdf_pages < min_pdf_pages:
+            errors.append(
+                f"PDF page count {pdf_pages} is below expected minimum {min_pdf_pages}."
+            )
 
     try:
         pdf_text = read_pdf_text(pdf_path)
@@ -148,6 +211,7 @@ def main() -> int:
     print(f"DOCX drawings: {drawing_count}")
     if pdf_pages:
         print(f"PDF pages: {pdf_pages}")
+    print(f"Contract: {contract_path} ({'found' if contract_path.exists() else 'missing, defaults used'})")
     print(f"Required text markers: {len(required_text)}")
 
     if errors:

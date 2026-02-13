@@ -34,6 +34,10 @@ jobs:
           python3 --version
           rg --version | head -n 1
 
+      - name: Validate build config
+        run: |
+          make validate-config
+
       - name: Run manuscript and fixture guards
         run: |
           make lint-manuscript
@@ -74,7 +78,20 @@ jobs:
 
       - name: Summarize main artifacts
         run: |
-          ls -lh dist/manuscript.pdf dist/manuscript.docx >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist/manuscript.pdf dist/manuscript.docx dist/build_manifest.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect main diagnostics on failure
+        if: failure()
+        run: |
+          make diagnose
+
+      - name: Upload main diagnostics (failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manuscript-main-diagnostics
+          path: dist/diagnostics/**/*
+          if-no-files-found: ignore
 
       - name: Upload build artifacts
         if: always()
@@ -84,6 +101,7 @@ jobs:
           path: |
             dist/manuscript.pdf
             dist/manuscript.docx
+            dist/build_manifest.json
           if-no-files-found: ignore
 
   build-fixture:
@@ -116,11 +134,24 @@ jobs:
         run: |
           make check-tools
           make fixture-all
-          make fixture-golden-check
+          make fixture-contract-check
 
       - name: Summarize fixture artifacts
         run: |
-          ls -lh dist/testbed/fixture_manuscript.pdf dist/testbed/fixture_manuscript.docx >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist/testbed/fixture_manuscript.pdf dist/testbed/fixture_manuscript.docx dist/testbed/build_manifest.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect fixture diagnostics on failure
+        if: failure()
+        run: |
+          make fixture-diagnose
+
+      - name: Upload fixture diagnostics (failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manuscript-fixture-diagnostics
+          path: dist/diagnostics/**/*
+          if-no-files-found: ignore
 
       - name: Upload fixture artifacts
         if: always()
@@ -130,4 +161,5 @@ jobs:
           path: |
             dist/testbed/fixture_manuscript.pdf
             dist/testbed/fixture_manuscript.docx
+            dist/testbed/build_manifest.json
           if-no-files-found: ignore
