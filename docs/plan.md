@@ -40,7 +40,7 @@ Out of scope for this iteration:
 6. Phase 6 (completed): Config-driven orchestration + onboarding docs
 7. Phase 7 (completed): Onboarding automation + fixture golden hardening
 8. Phase 8 (completed): Pre-iteration hardening (config validation, manifests, diagnostics)
-9. Phase 9 (in progress): Profile-controlled layout options for PDF output
+9. Phase 9 (completed): Profile-controlled layout options for PDF output
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -168,8 +168,8 @@ Out of scope for this iteration:
 
 ### Acceptance Criteria
 - `make validate-config` passes for active + fixture profiles
-- `make all` writes `dist/build_manifest.json`
-- `make fixture-all` writes `dist/testbed/build_manifest.json`
+- `make manifest` writes `<dist>/<profile-root>/<output_stem>_build_manifest.json`
+- `make fixture-manifest` writes `dist/testbed/fixture_manuscript_build_manifest.json` for the fixture profile
 - `make diagnose` and `make fixture-diagnose` produce timestamped bundles under `dist/diagnostics/`
 - `make check-fixture` runs contract-based fixture checks using `golden_contract` path
 - CI workflow uploads manifests with build artifacts and uploads diagnostics bundles when jobs fail
@@ -179,8 +179,16 @@ Out of scope for this iteration:
 - Page-number mode control with sane defaults and profile overrides
 - Line-spacing controls (single, 1.5, 2) driven by profile config
 - Line-numbering controls (continuous, by page, by section, off)
+- Margin controls:
+  - `margins.unit` (`cm`, `in`)
+  - `margins.paper_size` (`a4`, `letter`)
+  - `margins.top/right/bottom/left` numeric side values
+- `scripts/build_profile.py` validates and resolves the `margins` mapping
 - LaTeX header generation per profile and integration into PDF rules
 - Config validation, scaffold, and README schema docs updated for new keys
+- Output-directory routing:
+  - If a profile's `output_dir` is `dist`, automatically emit outputs under `dist/<profile-root>/`.
+  - `<profile-root>` is inferred from source location (`manuscript` parent when present, otherwise git repo name, otherwise `manuscript-#`).
 - Reference placement behavior:
   - If any source markdown file contains a heading matching `References` (case-insensitive),
     Bibliography is anchored there by inserting `<div id="refs"></div>` in prepared merged sources.
@@ -189,9 +197,12 @@ Out of scope for this iteration:
 ### Acceptance Criteria
 - `settings/build.yaml` includes the new formatting keys in default and fixture profiles
 - `scripts/render_pdf_layout.py` emits profile-driven LaTeX fragments
+- `scripts/profile_scaffold.py` emits margin-aware scaffold snippets
 - `make clean && make all` and `make PROFILE=fixture all` succeed using configured values
 - `make validate-config` passes after new schema keys are added
 - `## References` headings in source markdown are respected as bibliography insertion points for PDF and DOCX targets.
+- Default output destination behavior prefers `dist/<profile-root>/` when profile `output_dir` is `dist`.
+- Default layout now uses A4 + 1.5 cm margins.
 
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
@@ -234,6 +245,7 @@ Out of scope for this iteration:
 - 2026-02-13: Hardened CI into three jobs (`guard-tests`, `build-main`, `build-fixture`) with artifact summaries and uploads.
 - 2026-02-13: Suppressed GitHub error annotations for expected-failure guard fixtures via `DISABLE_GHA_ANNOTATIONS=1`.
 - 2026-02-13: Verified hardened CI passed on GitHub (`manuscript-ci` run `21972670054`) with all three jobs green.
+- 2026-02-13: Fixed line-numbering visibility by switching LaTeX package detection to `kpsewhich` in layout generation and added profile-controlled margins (`margins` mapping) with default A4 + 1.5 cm.
 - 2026-02-13: Revalidated hardened CI on GitHub (`manuscript-ci` run `21972735861`) with `guard-tests`, `build-main`, and `build-fixture` all succeeding.
 - 2026-02-13: Introduced profile-driven build configuration (`settings/build.yaml`) and resolver script (`scripts/build_profile.py`).
 - 2026-02-13: Refactored `Makefile` to consume resolved profile values for main and fixture pipelines.
@@ -256,8 +268,11 @@ Out of scope for this iteration:
 - 2026-02-13: Verified Phase 8 CI run passed on GitHub (`manuscript-ci` run `21975285208`) with all three jobs succeeding and diagnostic-upload steps skipped as expected on green.
 - 2026-02-13: Fixed fixture-only build routing so `make testbed` (and aliases `testbed/`, `testbed-all`) writes only `dist/testbed/*` and no root `dist/` artifacts.
 - 2026-02-13: Added `scripts/test_output_routing.sh` and `make test-output-routing` unit-style regression check for output routing.
+- 2026-02-13: Extended routing regression to validate fallback `dist/manuscript-#` inference with a synthetic standalone profile that lacks `.git` and `manuscript` path context.
 - 2026-02-13: Added profile-driven PDF layout options (`page_numbers`, `line_spacing`, `line_numbering`) and profile-aware layout header generation.
 - 2026-02-13: Added source normalization hook (`scripts/prepare_markdown_sources.py`) to honor `## References` headings in merged markdown and keep default-end placement when no placeholder exists.
+- 2026-02-13: Added auto-routing for default `dist` output directories into `dist/<profile-root>/` (derived from manuscript sources/repo/fallback).
+- 2026-02-13: Updated layout generation warnings so missing `lineno`, `etoolbox`, or `geometry` packages are surfaced at build time (with PDF output continuing where possible).
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

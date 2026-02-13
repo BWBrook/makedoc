@@ -22,8 +22,11 @@ make deps-install-full
 ```
 
 Install modes:
-- `minimal`: build/check essentials for this repo (`pandoc`, `xelatex`, `python3-yaml`, `ripgrep`, etc.)
+- `minimal`: build/check essentials for this repo (`pandoc`, `xelatex`, `texlive-xetex`, `texlive-latex-extra`, `python3-yaml`, `ripgrep`, etc.)
 - `full`: `minimal` plus heavier optional tools (`libreoffice`, broader TeX extras, hunspell locales, `poppler-utils`)
+
+Notes for line numbering:
+- If line numbering is enabled, the LaTeX `lineno` package is required. It is present in `full` mode installs (`texlive-latex-extra`) and is checked before rendering.
 
 Disk-size note:
 - both estimate targets run `apt-get -s install ...` and print the host-specific "After this operation..." line, which gives a rough install size for that machine.
@@ -77,8 +80,13 @@ ls -lh dist/
 ```
 
 Default outputs:
-- `dist/manuscript.pdf`
-- `dist/manuscript.docx`
+- `dist/<profile-root>/manuscript.pdf`
+- `dist/<profile-root>/manuscript.docx`
+
+`<profile-root>` is derived automatically from manuscript sources:
+- If a source path contains a `manuscript/` directory, the containing parent folder name is used (for example `testbed`).
+- Otherwise, if sources are inside a git repository, that repository name is used.
+- If neither can be inferred, the system falls back to `manuscript-#` under `dist/`.
 
 Fixture outputs:
 - `dist/testbed/fixture_manuscript.pdf`
@@ -142,6 +150,12 @@ make profile-scaffold \
   PROFILE_PAGE_NUMBERS=lower_right \
   PROFILE_LINE_SPACING=single \
   PROFILE_LINE_NUMBERING=continuous \
+  PROFILE_PAPER_SIZE=a4 \
+  PROFILE_MARGIN_UNIT=cm \
+  PROFILE_MARGIN_TOP=1.5 \
+  PROFILE_MARGIN_RIGHT=1.5 \
+  PROFILE_MARGIN_BOTTOM=1.5 \
+  PROFILE_MARGIN_LEFT=1.5 \
   PROFILE_APPEND=1 \
   PROFILE_SET_DEFAULT=1
 ```
@@ -157,12 +171,33 @@ Each profile supports:
 - `journal`: optional journal label/metadata
 - `csl_search_dirs`: directories scanned by CSL discovery tools
 - `output_dir`: output folder
+- `dist` values are auto-routed to `dist/<profile-root>`.
 - `output_stem`: output basename (without extension)
 - `golden_contract`: optional fixture/contract expectations file used by structure checks
 - `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)
 - `line_spacing`: line spacing mode (`single`, `1.5`, `2`)
 - `line_numbering`: line-numbering mode (`continuous`, `page`, `section`, `none`)
+- `margins`:
+  - `unit`: `cm` (default) or `in`
+  - `paper_size`: `a4` (default) or `letter`
+  - `top`, `right`, `bottom`, `left`: numeric margin values in selected unit
+  - defaults in this repo are `1.5` for every side (metric A4)
 - These styling controls apply to PDF generation paths.
+- Defaults are metric:
+  - paper size: `a4`
+  - units: `cm`
+  - margins: `1.5` all around
+- U.S. profile examples can switch to US units with:
+
+  ```yaml
+  margins:
+    unit: in
+    paper_size: letter
+    top: 1.0
+    right: 1.0
+    bottom: 1.0
+    left: 1.0
+  ```
 - `References` placement behavior:
   - If any source markdown file contains a heading matching `References` (case-insensitive), the build inserts a `<div id="refs"></div>` anchor immediately after that heading in the prepared markdown pipeline, so Pandoc places the bibliography there.
   - If no such heading exists, Pandoc appends the bibliography at the end of the document.
@@ -195,6 +230,13 @@ profiles:
     page_numbers: lower_right
     line_spacing: single
     line_numbering: continuous
+    margins:
+      unit: cm
+      paper_size: a4
+      top: 1.5
+      right: 1.5
+      bottom: 1.5
+      left: 1.5
 ```
 
 ## CSL Search and Sourcing by Journal
@@ -259,8 +301,8 @@ make show-manifest
 ```
 
 Manifest outputs:
-- `dist/build_manifest.json` (active profile)
-- `dist/testbed/build_manifest.json` (fixture profile)
+- `dist/<profile-root>/manuscript_build_manifest.json` (active profile)
+- `dist/<profile-root>/fixture_manuscript_build_manifest.json` (fixture profile)
 
 Collect diagnostics bundles (useful for CI failures and local triage):
 

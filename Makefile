@@ -27,8 +27,10 @@ JOURNAL ?=
 
 ifneq ($(filter xelatex pdflatex lualatex,$(PDF_ENGINE)),)
 PDF_ENGINE_OPTS := --pdf-engine-opt=-output-directory=$(PDF_ENGINE_OUTPUT_DIR)
+PDF_RENDER_MULTI_PASS := 1
 else
 PDF_ENGINE_OPTS :=
+PDF_RENDER_MULTI_PASS := 0
 endif
 
 PROFILE_NAME ?=
@@ -42,6 +44,12 @@ PROFILE_OUTPUT_STEM ?=manuscript
 PROFILE_PAGE_NUMBERS ?= lower_right
 PROFILE_LINE_SPACING ?= single
 PROFILE_LINE_NUMBERING ?= continuous
+PROFILE_PAPER_SIZE ?= a4
+PROFILE_MARGIN_UNIT ?= cm
+PROFILE_MARGIN_TOP ?= 1.5
+PROFILE_MARGIN_RIGHT ?= 1.5
+PROFILE_MARGIN_BOTTOM ?= 1.5
+PROFILE_MARGIN_LEFT ?= 1.5
 PROFILE_APPEND ?=0
 PROFILE_SET_DEFAULT ?=0
 PROFILE_OVERWRITE ?=0
@@ -57,6 +65,25 @@ ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.tex
 FIXTURE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/fixture_layout.tex
 ACTIVE_SOURCE_MD := $(PROFILE_CACHE_DIR)/active_sources.md
 FIXTURE_SOURCE_MD := $(PROFILE_CACHE_DIR)/fixture_sources.md
+
+define render_pdf
+	@tmp="$$(mktemp)"; \
+	$(1) > "$$tmp" 2>&1; status=$$?; \
+	if [ $$status -ne 0 ]; then \
+		cat "$$tmp"; \
+		rm -f "$$tmp"; \
+		exit $$status; \
+	fi; \
+	if [ "$(PDF_RENDER_MULTI_PASS)" = "1" ]; then \
+		$(1) > "$$tmp" 2>&1; status=$$?; \
+		if [ $$status -ne 0 ]; then \
+			cat "$$tmp"; \
+			rm -f "$$tmp"; \
+			exit $$status; \
+		fi; \
+	fi; \
+	rm -f "$$tmp"
+endef
 
 $(shell mkdir -p "$(PROFILE_CACHE_DIR)" "$(PDF_ENGINE_OUTPUT_DIR)")
 $(shell rm -f "$(ACTIVE_VARS_FILE)" "$(FIXTURE_VARS_FILE)")
@@ -81,8 +108,8 @@ ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIB
 ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
 FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --include-in-header="$(FIXTURE_LAYOUT_TEX)"
 FIXTURE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
-ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/build_manifest.json
-FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/build_manifest.json
+ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/$(ACTIVE_OUTPUT_STEM)_build_manifest.json
+FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
 .PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
@@ -113,7 +140,7 @@ fixture-manifest: $(FIXTURE_MANIFEST_OUT)
 endif
 
 $(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
-	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@
+	$(call render_pdf, $(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
 $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
 	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_DOCX_COMMON) -o $@
@@ -121,7 +148,7 @@ $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BI
 ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
 else
 $(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
-		$(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@
+		$(call render_pdf, $(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
 $(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
 		$(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_DOCX_COMMON) -o $@
@@ -169,7 +196,7 @@ profile-show:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) show --format yaml
 
 profile-scaffold:
-	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
+	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_PAPER_SIZE=a4] [PROFILE_MARGIN_UNIT=cm] [PROFILE_MARGIN_TOP=1.5] [PROFILE_MARGIN_RIGHT=1.5] [PROFILE_MARGIN_BOTTOM=1.5] [PROFILE_MARGIN_LEFT=1.5] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
 	@args=( \
 		--name "$(PROFILE_NAME)" \
 		--config "$(CONFIG)" \
@@ -184,6 +211,12 @@ profile-scaffold:
 	args+=(--page-numbers "$(PROFILE_PAGE_NUMBERS)"); \
 	args+=(--line-spacing "$(PROFILE_LINE_SPACING)"); \
 	args+=(--line-numbering "$(PROFILE_LINE_NUMBERING)"); \
+	args+=(--paper-size "$(PROFILE_PAPER_SIZE)"); \
+	args+=(--margin-unit "$(PROFILE_MARGIN_UNIT)"); \
+	args+=(--margin-top "$(PROFILE_MARGIN_TOP)"); \
+	args+=(--margin-right "$(PROFILE_MARGIN_RIGHT)"); \
+	args+=(--margin-bottom "$(PROFILE_MARGIN_BOTTOM)"); \
+	args+=(--margin-left "$(PROFILE_MARGIN_LEFT)"); \
 	if [ "$(PROFILE_APPEND)" = "1" ]; then args+=(--append); fi; \
 	if [ "$(PROFILE_SET_DEFAULT)" = "1" ]; then args+=(--set-default); fi; \
 	if [ "$(PROFILE_OVERWRITE)" = "1" ]; then args+=(--overwrite); fi; \

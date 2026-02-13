@@ -60,6 +60,40 @@ def parse_args() -> argparse.Namespace:
         default="continuous",
         help="Line-numbering mode: continuous, page, section, or none.",
     )
+    parser.add_argument(
+        "--paper-size",
+        default="a4",
+        help="Paper size for output (a4 or letter).",
+    )
+    parser.add_argument(
+        "--margin-unit",
+        default="cm",
+        help="Margin unit (cm or in).",
+    )
+    parser.add_argument(
+        "--margin-top",
+        default=1.5,
+        type=float,
+        help="Top margin value.",
+    )
+    parser.add_argument(
+        "--margin-right",
+        default=1.5,
+        type=float,
+        help="Right margin value.",
+    )
+    parser.add_argument(
+        "--margin-bottom",
+        default=1.5,
+        type=float,
+        help="Bottom margin value.",
+    )
+    parser.add_argument(
+        "--margin-left",
+        default=1.5,
+        type=float,
+        help="Left margin value.",
+    )
     parser.add_argument("--edgecase-unknown-cite", help="Optional unknown-cite edge case path.")
     parser.add_argument("--edgecase-manual-cite", help="Optional manual-cite edge case path.")
     parser.add_argument("--edgecase-malformed-table", help="Optional malformed-table edge case path.")
@@ -79,6 +113,12 @@ def parse_args() -> argparse.Namespace:
         help="Overwrite existing profile with same name when --append is used.",
     )
     return parser.parse_args()
+
+
+def _positive_float(raw_value: float) -> float:
+    if raw_value <= 0:
+        raise ValueError("Values must be strictly greater than zero.")
+    return raw_value
 
 
 def dedupe_keep_order(items: list[str]) -> list[str]:
@@ -123,6 +163,14 @@ def build_profile(args: argparse.Namespace) -> dict[str, Any]:
         "page_numbers": args.page_numbers,
         "line_spacing": args.line_spacing,
         "line_numbering": args.line_numbering,
+        "margins": {
+            "unit": args.margin_unit,
+            "paper_size": args.paper_size,
+            "top": _positive_float(args.margin_top),
+            "right": _positive_float(args.margin_right),
+            "bottom": _positive_float(args.margin_bottom),
+            "left": _positive_float(args.margin_left),
+        },
     }
 
     edgecases: dict[str, str] = {}

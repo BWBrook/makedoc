@@ -27,6 +27,7 @@ ALLOWED_PROFILE_KEYS = {
     "page_numbers",
     "line_spacing",
     "line_numbering",
+    "margins",
 }
 ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
 

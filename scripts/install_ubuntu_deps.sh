@@ -13,6 +13,7 @@ MINIMAL_PACKAGES=(
   make
   pandoc
   texlive-xetex
+  texlive-latex-extra
   python3
   python3-yaml
   ripgrep

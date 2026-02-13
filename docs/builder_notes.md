@@ -35,7 +35,10 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - 2026-02-13: Keep fixture expectations in a versioned YAML contract and treat `fixture-golden-check` as a compatibility alias to `fixture-contract-check`.
 - 2026-02-13: Collect diagnostics bundles on CI failure for faster triage without rerunning jobs locally.
 - 2026-02-13: Add profile-driven PDF layout controls through generated include files (page numbers, line spacing, line numbering), applied via `--include-in-header`.
+- 2026-02-13: Fixed line-numbering detection by checking LaTeX packages via `kpsewhich` in `scripts/render_pdf_layout.py`.
 - 2026-02-13: Add source-merge normalization step (`scripts/prepare_markdown_sources.py`) that injects `<div id="refs"></div>` after first `## References` heading to allow in-document bibliography placement.
+- 2026-02-13: Add automatic output-root derivation for `output_dir: dist`, routing builds into `dist/<profile-root>/` so default profile outputs no longer land in raw `dist/`.
+- 2026-02-13: Improve line-numbering and margins diagnostics by emitting build-time warnings when LaTeX packages (`lineno`, `etoolbox`, `geometry`) are unavailable for selected profile styling options.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -89,6 +92,9 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - 2026-02-13: Updated README and fixture expectation docs for contract/manifests/diagnostics workflows.
 - 2026-02-13: Verified updated CI run (`21975285208`) passed with new config-validation, manifest artifact, and failure-diagnostics steps.
 - 2026-02-13: Verified `## References` in testbed main is honored as bibliography insertion point via fixture output.
+- 2026-02-13: Added `margins` controls to profile defaults and schema validation; defaults are A4 + 1.5 cm.
+- 2026-02-13: Fixed line-numbering check path in `scripts/render_pdf_layout.py` so `lineno` availability is detected via `kpsewhich` instead of `\IfFileExists`.
+- 2026-02-13: Extended `make profile-scaffold` to include margin-related arguments for `paper_size` and per-side values.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -140,7 +146,7 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - `python3 -m py_compile scripts/build_profile.py scripts/validate_build_config.py scripts/build_manifest.py scripts/diagnose_build.py scripts/fixture_golden_check.py scripts/lint_manuscript.py scripts/refs_audit.py scripts/csl_resolver.py scripts/profile_scaffold.py` -> PASS
 - `python3 - <<'PY' ... yaml.safe_load('.github/workflows/ci.yml') ...` -> PASS (updated workflow YAML parses)
 - `make validate-config` -> PASS (`Build config validation passed for selected profile(s): default, fixture`)
-- `make check` (Phase 8 hardening) -> PASS (includes config validation and writes `dist/build_manifest.json`)
+- `make check` (Phase 8 hardening) -> PASS (includes config validation and writes `dist/<profile-root>/<output_stem>_build_manifest.json`)
 - `make check-fixture` (Phase 8 hardening) -> PASS (includes config validation, fixture manifest, and contract checks)
 - `make check-fixture-guards` (Phase 8 hardening) -> PASS (all three expected-failure guards still observed)
 - `make show-manifest` -> PASS (pretty-printed active manifest JSON)
@@ -149,9 +155,11 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - `make fixture-golden-check` -> PASS (backward-compatible alias to contract check remains valid)
 - `make manifest && make fixture-manifest` -> PASS (manifests present; make reports up-to-date)
 - `gh run watch 21975285208 --repo BWBrook/makedoc --exit-status` -> PASS (Phase 8 CI run green; diagnostics upload steps skipped because no failures)
-- `make testbed` -> PASS (created `dist/testbed/fixture_manuscript.pdf`, `dist/testbed/fixture_manuscript.docx`, `dist/testbed/build_manifest.json` and no root `dist/` files)
+- `make testbed` -> PASS (created `dist/testbed/fixture_manuscript.pdf`, `dist/testbed/fixture_manuscript.docx`, `dist/testbed/fixture_manuscript_build_manifest.json` and no root `dist/` files)
 - `make PROFILE=fixture check-fixture` -> PASS (fixture pipeline + contract check; `Build config` validated and outputs remain under `dist/testbed/*`)
 - `make test-output-routing` -> PASS (`dist/testbed` outputs only for fixture flows; default `make all` routes to `dist/` as expected)
+- `./scripts/test_output_routing.sh` -> PASS (`dist/manuscript-#` fallback path is validated with a synthetic profile and no `.git`/`manuscript/` context).
+- `make all` -> PASS and no LaTeX undefined-figure-reference warnings after adding two-pass PDF rendering for LaTeX engines.
 - `python3 -m py_compile scripts/build_profile.py scripts/render_pdf_layout.py scripts/validate_build_config.py scripts/profile_scaffold.py` -> PASS
 - `make clean && make all` -> PASS (layout-aware PDF/DOCX and manifest generation succeed for default profile)
 - `make PROFILE=fixture all` -> PASS (fixture profile builds to `dist/testbed` with layout-aware includes)
@@ -161,6 +169,11 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - `python3 -m py_compile scripts/prepare_markdown_sources.py` -> PASS
 - `make check` -> PASS (reference-anchor normalization in source merge path included)
 - `make check-fixture` -> PASS (`## References` heading in fixture now anchors rendered bibliography).
+- `make all` -> PASS and now produces `dist/testbed/manuscript.*` instead of `dist/manuscript.*` for the default profile.
+- `make all` -> PASS and fixture figure reference warnings are now resolved after rerendering PDF with second LaTeX pass.
+- `python3 -m py_compile scripts/build_profile.py scripts/render_pdf_layout.py scripts/validate_build_config.py scripts/profile_scaffold.py` -> PASS
+- `make clean && make all` -> PASS (`line numbering and margin options active in profiles; outputs in dist/testbed`).
+- `make profile-scaffold PROFILE_NAME=demo_profile` -> PASS (includes margin defaults in emitted snippet).
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

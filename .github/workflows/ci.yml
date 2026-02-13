@@ -58,7 +58,7 @@ jobs:
       - name: Install build dependencies
         uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
-          packages: pandoc texlive-xetex ripgrep python3-yaml
+          packages: pandoc texlive-xetex texlive-latex-extra ripgrep python3-yaml
           version: build-main-deps-v1
           execute_install_scripts: true
 
@@ -68,6 +68,7 @@ jobs:
           sudo apt-get install -y \
             pandoc \
             texlive-xetex \
+            texlive-latex-extra \
             ripgrep \
             python3-yaml
 
@@ -116,7 +117,7 @@ jobs:
       - name: Install build dependencies
         uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
-          packages: pandoc texlive-xetex ripgrep python3-yaml poppler-utils
+          packages: pandoc texlive-xetex texlive-latex-extra ripgrep python3-yaml poppler-utils
           version: build-fixture-deps-v2
           execute_install_scripts: true
 
@@ -126,6 +127,7 @@ jobs:
           sudo apt-get install -y \
             pandoc \
             texlive-xetex \
+            texlive-latex-extra \
             ripgrep \
             python3-yaml \
             poppler-utils

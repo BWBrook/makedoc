@@ -19,6 +19,104 @@ PAGE_NUMBERING_DEFAULT = "lower_right"
 LINE_SPACING_OPTIONS = {"single", "1.5", "2"}
 LINE_NUMBERING_OPTIONS = {"continuous", "page", "section", "none"}
 PAGE_NUMBERING_OPTIONS = {"lower_right", "none"}
+MARGIN_UNIT_OPTIONS = {"cm", "in"}
+MARGIN_PAPER_SIZE_OPTIONS = {"a4", "letter"}
+DEFAULT_MARGINS = {
+    "unit": "cm",
+    "paper_size": "a4",
+    "top": 1.5,
+    "right": 1.5,
+    "bottom": 1.5,
+    "left": 1.5,
+}
+
+
+@dataclass(frozen=True)
+class Margins:
+    unit: str
+    paper_size: str
+    top: float
+    right: float
+    bottom: float
+    left: float
+
+    def to_dict(self) -> dict[str, float | str]:
+        return {
+            "unit": self.unit,
+            "paper_size": self.paper_size,
+            "top": self.top,
+            "right": self.right,
+            "bottom": self.bottom,
+            "left": self.left,
+        }
+
+
+def _find_repo_root(path: Path) -> Path | None:
+    for parent in [path, *path.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
+def _derive_output_subdir(manuscript_sources: list[str], repo_name: str | None = None) -> str:
+    source_paths = [Path(source).expanduser() for source in manuscript_sources]
+
+    # Prefer explicit manuscript root markers.
+    manuscript_candidates: list[str] = []
+    for raw in source_paths:
+        source = raw.resolve()
+        for ancestor in [source] + list(source.parents):
+            if ancestor.name.lower() == "manuscript":
+                container = ancestor.parent
+                if container.name:
+                    manuscript_candidates.append(container.name)
+                break
+
+    if manuscript_candidates:
+        # Prefer the most common match when inputs span multiple paths.
+        ranked = sorted(
+            {name: manuscript_candidates.count(name) for name in set(manuscript_candidates)}.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+        if ranked:
+            return ranked[0][0]
+
+    if repo_name:
+        return repo_name
+
+    # Last-resort collision-safe fallback.
+    return _next_fallback_dir("manuscript")
+
+
+def _next_fallback_dir(prefix: str) -> str:
+    base_dir = Path("dist")
+    existing = []
+    for item in base_dir.glob(f"{prefix}-*"):
+        if not item.is_dir():
+            continue
+        suffix = item.name.removeprefix(f"{prefix}-")
+        if suffix.isdigit():
+            existing.append(int(suffix))
+
+    next_n = (max(existing) + 1) if existing else 1
+    return f"{prefix}-{next_n}"
+
+
+def _infer_output_dir(output_dir: str, manuscript_sources: list[str]) -> str:
+    base_output = Path(output_dir).as_posix()
+    if base_output != "dist":
+        return output_dir
+
+    repo_name: str | None = None
+    for source in manuscript_sources:
+        resolved = Path(source).expanduser().resolve()
+        repo_root = _find_repo_root(resolved)
+        if repo_root:
+            repo_name = repo_root.name
+            break
+
+    inferred = _derive_output_subdir(manuscript_sources, repo_name=repo_name)
+    return str(Path("dist") / inferred)
 
 
 @dataclass(frozen=True)
@@ -42,6 +140,7 @@ class Profile:
     page_numbers: str
     line_spacing: str
     line_numbering: str
+    margins: Margins
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,6 +165,7 @@ class Profile:
             "page_numbers": self.page_numbers,
             "line_spacing": self.line_spacing,
             "line_numbering": self.line_numbering,
+            "margins": self.margins.to_dict(),
         }
 
 
@@ -136,6 +236,27 @@ def expect_str(mapping: dict[str, Any], key: str, *, required: bool = True, defa
     return value.strip()
 
 
+def expect_str_or_number(mapping: dict[str, Any], key: str, *, required: bool = True, default: str | float | int = "") -> str:
+    value = mapping.get(key, default)
+    if value is None:
+        value = default
+    if value == "" and not required:
+        return ""
+    if isinstance(value, bool):
+        raise ValueError(f"Profile key '{key}' must be a non-empty string/number.")
+    if isinstance(value, (int, float)):
+        value_text = str(value)
+    elif isinstance(value, str):
+        value_text = value.strip()
+    else:
+        raise ValueError(f"Profile key '{key}' must be a non-empty string/number.")
+    if not value_text:
+        if required:
+            raise ValueError(f"Profile key '{key}' must be a non-empty string/number.")
+        return ""
+    return value_text
+
+
 def expect_list_of_str(
     mapping: dict[str, Any], key: str, *, required: bool = True, default: list[str] | None = None
 ) -> list[str]:
@@ -187,6 +308,54 @@ def normalize_line_numbering(raw_value: str) -> str:
     return value
 
 
+def normalize_margin_unit(raw_value: str) -> str:
+    value = raw_value.strip().lower().replace("_", "").replace("-", "")
+    if value in {"cm", "centimeter", "centimetre", "metric"}:
+        return "cm"
+    if value in {"inch", "in", "inches", "imperial"}:
+        return "in"
+    return value
+
+
+def normalize_paper_size(raw_value: str) -> str:
+    value = raw_value.strip().lower().replace("_", "").replace("-", "")
+    if value in {"a4paper", "a4"}:
+        return "a4"
+    if value in {"letter", "letterpaper", "usletter"}:
+        return "letter"
+    return value
+
+
+def expect_positive_number(mapping: dict[str, Any], key: str, default: float, *, required: bool = True) -> float:
+    value = mapping.get(key, default)
+    if value is None:
+        if required:
+            raise ValueError(f"Profile key '{key}' must be a positive number.")
+        return float(default)
+
+    if isinstance(value, bool):
+        raise ValueError(f"Profile key '{key}' must be a positive number.")
+
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            if required:
+                raise ValueError(f"Profile key '{key}' must be a positive number.")
+            return float(default)
+        try:
+            number = float(normalized)
+        except ValueError as exc:
+            raise ValueError(f"Profile key '{key}' must be a positive number.") from exc
+    else:
+        raise ValueError(f"Profile key '{key}' must be a positive number.")
+
+    if number <= 0:
+        raise ValueError(f"Profile key '{key}' must be greater than 0.")
+    return number
+
+
 def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile:
     profiles = config.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
@@ -212,7 +381,8 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
     bibliography = expect_str(raw_profile, "bibliography")
     csl = expect_str(raw_profile, "csl")
     journal = expect_str(raw_profile, "journal", required=False)
-    output_dir = expect_str(raw_profile, "output_dir")
+    requested_output_dir = expect_str(raw_profile, "output_dir")
+    output_dir = _infer_output_dir(requested_output_dir, manuscript_sources)
     output_stem = expect_str(raw_profile, "output_stem")
     description = expect_str(raw_profile, "description", required=False)
     golden_contract = expect_str(raw_profile, "golden_contract", required=False)
@@ -251,7 +421,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
     if page_numbers not in PAGE_NUMBERING_OPTIONS:
         raise ValueError(f"Profile key 'page_numbers' resolved to unsupported value: {page_numbers}")
 
-    line_spacing = expect_str(
+    line_spacing = expect_str_or_number(
         raw_profile,
         "line_spacing",
         required=False,
@@ -270,6 +440,45 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
     line_numbering = normalize_line_numbering(line_numbering_raw)
     if line_numbering not in LINE_NUMBERING_OPTIONS:
         raise ValueError(f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}")
+
+    margins_raw = raw_profile.get("margins", {})
+    if margins_raw is None:
+        margins_raw = {}
+    if not isinstance(margins_raw, dict):
+        raise ValueError("Profile key 'margins' must be a mapping when present.")
+
+    margins_values = {
+        "unit": normalize_margin_unit(expect_str(margins_raw, "unit", required=False, default=DEFAULT_MARGINS["unit"])),
+        "paper_size": normalize_paper_size(
+            expect_str(margins_raw, "paper_size", required=False, default=DEFAULT_MARGINS["paper_size"]),
+        ),
+        "top": expect_positive_number(
+            margins_raw, "top", default=DEFAULT_MARGINS["top"], required=False,
+        ),
+        "right": expect_positive_number(
+            margins_raw, "right", default=DEFAULT_MARGINS["right"], required=False,
+        ),
+        "bottom": expect_positive_number(
+            margins_raw, "bottom", default=DEFAULT_MARGINS["bottom"], required=False,
+        ),
+        "left": expect_positive_number(
+            margins_raw, "left", default=DEFAULT_MARGINS["left"], required=False,
+        ),
+    }
+    if margins_values["unit"] not in MARGIN_UNIT_OPTIONS:
+        allowed = ", ".join(sorted(MARGIN_UNIT_OPTIONS))
+        raise ValueError(f"Profile key 'margins.unit' must be one of: {allowed}.")
+    if margins_values["paper_size"] not in MARGIN_PAPER_SIZE_OPTIONS:
+        allowed = ", ".join(sorted(MARGIN_PAPER_SIZE_OPTIONS))
+        raise ValueError(f"Profile key 'margins.paper_size' must be one of: {allowed}.")
+    margins = Margins(
+        unit=margins_values["unit"],
+        paper_size=margins_values["paper_size"],
+        top=margins_values["top"],
+        right=margins_values["right"],
+        bottom=margins_values["bottom"],
+        left=margins_values["left"],
+    )
 
     pdf_out = str(Path(output_dir) / f"{output_stem}.pdf")
     docx_out = str(Path(output_dir) / f"{output_stem}.docx")
@@ -294,6 +503,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         page_numbers=page_numbers,
         line_spacing=line_spacing,
         line_numbering=line_numbering,
+        margins=margins,
     )
 
 
@@ -335,6 +545,12 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_PAGE_NUMBERS": profile.page_numbers,
         f"{base}_LINE_SPACING": profile.line_spacing,
         f"{base}_LINE_NUMBERING": profile.line_numbering,
+        f"{base}_MARGIN_UNIT": profile.margins.unit,
+        f"{base}_MARGIN_PAPER_SIZE": profile.margins.paper_size,
+        f"{base}_MARGIN_TOP": profile.margins.top,
+        f"{base}_MARGIN_RIGHT": profile.margins.right,
+        f"{base}_MARGIN_BOTTOM": profile.margins.bottom,
+        f"{base}_MARGIN_LEFT": profile.margins.left,
     }
     lines = [f"{name} := {format_make_value(value)}" for name, value in values.items()]
     return "\n".join(lines)
