@@ -28,11 +28,12 @@ assert_no_root_artifacts() {
 	fi
 }
 
-assert_dist_only_has_testbed() {
+assert_dist_only_has_dir() {
+	local expected_dir=$1
 	local top_dirs
 	top_dirs="$(find dist -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)"
-	if [ -n "$top_dirs" ] && [ "$top_dirs" != "testbed" ]; then
-		echo "ASSERTION FAILED: expected only dist/testbed directory, found: $top_dirs" >&2
+	if [ -n "$top_dirs" ] && [ "$top_dirs" != "$expected_dir" ]; then
+		echo "ASSERTION FAILED: expected only dist/$expected_dir directory, found: $top_dirs" >&2
 		exit 1
 	fi
 }
@@ -86,7 +87,7 @@ EOF
 	expected_stem="$(python3 scripts/build_profile.py --config "$cfg" --profile standalone value --key output_stem)"
 
 	make clean >/dev/null
-	make CONFIG="$cfg" PROFILE=standalone FIXTURE_PROFILE=standalone all
+	make CONFIG="$cfg" PROFILE=standalone all
 
 	assert_dir_exists "$expected_output_dir"
 	assert_file_exists "$expected_output_dir/$expected_stem.pdf"
@@ -109,23 +110,23 @@ run_testbed_target() {
 	make clean >/dev/null
 	make testbed
 
-	assert_dir_exists dist/testbed
-	assert_file_exists dist/testbed/fixture_manuscript.pdf
-	assert_file_exists dist/testbed/fixture_manuscript.docx
-	assert_file_exists dist/testbed/fixture_manuscript_build_manifest.json
+	assert_dir_exists dist/fixture
+	assert_file_exists dist/fixture/fixture_manuscript.pdf
+	assert_file_exists dist/fixture/fixture_manuscript.docx
+	assert_file_exists dist/fixture/fixture_manuscript_build_manifest.json
 	assert_no_root_artifacts
-	assert_dist_only_has_testbed
+	assert_dist_only_has_dir fixture
 }
 
 run_fixture_profile_all() {
 	make clean >/dev/null
-	make PROFILE=fixture all
+	make fixture-all
 
-	assert_file_exists dist/testbed/fixture_manuscript.pdf
-	assert_file_exists dist/testbed/fixture_manuscript.docx
-	assert_file_exists dist/testbed/fixture_manuscript_build_manifest.json
+	assert_file_exists dist/fixture/fixture_manuscript.pdf
+	assert_file_exists dist/fixture/fixture_manuscript.docx
+	assert_file_exists dist/fixture/fixture_manuscript_build_manifest.json
 	assert_no_root_artifacts
-	assert_dist_only_has_testbed
+	assert_dist_only_has_dir fixture
 }
 
 run_default_profile_all() {
@@ -135,7 +136,7 @@ run_default_profile_all() {
 	assert_file_exists dist/testbed/manuscript.pdf
 	assert_file_exists dist/testbed/manuscript.docx
 	assert_file_exists dist/testbed/manuscript_build_manifest.json
-	if [ -f dist/testbed/fixture_manuscript.pdf ] || [ -f dist/testbed/fixture_manuscript.docx ] || [ -f dist/testbed/golden_check.txt ]; then
+	if [ -f dist/fixture/fixture_manuscript.pdf ] || [ -f dist/fixture/fixture_manuscript.docx ] || [ -f dist/fixture/golden_check.txt ]; then
 		echo "ASSERTION FAILED: default build unexpectedly created fixture artifacts" >&2
 		exit 1
 	fi

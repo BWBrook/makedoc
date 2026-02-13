@@ -1,7 +1,7 @@
 # Builder Notes
 
 Last updated: 2026-02-13
-Context: Phase 1-8 implementation (build scaffold through pre-iteration hardening)
+Context: Phase 1-10 implementation (through profile-driven figure placement)
 
 ## Decision Log
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
@@ -39,6 +39,9 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - 2026-02-13: Add source-merge normalization step (`scripts/prepare_markdown_sources.py`) that injects `<div id="refs"></div>` after first `## References` heading to allow in-document bibliography placement.
 - 2026-02-13: Add automatic output-root derivation for `output_dir: dist`, routing builds into `dist/<profile-root>/` so default profile outputs no longer land in raw `dist/`.
 - 2026-02-13: Improve line-numbering and margins diagnostics by emitting build-time warnings when LaTeX packages (`lineno`, `etoolbox`, `geometry`) are unavailable for selected profile styling options.
+- 2026-02-13: Add profile-controlled figure handling in source preparation (`figures` settings) with page-mode defaults, supplementary ordering, caption placement, and optional inline placeholder routing.
+- 2026-02-13: Add dedicated regression target `make test-figure-modes` for pages/inline figure placement behaviors.
+- 2026-02-13: Extend figure handling with `placement: captions_page` for a dedicated Figure Captions page and title-bearing figure blocks.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -174,6 +177,14 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - `python3 -m py_compile scripts/build_profile.py scripts/render_pdf_layout.py scripts/validate_build_config.py scripts/profile_scaffold.py` -> PASS
 - `make clean && make all` -> PASS (`line numbering and margin options active in profiles; outputs in dist/testbed`).
 - `make profile-scaffold PROFILE_NAME=demo_profile` -> PASS (includes margin defaults in emitted snippet).
+- `make check-fixture` -> PASS (`figure placement and caption settings applied during source prep; golden contract updated for figure labels`).
+- `make test-output-routing` -> PASS (output location behavior unchanged by figure pipeline edits).
+- `make clean && make all` -> PASS (`default and fixture figure placement now produces one figure per page with Fig. labels`).
+- `make test-figure-modes` -> PASS (`pages mode includes ordered labels with one clearpage per figure; inline mode removes placeholder, suppresses clearpage, and keeps caption below image`).
+- `make test-figure-modes` -> PASS (`new captions_page mode adds Figure Captions page and successive title-bearing figure pages`).
+- `make test-output-routing` -> PASS after config split (`settings/build.yaml` for active + `settings/fixture.yaml` for fixture); confirms fixture outputs now land in `dist/fixture/*`.
+- `make check-fixture` -> PASS after fixture config split (fixture lint/audit/build/contract checks run from `settings/fixture.yaml`).
+- `make all` -> PASS and produces only active outputs under `dist/testbed/*` (no fixture outputs rebuilt by default).
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

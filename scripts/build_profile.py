@@ -19,6 +19,13 @@ PAGE_NUMBERING_DEFAULT = "lower_right"
 LINE_SPACING_OPTIONS = {"single", "1.5", "2"}
 LINE_NUMBERING_OPTIONS = {"continuous", "page", "section", "none"}
 PAGE_NUMBERING_OPTIONS = {"lower_right", "none"}
+FIGURE_PLACEMENT_OPTIONS = {"pages", "captions_page", "inline"}
+FIGURE_CAPTION_POSITION_OPTIONS = {"top", "bottom"}
+DEFAULT_FIGURE_SETTINGS = {
+    "placement": "pages",
+    "caption_position": "top",
+    "placeholder_id": "figures",
+}
 MARGIN_UNIT_OPTIONS = {"cm", "in"}
 MARGIN_PAPER_SIZE_OPTIONS = {"a4", "letter"}
 DEFAULT_MARGINS = {
@@ -48,6 +55,20 @@ class Margins:
             "right": self.right,
             "bottom": self.bottom,
             "left": self.left,
+        }
+
+
+@dataclass(frozen=True)
+class Figures:
+    placement: str
+    caption_position: str
+    placeholder_id: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "placement": self.placement,
+            "caption_position": self.caption_position,
+            "placeholder_id": self.placeholder_id,
         }
 
 
@@ -141,6 +162,7 @@ class Profile:
     line_spacing: str
     line_numbering: str
     margins: Margins
+    figures: Figures
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -166,6 +188,7 @@ class Profile:
             "line_spacing": self.line_spacing,
             "line_numbering": self.line_numbering,
             "margins": self.margins.to_dict(),
+            "figures": self.figures.to_dict(),
         }
 
 
@@ -326,6 +349,35 @@ def normalize_paper_size(raw_value: str) -> str:
     return value
 
 
+def normalize_figure_placement(raw_value: str) -> str:
+    value = raw_value.strip().lower().replace("-", "_")
+    if value in {"page", "pages", "end", "endpages", "end_page", "end_of_doc", "append"}:
+        return "pages"
+    if value in {
+        "captions",
+        "caption",
+        "captionspage",
+        "caption_page",
+        "captions_page",
+        "figure_captions",
+        "figurecaptions",
+        "figcaps",
+    }:
+        return "captions_page"
+    if value in {"inline", "in", "embed", "inlinefigures", "inline_figures"}:
+        return "inline"
+    return value
+
+
+def normalize_caption_position(raw_value: str) -> str:
+    value = raw_value.strip().lower().replace("-", "_")
+    if value in {"top", "caption_top", "above"}:
+        return "top"
+    if value in {"bottom", "caption_bottom", "below"}:
+        return "bottom"
+    return value
+
+
 def expect_positive_number(mapping: dict[str, Any], key: str, default: float, *, required: bool = True) -> float:
     value = mapping.get(key, default)
     if value is None:
@@ -441,6 +493,53 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
     if line_numbering not in LINE_NUMBERING_OPTIONS:
         raise ValueError(f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}")
 
+    figures_raw = raw_profile.get("figures", {})
+    if figures_raw is None:
+        figures_raw = {}
+    if not isinstance(figures_raw, dict):
+        raise ValueError("Profile key 'figures' must be a mapping when present.")
+
+    figure_placement = normalize_figure_placement(
+        expect_str(
+            figures_raw,
+            "placement",
+            required=False,
+            default=DEFAULT_FIGURE_SETTINGS["placement"],
+        )
+    )
+    if figure_placement not in FIGURE_PLACEMENT_OPTIONS:
+        allowed = ", ".join(sorted(FIGURE_PLACEMENT_OPTIONS))
+        raise ValueError(f"Profile key 'figures.placement' must be one of: {allowed}.")
+
+    figure_caption_position = normalize_caption_position(
+        expect_str(
+            figures_raw,
+            "caption_position",
+            required=False,
+            default=DEFAULT_FIGURE_SETTINGS["caption_position"],
+        )
+    )
+    if figure_caption_position not in FIGURE_CAPTION_POSITION_OPTIONS:
+        allowed = ", ".join(sorted(FIGURE_CAPTION_POSITION_OPTIONS))
+        raise ValueError(
+            f"Profile key 'figures.caption_position' must be one of: {allowed}."
+        )
+
+    figure_placeholder_id = expect_str(
+        figures_raw,
+        "placeholder_id",
+        required=False,
+        default=DEFAULT_FIGURE_SETTINGS["placeholder_id"],
+    )
+    if not figure_placeholder_id:
+        raise ValueError("Profile key 'figures.placeholder_id' must be a non-empty string.")
+
+    figures = Figures(
+        placement=figure_placement,
+        caption_position=figure_caption_position,
+        placeholder_id=figure_placeholder_id,
+    )
+
     margins_raw = raw_profile.get("margins", {})
     if margins_raw is None:
         margins_raw = {}
@@ -504,6 +603,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         line_spacing=line_spacing,
         line_numbering=line_numbering,
         margins=margins,
+        figures=figures,
     )
 
 
@@ -545,6 +645,9 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_PAGE_NUMBERS": profile.page_numbers,
         f"{base}_LINE_SPACING": profile.line_spacing,
         f"{base}_LINE_NUMBERING": profile.line_numbering,
+        f"{base}_FIGURE_PLACEMENT": profile.figures.placement,
+        f"{base}_FIGURE_CAPTION_POSITION": profile.figures.caption_position,
+        f"{base}_FIGURE_PLACEHOLDER_ID": profile.figures.placeholder_id,
         f"{base}_MARGIN_UNIT": profile.margins.unit,
         f"{base}_MARGIN_PAPER_SIZE": profile.margins.paper_size,
         f"{base}_MARGIN_TOP": profile.margins.top,

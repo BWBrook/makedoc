@@ -6,9 +6,6 @@ profiles:
     manuscript_sources:
       - testbed/manuscript/text/fixture_main.md
       - testbed/manuscript/text/fixture_figures.md
-    lint_sources:
-      - testbed/manuscript/text/fixture_main.md
-      - testbed/manuscript/text/fixture_figures.md
     bibliography: testbed/references/fixture_refs.yaml
     csl: testbed/csl/fixture_style.csl
     journal: Oikos
@@ -20,43 +17,15 @@ profiles:
     page_numbers: lower_right
     line_spacing: 1.5
     line_numbering: continuous
+    figures:
+      placement: captions_page
+      caption_position: top
+      placeholder_id: figures
     margins:
       unit: cm
       paper_size: a4
-      top: 1.5
-      bottom: 1.5
-      left: 1.5
-      right: 1.5
+      top: 2.0
+      bottom: 2.0
+      left: 2.5
+      right: 2.5
     golden_contract: testbed/expected/golden_contract.yaml
-
-  fixture:
-    description: Dedicated regression fixture profile used by CI hardening checks.
-    manuscript_sources:
-      - testbed/manuscript/text/fixture_main.md
-      - testbed/manuscript/text/fixture_figures.md
-    lint_sources:
-      - testbed/manuscript/text/fixture_main.md
-      - testbed/manuscript/text/fixture_figures.md
-    bibliography: testbed/references/fixture_refs.yaml
-    csl: testbed/csl/fixture_style.csl
-    journal: Oikos
-    csl_search_dirs:
-      - testbed/csl
-      - csl
-    output_dir: dist/testbed
-    output_stem: fixture_manuscript
-    page_numbers: lower_right
-    line_spacing: single
-    line_numbering: continuous
-    margins:
-      unit: cm
-      paper_size: a4
-      top: 1.5
-      bottom: 1.5
-      left: 1.5
-      right: 1.5
-    golden_contract: testbed/expected/golden_contract.yaml
-    edgecases:
-      unknown_cite: testbed/edgecases/unknown_cite_main.md
-      manual_cite: testbed/edgecases/manual_cite_main.md
-      malformed_table: testbed/edgecases/malformed_table_main.md

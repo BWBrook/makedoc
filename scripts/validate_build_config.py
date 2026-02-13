@@ -27,8 +27,10 @@ ALLOWED_PROFILE_KEYS = {
     "page_numbers",
     "line_spacing",
     "line_numbering",
+    "figures",
     "margins",
 }
+ALLOWED_FIGURE_KEYS = {"placement", "caption_position", "placeholder_id"}
 ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
 
 
@@ -97,6 +99,21 @@ def validate_schema(config: dict[str, Any], errors: list[str]) -> dict[str, Any]
                         (
                             f"Profile '{name}' edgecases has unknown keys: "
                             f"{', '.join(unknown_edge_keys)}"
+                        ),
+                    )
+
+        figures = raw_profile.get("figures")
+        if figures is not None:
+            if not isinstance(figures, dict):
+                append_error(errors, f"Profile '{name}' key 'figures' must be a mapping.")
+            else:
+                unknown_figure_keys = sorted(set(figures.keys()) - ALLOWED_FIGURE_KEYS)
+                if unknown_figure_keys:
+                    append_error(
+                        errors,
+                        (
+                            f"Profile '{name}' figures has unknown keys: "
+                            f"{', '.join(unknown_figure_keys)}"
                         ),
                     )
 

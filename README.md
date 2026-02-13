@@ -89,20 +89,29 @@ Default outputs:
 - If neither can be inferred, the system falls back to `manuscript-#` under `dist/`.
 
 Fixture outputs:
-- `dist/testbed/fixture_manuscript.pdf`
-- `dist/testbed/fixture_manuscript.docx`
+- `dist/fixture/fixture_manuscript.pdf`
+- `dist/fixture/fixture_manuscript.docx`
 
 Fixture-only build:
 ```bash
 make testbed
 ```
-This runs the dedicated fixture profile and writes into `dist/testbed/` only (no files are emitted to the `dist/` root by this path).
+This runs the dedicated fixture profile and writes into `dist/fixture/` only (no files are emitted to the `dist/` root by this path).
 
-Regression check:
+Regression checks:
 ```bash
 make test-output-routing
 ```
 Runs a unit-style routing test that validates fixture-only and default output locations.
+
+Figure placement regression:
+```bash
+make test-figure-modes
+```
+Verifies the new figure pipeline behavior in `pages`, `inline`, and `captions_page` modes, including:
+- ordered `Fig. 1`, `Fig. 2`, `Fig. S1` labels
+- supplementary figure ordering
+- inline insertion at a placeholder with bottom-positioned captions.
 
 Workspace cleanup:
 ```bash
@@ -117,19 +126,21 @@ make clean-all
 
 ## Build Profiles (YAML-Driven)
 
-Build inputs are defined in `settings/build.yaml`.
+Build inputs are split across:
+- `settings/build.yaml` for active manuscript profiles (`make all`, `make check`)
+- `settings/fixture.yaml` for fixture/testbed checks (`make fixture-all`, `make check-fixture`, CI fixture job)
 
 Current profile layout:
-- `default`: active profile used by `make all` and `make check`
-- `fixture`: dedicated regression profile used by fixture checks/guard tests
+- `default` in `settings/build.yaml`: active profile used by `make all` and `make check`
+- `fixture` in `settings/fixture.yaml`: dedicated regression profile used by fixture checks/guard tests
 
 Useful commands:
 
 ```bash
 make profiles
 make profile-show
-make PROFILE=fixture all
-make PROFILE=fixture check
+make fixture-all
+make check-fixture
 ```
 
 Scaffold a new profile snippet:
@@ -150,6 +161,9 @@ make profile-scaffold \
   PROFILE_PAGE_NUMBERS=lower_right \
   PROFILE_LINE_SPACING=single \
   PROFILE_LINE_NUMBERING=continuous \
+  PROFILE_FIGURE_PLACEMENT=pages \
+  PROFILE_FIGURE_CAPTION_POSITION=top \
+  PROFILE_FIGURE_PLACEHOLDER_ID=figures \
   PROFILE_PAPER_SIZE=a4 \
   PROFILE_MARGIN_UNIT=cm \
   PROFILE_MARGIN_TOP=1.5 \
@@ -165,7 +179,7 @@ make profile-scaffold \
 Each profile supports:
 
 - `manuscript_sources`: ordered Markdown input files for Pandoc
-- `lint_sources`: Markdown files scanned by lint checks
+- `lint_sources`: Markdown files scanned by lint checks. If omitted, this defaults to `manuscript_sources`.
 - `bibliography`: YAML bibliography path
 - `csl`: CSL file path
 - `journal`: optional journal label/metadata
@@ -177,6 +191,11 @@ Each profile supports:
 - `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)
 - `line_spacing`: line spacing mode (`single`, `1.5`, `2`)
 - `line_numbering`: line-numbering mode (`continuous`, `page`, `section`, `none`)
+- `figures`:
+  - `placement`: `pages` (default, one figure per page after references),
+    `inline`, or `captions_page`
+  - `caption_position`: `top` (default) or `bottom`
+  - `placeholder_id`: placeholder `<div id="..."></div>` identifier used for inline placement
 - `margins`:
   - `unit`: `cm` (default) or `in`
   - `paper_size`: `a4` (default) or `letter`
@@ -202,6 +221,11 @@ Each profile supports:
   - If any source markdown file contains a heading matching `References` (case-insensitive), the build inserts a `<div id="refs"></div>` anchor immediately after that heading in the prepared markdown pipeline, so Pandoc places the bibliography there.
   - If no such heading exists, Pandoc appends the bibliography at the end of the document.
   - The behavior is implemented while concatenating sources: `scripts/prepare_markdown_sources.py` builds `$(PROFILE_CACHE_DIR)/<profile>_sources.md` and normalizes it before handing it to Pandoc.
+- Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
+  - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
+  - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.
+  - `placement=captions_page`: creates a dedicated `## Figure Captions` page with one plain caption line per figure (no bullets), then appends each figure on successive pages with label-only titles (`Fig. X.`) and image-only blocks (no repeated caption under the image). Supplementary figures are grouped after a `## Supplementary Information` heading.
+  - captions in `pages`/`inline` modes are generated as `**Fig. X.**` / `**Fig. S1.**`; underlying image elements continue to carry their source alt text.
 - `edgecases` (optional):
   - `unknown_cite`
   - `manual_cite`
@@ -230,6 +254,10 @@ profiles:
     page_numbers: lower_right
     line_spacing: single
     line_numbering: continuous
+    figures:
+      placement: captions_page
+      caption_position: top
+      placeholder_id: figures
     margins:
       unit: cm
       paper_size: a4
@@ -288,7 +316,7 @@ make wsl-smoke
 
 Contract source:
 - defaults to `testbed/expected/golden_contract.yaml`
-- can be overridden per profile via `golden_contract` in `settings/build.yaml`
+- can be overridden per profile via `golden_contract` in `settings/build.yaml` (active) or `settings/fixture.yaml` (fixture)
 
 ## Reproducibility and Diagnostics
 
@@ -302,7 +330,7 @@ make show-manifest
 
 Manifest outputs:
 - `dist/<profile-root>/manuscript_build_manifest.json` (active profile)
-- `dist/<profile-root>/fixture_manuscript_build_manifest.json` (fixture profile)
+- `dist/fixture/fixture_manuscript_build_manifest.json` (fixture profile)
 
 Collect diagnostics bundles (useful for CI failures and local triage):
 

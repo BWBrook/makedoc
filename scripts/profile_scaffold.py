@@ -61,6 +61,21 @@ def parse_args() -> argparse.Namespace:
         help="Line-numbering mode: continuous, page, section, or none.",
     )
     parser.add_argument(
+        "--figure-placement",
+        default="pages",
+        help="Figure placement mode: pages (default), captions_page, or inline.",
+    )
+    parser.add_argument(
+        "--figure-caption-position",
+        default="top",
+        help="Figure caption position: top (default) or bottom.",
+    )
+    parser.add_argument(
+        "--figure-placeholder-id",
+        default="figures",
+        help="ID used for placeholder div when figure placement is inline.",
+    )
+    parser.add_argument(
         "--paper-size",
         default="a4",
         help="Paper size for output (a4 or letter).",
@@ -163,6 +178,11 @@ def build_profile(args: argparse.Namespace) -> dict[str, Any]:
         "page_numbers": args.page_numbers,
         "line_spacing": args.line_spacing,
         "line_numbering": args.line_numbering,
+        "figures": {
+            "placement": args.figure_placement,
+            "caption_position": args.figure_caption_position,
+            "placeholder_id": args.figure_placeholder_id,
+        },
         "margins": {
             "unit": args.margin_unit,
             "paper_size": args.paper_size,

@@ -4,5 +4,7 @@ min_pdf_pages: 1
 required_text:
   - Fixture Manuscript Title
   - Fixture Table
-  - Fixture Figures
   - Discussion
+  - Fig. 1
+  - Fig. 2
+  - Fig. S1

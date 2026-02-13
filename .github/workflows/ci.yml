@@ -79,7 +79,7 @@ jobs:
 
       - name: Summarize main artifacts
         run: |
-          ls -lh dist/manuscript.pdf dist/manuscript.docx dist/build_manifest.json >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist/testbed/manuscript.pdf dist/testbed/manuscript.docx dist/testbed/manuscript_build_manifest.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect main diagnostics on failure
         if: failure()
@@ -100,9 +100,9 @@ jobs:
         with:
           name: manuscript-main-artifacts
           path: |
-            dist/manuscript.pdf
-            dist/manuscript.docx
-            dist/build_manifest.json
+            dist/testbed/manuscript.pdf
+            dist/testbed/manuscript.docx
+            dist/testbed/manuscript_build_manifest.json
           if-no-files-found: ignore
 
   build-fixture:
@@ -140,7 +140,7 @@ jobs:
 
       - name: Summarize fixture artifacts
         run: |
-          ls -lh dist/testbed/fixture_manuscript.pdf dist/testbed/fixture_manuscript.docx dist/testbed/build_manifest.json >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist/fixture/fixture_manuscript.pdf dist/fixture/fixture_manuscript.docx dist/fixture/fixture_manuscript_build_manifest.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect fixture diagnostics on failure
         if: failure()
@@ -161,7 +161,7 @@ jobs:
         with:
           name: manuscript-fixture-artifacts
           path: |
-            dist/testbed/fixture_manuscript.pdf
-            dist/testbed/fixture_manuscript.docx
-            dist/testbed/build_manifest.json
+            dist/fixture/fixture_manuscript.pdf
+            dist/fixture/fixture_manuscript.docx
+            dist/fixture/fixture_manuscript_build_manifest.json
           if-no-files-found: ignore

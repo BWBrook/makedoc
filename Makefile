@@ -7,6 +7,7 @@ PANDOC_FROM ?= markdown+tex_math_dollars+tex_math_single_backslash
 
 CONFIG ?= settings/build.yaml
 PROFILE ?=
+FIXTURE_CONFIG ?= settings/fixture.yaml
 FIXTURE_PROFILE ?= fixture
 
 CONFIG_SCRIPT ?= scripts/build_profile.py
@@ -50,6 +51,9 @@ PROFILE_MARGIN_TOP ?= 1.5
 PROFILE_MARGIN_RIGHT ?= 1.5
 PROFILE_MARGIN_BOTTOM ?= 1.5
 PROFILE_MARGIN_LEFT ?= 1.5
+PROFILE_FIGURE_PLACEMENT ?= pages
+PROFILE_FIGURE_CAPTION_POSITION ?= top
+PROFILE_FIGURE_PLACEHOLDER_ID ?= figures
 PROFILE_APPEND ?=0
 PROFILE_SET_DEFAULT ?=0
 PROFILE_OVERWRITE ?=0
@@ -57,6 +61,7 @@ DIAG_OUTPUT_ROOT ?=dist/diagnostics
 
 PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
 FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
+SAME_ACTIVE_AND_FIXTURE := $(and $(filter $(abspath $(CONFIG)),$(abspath $(FIXTURE_CONFIG))),$(filter $(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE))))
 
 PROFILE_CACHE_DIR := .cache
 ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.mk
@@ -88,11 +93,11 @@ endef
 $(shell mkdir -p "$(PROFILE_CACHE_DIR)" "$(PDF_ENGINE_OUTPUT_DIR)")
 $(shell rm -f "$(ACTIVE_VARS_FILE)" "$(FIXTURE_VARS_FILE)")
 $(shell set -e; tmp="$(ACTIVE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp" && mv "$$tmp" "$(ACTIVE_VARS_FILE)")
-$(shell set -e; tmp="$(FIXTURE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp" && mv "$$tmp" "$(FIXTURE_VARS_FILE)")
+$(shell set -e; tmp="$(FIXTURE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp" && mv "$$tmp" "$(FIXTURE_VARS_FILE)")
 $(shell set -e; tmp="$(ACTIVE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(ACTIVE_LAYOUT_TEX)")
-$(shell set -e; tmp="$(FIXTURE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_LAYOUT_TEX)")
+$(shell set -e; tmp="$(FIXTURE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_LAYOUT_TEX)")
 $(shell set -e; tmp="$(ACTIVE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(ACTIVE_SOURCE_MD)")
-$(shell set -e; tmp="$(FIXTURE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_SOURCE_MD)")
+$(shell set -e; tmp="$(FIXTURE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_SOURCE_MD)")
 
 include $(ACTIVE_VARS_FILE)
 include $(FIXTURE_VARS_FILE)
@@ -101,7 +106,7 @@ ifeq ($(strip $(ACTIVE_MANUSCRIPT_SOURCES)),)
 $(error Failed to load active build profile from $(CONFIG))
 endif
 ifeq ($(strip $(FIXTURE_MANUSCRIPT_SOURCES)),)
-$(error Failed to load fixture profile '$(FIXTURE_PROFILE)' from $(CONFIG))
+$(error Failed to load fixture profile '$(FIXTURE_PROFILE)' from $(FIXTURE_CONFIG))
 endif
 
 ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --include-in-header="$(ACTIVE_LAYOUT_TEX)"
@@ -112,7 +117,7 @@ ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/$(ACTIVE_OUTPUT_STEM)_build_manifest
 FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-figure-modes check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx manifest
 
@@ -129,7 +134,7 @@ OUTPUT_DIRS := $(sort $(ACTIVE_OUTPUT_DIR) $(FIXTURE_OUTPUT_DIR))
 $(OUTPUT_DIRS):
 	mkdir -p "$@"
 
-ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
+ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 fixture-pdf: $(ACTIVE_PDF_OUT)
 fixture-docx: $(ACTIVE_DOCX_OUT)
 fixture-manifest: $(ACTIVE_MANIFEST_OUT)
@@ -145,7 +150,7 @@ $(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIB
 $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
 	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_DOCX_COMMON) -o $@
 
-ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
+ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
 $(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
 		$(call render_pdf, $(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
@@ -157,10 +162,10 @@ endif
 $(ACTIVE_MANIFEST_OUT): $(ACTIVE_PDF_OUT) $(ACTIVE_DOCX_OUT) $(MANIFEST_SCRIPT) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(if $(strip $(ACTIVE_GOLDEN_CONTRACT)),$(ACTIVE_GOLDEN_CONTRACT),)
 	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output "$@" --pdf "$(ACTIVE_PDF_OUT)" --docx "$(ACTIVE_DOCX_OUT)"
 
-ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
+ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
 $(FIXTURE_MANIFEST_OUT): $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT) $(MANIFEST_SCRIPT) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),)
-	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
+	@python3 "$(MANIFEST_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
 endif
 
 check-tools:
@@ -171,7 +176,8 @@ check-tools:
 
 validate-config:
 	@echo "Validating build profile config..."
-	@python3 "$(VALIDATE_CONFIG)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --profile "$(FIXTURE_PROFILE)"
+	@python3 "$(VALIDATE_CONFIG)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)"
+	@python3 "$(VALIDATE_CONFIG)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)"
 
 manifest: $(ACTIVE_MANIFEST_OUT)
 
@@ -184,10 +190,13 @@ diagnose:
 	@python3 "$(DIAGNOSE_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output-root "$(DIAG_OUTPUT_ROOT)" --manifest "$(ACTIVE_MANIFEST_OUT)"
 
 fixture-diagnose:
-	@python3 "$(DIAGNOSE_SCRIPT)" --config "$(CONFIG)" --profile "$(FIXTURE_PROFILE)" --output-root "$(DIAG_OUTPUT_ROOT)" --manifest "$(FIXTURE_MANIFEST_OUT)"
+	@python3 "$(DIAGNOSE_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)" --output-root "$(DIAG_OUTPUT_ROOT)" --manifest "$(FIXTURE_MANIFEST_OUT)"
 
 test-output-routing:
 	@bash scripts/test_output_routing.sh
+
+test-figure-modes:
+	@bash scripts/test_figure_modes.sh
 
 profiles:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" list-profiles
@@ -196,7 +205,7 @@ profile-show:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) show --format yaml
 
 profile-scaffold:
-	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_PAPER_SIZE=a4] [PROFILE_MARGIN_UNIT=cm] [PROFILE_MARGIN_TOP=1.5] [PROFILE_MARGIN_RIGHT=1.5] [PROFILE_MARGIN_BOTTOM=1.5] [PROFILE_MARGIN_LEFT=1.5] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
+	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_FIGURE_PLACEMENT=pages] [PROFILE_FIGURE_CAPTION_POSITION=top] [PROFILE_FIGURE_PLACEHOLDER_ID=figures] [PROFILE_PAPER_SIZE=a4] [PROFILE_MARGIN_UNIT=cm] [PROFILE_MARGIN_TOP=1.5] [PROFILE_MARGIN_RIGHT=1.5] [PROFILE_MARGIN_BOTTOM=1.5] [PROFILE_MARGIN_LEFT=1.5] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
 	@args=( \
 		--name "$(PROFILE_NAME)" \
 		--config "$(CONFIG)" \
@@ -211,6 +220,9 @@ profile-scaffold:
 	args+=(--page-numbers "$(PROFILE_PAGE_NUMBERS)"); \
 	args+=(--line-spacing "$(PROFILE_LINE_SPACING)"); \
 	args+=(--line-numbering "$(PROFILE_LINE_NUMBERING)"); \
+	args+=(--figure-placement "$(PROFILE_FIGURE_PLACEMENT)"); \
+	args+=(--figure-caption-position "$(PROFILE_FIGURE_CAPTION_POSITION)"); \
+	args+=(--figure-placeholder-id "$(PROFILE_FIGURE_PLACEHOLDER_ID)"); \
 	args+=(--paper-size "$(PROFILE_PAPER_SIZE)"); \
 	args+=(--margin-unit "$(PROFILE_MARGIN_UNIT)"); \
 	args+=(--margin-top "$(PROFILE_MARGIN_TOP)"); \
@@ -308,7 +320,7 @@ check: check-tools validate-config lint-manuscript refs-audit
 	@$(MAKE) --no-print-directory all
 	@echo "Build check passed."
 
-check-fixture: check-tools validate-config fixture-lint fixture-refs-audit
+check-fixture: check-tools validate-config fixture-lint fixture-refs-audit test-figure-modes
 	@$(MAKE) --no-print-directory fixture-all
 	@$(MAKE) --no-print-directory fixture-contract-check
 	@echo "Fixture build check passed."

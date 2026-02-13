@@ -41,6 +41,7 @@ Out of scope for this iteration:
 7. Phase 7 (completed): Onboarding automation + fixture golden hardening
 8. Phase 8 (completed): Pre-iteration hardening (config validation, manifests, diagnostics)
 9. Phase 9 (completed): Profile-controlled layout options for PDF output
+10. Phase 10 (completed): Profile-driven figure placement and caption policy in source preparation
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -118,7 +119,7 @@ Out of scope for this iteration:
 
 ## Phase 6 Work Package
 ### Deliverables
-- Profile YAML config in `settings/build.yaml` for default and fixture runs
+- Profile YAML config split across `settings/build.yaml` (active) and `settings/fixture.yaml` (fixture)
 - Profile resolver utility `scripts/build_profile.py`
 - Refactored `Makefile` that sources profile variables from YAML
 - Root onboarding documentation at `README.md`
@@ -127,7 +128,7 @@ Out of scope for this iteration:
 
 ### Acceptance Criteria
 - `make all` and `make check` run from the configured default profile without bespoke manuscript folders
-- `make PROFILE=fixture all` and `make check-fixture` continue to pass
+- `make fixture-all` and `make check-fixture` continue to pass
 - `make profiles` and `make profile-show` report active config state
 - `make csl-search JOURNAL="..."` surfaces style matches
 - `make csl-source JOURNAL="..."` resolves a local style or downloads a suitable one
@@ -169,7 +170,7 @@ Out of scope for this iteration:
 ### Acceptance Criteria
 - `make validate-config` passes for active + fixture profiles
 - `make manifest` writes `<dist>/<profile-root>/<output_stem>_build_manifest.json`
-- `make fixture-manifest` writes `dist/testbed/fixture_manuscript_build_manifest.json` for the fixture profile
+- `make fixture-manifest` writes `dist/fixture/fixture_manuscript_build_manifest.json` for the fixture profile
 - `make diagnose` and `make fixture-diagnose` produce timestamped bundles under `dist/diagnostics/`
 - `make check-fixture` runs contract-based fixture checks using `golden_contract` path
 - CI workflow uploads manifests with build artifacts and uploads diagnostics bundles when jobs fail
@@ -195,14 +196,32 @@ Out of scope for this iteration:
   - If no heading is present, references default to document end.
 
 ### Acceptance Criteria
-- `settings/build.yaml` includes the new formatting keys in default and fixture profiles
+- `settings/build.yaml` and `settings/fixture.yaml` include the new formatting keys for their respective profiles
 - `scripts/render_pdf_layout.py` emits profile-driven LaTeX fragments
 - `scripts/profile_scaffold.py` emits margin-aware scaffold snippets
-- `make clean && make all` and `make PROFILE=fixture all` succeed using configured values
+- `make clean && make all` and `make fixture-all` succeed using configured values
 - `make validate-config` passes after new schema keys are added
 - `## References` headings in source markdown are respected as bibliography insertion points for PDF and DOCX targets.
 - Default output destination behavior prefers `dist/<profile-root>/` when profile `output_dir` is `dist`.
 - Default layout now uses A4 + 1.5 cm margins.
+
+## Phase 10 Work Package
+- Deliverables
+  - Add profile-driven figure extraction and placement controls for manuscript preparation.
+  - Support dedicated figure pages (`placement: pages`) with one figure per page and explicit `Fig.` labels.
+  - Ensure supplementary figures sort after main figures (default `Fig. S1`, `Fig. S2`, ...).
+  - Add caption-order options for figure output (`caption_position: top|bottom`).
+  - Add inline figure insertion mode (`placement: inline`) when a placeholder ID is present in manuscript sources.
+  - Add `placement: captions_page` for dedicated caption lists followed by figure pages with title lines only.
+  - Document figure controls in profile schema and README.
+  - Keep source-merger behavior safe for code blocks and preserve references anchor insertion behavior.
+
+- Acceptance Criteria
+  - `make check-fixture` passes with fixture figure settings in `default`/`fixture` profiles.
+  - Figure labels in fixture output include `Fig. 1`, `Fig. 2`, and `Fig. S1` in order.
+  - Supplementary figures are placed after all main figures.
+  - `make test-figure-modes` verifies `placement: captions_page` output structure.
+  - No root `dist` artifacts are introduced by figure extraction/placement.
 
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
@@ -273,6 +292,8 @@ Out of scope for this iteration:
 - 2026-02-13: Added source normalization hook (`scripts/prepare_markdown_sources.py`) to honor `## References` headings in merged markdown and keep default-end placement when no placeholder exists.
 - 2026-02-13: Added auto-routing for default `dist` output directories into `dist/<profile-root>/` (derived from manuscript sources/repo/fallback).
 - 2026-02-13: Updated layout generation warnings so missing `lineno`, `etoolbox`, or `geometry` packages are surfaced at build time (with PDF output continuing where possible).
+- 2026-02-13: Split fixture configuration into `settings/fixture.yaml` to keep active manuscript config lean and reduce default-build confusion.
+- 2026-02-13: Routed fixture outputs to `dist/fixture/*` and updated Make/CI routing checks so active and fixture artifacts are clearly separated.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
