@@ -1,5 +1,7 @@
 # Fixture Manuscript Title
 
+<div id="authors"></div>
+
 ## Abstract
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. This synthetic fixture manuscript exists to stress the manuscript build pipeline rather than evaluate scientific claims. We include citations, equations, a table, and cross-referenced figures [@alpha2020SyntheticWorkflow].

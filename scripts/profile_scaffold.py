@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
         help="Lint source path; repeat for multiple files (defaults to manuscript sources).",
     )
     parser.add_argument("--bibliography", help="Bibliography YAML path.")
+    parser.add_argument("--author-metadata", help="Author metadata YAML path.")
     parser.add_argument("--csl", help="CSL style path.")
     parser.add_argument("--journal", default="Journal Name", help="Journal label.")
     parser.add_argument(
@@ -157,6 +158,7 @@ def build_profile(args: argparse.Namespace) -> dict[str, Any]:
 
     lint_sources = [item.strip() for item in args.lint_source if item.strip()] or list(manuscript_sources)
     bibliography = (args.bibliography or "/path/to/other-repo/references/references.yaml").strip()
+    author_metadata = (args.author_metadata or "").strip()
     csl = (args.csl or "/path/to/other-repo/csl/journal-style.csl").strip()
 
     csl_search_dirs = [item.strip() for item in args.csl_search_dir if item.strip()]
@@ -192,6 +194,8 @@ def build_profile(args: argparse.Namespace) -> dict[str, Any]:
             "left": _positive_float(args.margin_left),
         },
     }
+    if author_metadata:
+        profile["author_metadata"] = author_metadata
 
     edgecases: dict[str, str] = {}
     if args.edgecase_unknown_cite:

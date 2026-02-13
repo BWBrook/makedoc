@@ -84,6 +84,29 @@ assert_ordered_lines() {
 	fi
 }
 
+assert_pattern_between() {
+	local file=$1
+	local pattern=$2
+	local start_pattern=$3
+	local end_pattern=$4
+	local start_line
+	local end_line
+	start_line="$(first_match_line "$file" "$start_pattern")"
+	end_line="$(first_match_line "$file" "$end_pattern")"
+	if [ -z "$start_line" ] || [ -z "$end_line" ]; then
+		echo "ASSERTION FAILED: missing boundary patterns in $file ($start_pattern, $end_pattern)" >&2
+		exit 1
+	fi
+	if [ "$start_line" -ge "$end_line" ]; then
+		echo "ASSERTION FAILED: boundary patterns in unexpected order for $file" >&2
+		exit 1
+	fi
+	if ! grep -nF -- "$pattern" "$file" | awk -F: -v start="$start_line" -v end="$end_line" '$1 > start && $1 < end {found=1} END{exit(found?0:1)}'; then
+		echo "ASSERTION FAILED: expected pattern '$pattern' between '$start_pattern' and '$end_pattern' in $file" >&2
+		exit 1
+	fi
+}
+
 assert_line_count_at_least() {
 	local file=$1
 	local pattern=$2
@@ -92,6 +115,18 @@ assert_line_count_at_least() {
 	count="$(grep -cF -- "$pattern" "$file" || true)"
 	if [ "$count" -lt "$minimum" ]; then
 		echo "ASSERTION FAILED: expected at least $minimum occurrences of '$pattern' in $file, found $count" >&2
+		exit 1
+	fi
+}
+
+assert_line_count_exact() {
+	local file=$1
+	local pattern=$2
+	local expected=$3
+	local count
+	count="$(grep -cF -- "$pattern" "$file" || true)"
+	if [ "$count" -ne "$expected" ]; then
+		echo "ASSERTION FAILED: expected exactly $expected occurrences of '$pattern' in $file, found $count" >&2
 		exit 1
 	fi
 }
@@ -156,6 +191,7 @@ EOF
 	assert_ordered_lines "$prepared" "**Fig. 1.**" "**Fig. 2.**" "**Fig. S1.**"
 	assert_ordered_lines "$prepared" "**Fig. 2.**" "## Supplementary Information" "**Fig. S1.**"
 	assert_line_count_at_least "$prepared" "\\clearpage" 4
+	assert_line_count_at_least "$prepared" "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>" 4
 	assert_not_contains "$prepared" "<div id=\"figures\"></div>"
 }
 
@@ -215,7 +251,9 @@ EOF
 	assert_file_exists "$prepared"
 
 	assert_not_contains "$prepared" "<div id=\"figures\"></div>"
-	assert_not_contains "$prepared" "\\clearpage"
+	assert_line_count_exact "$prepared" "\\clearpage" 1
+	assert_line_count_exact "$prepared" "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>" 1
+	assert_pattern_between "$prepared" "\\clearpage" "More text after placeholder." "## References"
 	assert_contains "$prepared" "!["
 	assert_contains "$prepared" "**Fig. 1.**"
 
@@ -297,6 +335,7 @@ EOF
 	assert_ordered_lines "$prepared" "## Figure Captions" "**Fig. 1.** Fixture main figure used for CI layout and rendering checks." "**Fig. 2.** Fixture richness figure used for CI cross-reference and image embedding checks."
 	assert_ordered_lines "$prepared" "## Figure Captions" "**Fig. 2.** Fixture richness figure used for CI cross-reference and image embedding checks." "## Supplementary Information"
 	assert_line_count_at_least "$prepared" "\\clearpage" 5
+	assert_line_count_at_least "$prepared" "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>" 5
 	assert_contains "$prepared" "![]($REPO_ROOT/testbed/manuscript/figures/fig1_dummy.png){#fig-fixture-main width=95%}"
 	assert_contains "$prepared" "![]($REPO_ROOT/testbed/manuscript/figures/fig2_dummy.png){#fig-fixture-richness width=85%}"
 	assert_contains "$prepared" "![]($REPO_ROOT/testbed/manuscript/figures/figS1_dummy.png){#fig-fixture-s1 width=85%}"

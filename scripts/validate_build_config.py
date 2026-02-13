@@ -16,6 +16,7 @@ ALLOWED_PROFILE_KEYS = {
     "description",
     "manuscript_sources",
     "lint_sources",
+    "author_metadata",
     "bibliography",
     "csl",
     "journal",
@@ -151,6 +152,7 @@ def validate_selected_profiles(
             path_checks.append(("lint_sources", item))
         path_checks.extend(
             [
+                ("author_metadata", profile.author_metadata),
                 ("bibliography", profile.bibliography),
                 ("csl", profile.csl),
             ]
@@ -165,6 +167,8 @@ def validate_selected_profiles(
             path_checks.append(("edgecases.malformed_table", profile.edgecase_malformed_table))
 
         for label, raw_path in path_checks:
+            if not raw_path:
+                continue
             path = Path(raw_path)
             if not path.exists():
                 append_error(

@@ -22,6 +22,7 @@ DIAGNOSE_SCRIPT ?= scripts/diagnose_build.py
 INSTALLER ?= scripts/install_ubuntu_deps.sh
 LAYOUT_RENDER ?= scripts/render_pdf_layout.py
 SOURCE_RENDER ?= scripts/prepare_markdown_sources.py
+DOCX_STYLE_NORMALIZER ?= scripts/normalize_docx_styles.py
 
 CSL_DEST_DIR ?= csl
 JOURNAL ?=
@@ -38,6 +39,7 @@ PROFILE_NAME ?=
 PROFILE_MAIN ?=
 PROFILE_FIGS ?=
 PROFILE_BIB ?=
+PROFILE_AUTHOR_METADATA ?=
 PROFILE_CSL ?=
 PROFILE_JOURNAL ?=Journal Name
 PROFILE_OUTPUT_DIR ?=dist
@@ -117,7 +119,7 @@ ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/$(ACTIVE_OUTPUT_STEM)_build_manifest
 FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-figure-modes check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-figure-modes test-author-injection check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx manifest
 
@@ -147,16 +149,18 @@ endif
 $(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
 	$(call render_pdf, $(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
-$(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+$(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(ACTIVE_OUTPUT_DIR)
 	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_DOCX_COMMON) -o $@
+	python3 "$(DOCX_STYLE_NORMALIZER)" --docx "$@" --line-spacing "$(ACTIVE_LINE_SPACING)" --line-numbering "$(ACTIVE_LINE_NUMBERING)"
 
 ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
 $(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
 		$(call render_pdf, $(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
-$(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+$(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(FIXTURE_OUTPUT_DIR)
 		$(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_DOCX_COMMON) -o $@
+		python3 "$(DOCX_STYLE_NORMALIZER)" --docx "$@" --line-spacing "$(FIXTURE_LINE_SPACING)" --line-numbering "$(FIXTURE_LINE_NUMBERING)"
 endif
 
 $(ACTIVE_MANIFEST_OUT): $(ACTIVE_PDF_OUT) $(ACTIVE_DOCX_OUT) $(MANIFEST_SCRIPT) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(if $(strip $(ACTIVE_GOLDEN_CONTRACT)),$(ACTIVE_GOLDEN_CONTRACT),)
@@ -198,6 +202,9 @@ test-output-routing:
 test-figure-modes:
 	@bash scripts/test_figure_modes.sh
 
+test-author-injection:
+	@bash scripts/test_author_injection.sh
+
 profiles:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" list-profiles
 
@@ -205,7 +212,7 @@ profile-show:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) show --format yaml
 
 profile-scaffold:
-	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_FIGURE_PLACEMENT=pages] [PROFILE_FIGURE_CAPTION_POSITION=top] [PROFILE_FIGURE_PLACEHOLDER_ID=figures] [PROFILE_PAPER_SIZE=a4] [PROFILE_MARGIN_UNIT=cm] [PROFILE_MARGIN_TOP=1.5] [PROFILE_MARGIN_RIGHT=1.5] [PROFILE_MARGIN_BOTTOM=1.5] [PROFILE_MARGIN_LEFT=1.5] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
+	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_AUTHOR_METADATA=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_FIGURE_PLACEMENT=pages] [PROFILE_FIGURE_CAPTION_POSITION=top] [PROFILE_FIGURE_PLACEHOLDER_ID=figures] [PROFILE_PAPER_SIZE=a4] [PROFILE_MARGIN_UNIT=cm] [PROFILE_MARGIN_TOP=1.5] [PROFILE_MARGIN_RIGHT=1.5] [PROFILE_MARGIN_BOTTOM=1.5] [PROFILE_MARGIN_LEFT=1.5] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
 	@args=( \
 		--name "$(PROFILE_NAME)" \
 		--config "$(CONFIG)" \
@@ -216,6 +223,7 @@ profile-scaffold:
 	if [ -n "$(PROFILE_MAIN)" ]; then args+=(--manuscript-source "$(PROFILE_MAIN)"); fi; \
 	if [ -n "$(PROFILE_FIGS)" ]; then args+=(--manuscript-source "$(PROFILE_FIGS)"); fi; \
 	if [ -n "$(PROFILE_BIB)" ]; then args+=(--bibliography "$(PROFILE_BIB)"); fi; \
+	if [ -n "$(PROFILE_AUTHOR_METADATA)" ]; then args+=(--author-metadata "$(PROFILE_AUTHOR_METADATA)"); fi; \
 	if [ -n "$(PROFILE_CSL)" ]; then args+=(--csl "$(PROFILE_CSL)"); fi; \
 	args+=(--page-numbers "$(PROFILE_PAGE_NUMBERS)"); \
 	args+=(--line-spacing "$(PROFILE_LINE_SPACING)"); \
@@ -316,11 +324,11 @@ csl-source:
 	done; \
 	python3 "$(CSL_RESOLVER)" source --journal "$(JOURNAL)" --dest-dir "$(CSL_DEST_DIR)" "$${args[@]}"
 
-check: check-tools validate-config lint-manuscript refs-audit
+check: check-tools validate-config lint-manuscript refs-audit test-author-injection
 	@$(MAKE) --no-print-directory all
 	@echo "Build check passed."
 
-check-fixture: check-tools validate-config fixture-lint fixture-refs-audit test-figure-modes
+check-fixture: check-tools validate-config fixture-lint fixture-refs-audit test-figure-modes test-author-injection
 	@$(MAKE) --no-print-directory fixture-all
 	@$(MAKE) --no-print-directory fixture-contract-check
 	@echo "Fixture build check passed."

@@ -1,0 +1,15 @@
+title_note: Synthetic author metadata used for regression and formatting checks.
+authors:
+  - name: Lila M. Carter
+    affiliations: [aff1, aff2]
+    corresponding: true
+    email: lila.carter@example.org
+    orcid: 0000-0002-1234-5678
+  - name: Noah R. Bennett
+    affiliations: [aff2]
+    corresponding: false
+    email: noah.bennett@example.org
+    orcid: 0000-0003-9876-5432
+affiliations:
+  aff1: Department of Synthetic Ecology, Harborview University, Sydney, Australia
+  aff2: Centre for Reproducible Workflows, Southern Institute of Systems Science, Melbourne, Australia

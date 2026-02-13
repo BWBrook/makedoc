@@ -6,6 +6,7 @@ profiles:
     manuscript_sources:
       - testbed/manuscript/text/fixture_main.md
       - testbed/manuscript/text/fixture_figures.md
+    author_metadata: testbed/manuscript/authors.yaml
     bibliography: testbed/references/fixture_refs.yaml
     csl: testbed/csl/fixture_style.csl
     journal: Oikos

@@ -185,6 +185,12 @@ Context: Phase 1-10 implementation (through profile-driven figure placement)
 - `make test-output-routing` -> PASS after config split (`settings/build.yaml` for active + `settings/fixture.yaml` for fixture); confirms fixture outputs now land in `dist/fixture/*`.
 - `make check-fixture` -> PASS after fixture config split (fixture lint/audit/build/contract checks run from `settings/fixture.yaml`).
 - `make all` -> PASS and produces only active outputs under `dist/testbed/*` (no fixture outputs rebuilt by default).
+- `make test-author-injection` -> PASS (placeholder replacement and after-title fallback are both validated).
+- `make check` / `make check-fixture` -> PASS with profile-driven author metadata injection and testbed `authors.yaml` path checks enabled.
+- `python3 -m py_compile scripts/prepare_markdown_sources.py` -> PASS (section-flow and author-superscript changes compile cleanly).
+- `make test-author-injection` -> PASS (now also validates default page breaks after authors, before `Introduction`, and before `References`, plus level-2 spacing guard).
+- `make test-figure-modes` -> PASS (inline mode updated for default references page break while preserving no figure-page break behavior).
+- `make check && make check-fixture && make -B all` -> PASS (full validation suite and forced rebuild with new section-flow defaults).
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

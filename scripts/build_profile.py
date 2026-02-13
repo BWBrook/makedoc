@@ -146,6 +146,7 @@ class Profile:
     description: str
     manuscript_sources: list[str]
     lint_sources: list[str]
+    author_metadata: str
     bibliography: str
     csl: str
     journal: str
@@ -170,6 +171,7 @@ class Profile:
             "description": self.description,
             "manuscript_sources": self.manuscript_sources,
             "lint_sources": self.lint_sources,
+            "author_metadata": self.author_metadata,
             "bibliography": self.bibliography,
             "csl": self.csl,
             "journal": self.journal,
@@ -432,6 +434,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
     )
     bibliography = expect_str(raw_profile, "bibliography")
     csl = expect_str(raw_profile, "csl")
+    author_metadata = expect_str(raw_profile, "author_metadata", required=False)
     journal = expect_str(raw_profile, "journal", required=False)
     requested_output_dir = expect_str(raw_profile, "output_dir")
     output_dir = _infer_output_dir(requested_output_dir, manuscript_sources)
@@ -587,6 +590,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         description=description,
         manuscript_sources=manuscript_sources,
         lint_sources=lint_sources,
+        author_metadata=author_metadata,
         bibliography=bibliography,
         csl=csl,
         journal=journal,
@@ -630,6 +634,7 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_DESCRIPTION": profile.description,
         f"{base}_MANUSCRIPT_SOURCES": profile.manuscript_sources,
         f"{base}_LINT_SOURCES": profile.lint_sources,
+        f"{base}_AUTHOR_METADATA": profile.author_metadata,
         f"{base}_BIBLIOGRAPHY": profile.bibliography,
         f"{base}_CSL": profile.csl,
         f"{base}_JOURNAL": profile.journal,

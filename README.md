@@ -113,6 +113,12 @@ Verifies the new figure pipeline behavior in `pages`, `inline`, and `captions_pa
 - supplementary figure ordering
 - inline insertion at a placeholder with bottom-positioned captions.
 
+Author metadata regression:
+```bash
+make test-author-injection
+```
+Verifies profile-driven author metadata injection at `<div id="authors"></div>` and fallback insertion after the first title heading.
+
 Workspace cleanup:
 ```bash
 make tidy
@@ -157,6 +163,7 @@ make profile-scaffold \
   PROFILE_MAIN=/path/to/other-repo/manuscript/text/main.md \
   PROFILE_FIGS=/path/to/other-repo/manuscript/text/figures.md \
   PROFILE_BIB=/path/to/other-repo/references/refs.yaml \
+  PROFILE_AUTHOR_METADATA=/path/to/other-repo/manuscript/authors.yaml \
   PROFILE_CSL=/path/to/other-repo/csl/oikos.csl \
   PROFILE_PAGE_NUMBERS=lower_right \
   PROFILE_LINE_SPACING=single \
@@ -180,6 +187,7 @@ Each profile supports:
 
 - `manuscript_sources`: ordered Markdown input files for Pandoc
 - `lint_sources`: Markdown files scanned by lint checks. If omitted, this defaults to `manuscript_sources`.
+- `author_metadata`: optional YAML file path for manuscript author metadata injection
 - `bibliography`: YAML bibliography path
 - `csl`: CSL file path
 - `journal`: optional journal label/metadata
@@ -219,13 +227,29 @@ Each profile supports:
   ```
 - `References` placement behavior:
   - If any source markdown file contains a heading matching `References` (case-insensitive), the build inserts a `<div id="refs"></div>` anchor immediately after that heading in the prepared markdown pipeline, so Pandoc places the bibliography there.
+  - By default the `References` heading is prefixed with a hard page break (LaTeX + OpenXML raw blocks) so PDF and DOCX start the reference list on a new page.
   - If no such heading exists, Pandoc appends the bibliography at the end of the document.
   - The behavior is implemented while concatenating sources: `scripts/prepare_markdown_sources.py` builds `$(PROFILE_CACHE_DIR)/<profile>_sources.md` and normalizes it before handing it to Pandoc.
+- Author metadata behavior:
+  - If profile key `author_metadata` is set, `scripts/prepare_markdown_sources.py` loads the YAML file and renders a superscript-affiliation author block (Pandoc native superscript syntax, e.g. `Name*^1,2^`).
+  - Author block placeholder token: `<div id="authors"></div>`.
+  - If placeholder is missing, insertion falls back to immediately after the first H1 title (`# ...`).
+  - By default a hard page break is inserted after the generated author block so title-page metadata is separated from body content.
+  - If metadata path is set but invalid/missing, source preparation fails with a validation error.
+- Section-flow defaults in source preparation:
+  - The first `Introduction` heading is moved onto a new page by default (hard page break).
+  - Level-2 headings (`## ...`) are normalized to at least two blank lines of separation in prepared markdown.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
   - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
   - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.
   - `placement=captions_page`: creates a dedicated `## Figure Captions` page with one plain caption line per figure (no bullets), then appends each figure on successive pages with label-only titles (`Fig. X.`) and image-only blocks (no repeated caption under the image). Supplementary figures are grouped after a `## Supplementary Information` heading.
   - captions in `pages`/`inline` modes are generated as `**Fig. X.**` / `**Fig. S1.**`; underlying image elements continue to carry their source alt text.
+  - page breaks are emitted in both LaTeX and OpenXML raw blocks so PDF and DOCX respect dedicated figure-page separation.
+- DOCX post-processing:
+  - `scripts/normalize_docx_styles.py` runs after DOCX generation to:
+    - normalize heading styles to black (`000000`) by default
+    - apply profile-driven line spacing (`single`, `1.5`, `2`)
+    - apply profile-driven line numbering (`continuous`, `page`, `section`, `none`)
 - `edgecases` (optional):
   - `unknown_cite`
   - `manual_cite`
@@ -243,6 +267,7 @@ profiles:
     lint_sources:
       - /path/to/other-repo/manuscript/text/main.md
       - /path/to/other-repo/manuscript/text/figures.md
+    author_metadata: /path/to/other-repo/manuscript/authors.yaml
     bibliography: /path/to/other-repo/references/refs.yaml
     csl: /path/to/other-repo/csl/journal-style.csl
     journal: Journal Name

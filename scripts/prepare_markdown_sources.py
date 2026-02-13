@@ -5,6 +5,15 @@ The source pipeline now normalizes figure blocks and reference placement:
 if an author-supplied ``References`` heading exists, we inject the
 Pandoc-style anchor div (`<div id="refs"></div>`) at that location so the
 bibliography is rendered there.
+If profile-level author metadata is configured, an author block is injected at
+`<div id="authors"></div>`; if that placeholder is absent, insertion falls back
+to immediately after the first `#` title heading.
+
+Default section layout policy:
+- when author metadata is injected, a page break is inserted after the author block
+- the first `Introduction` heading is forced onto a new page
+- the `References` heading is forced onto a new page
+- level-2 headings are separated by at least two blank lines in prepared markdown
 
 Figure policy is driven by profile settings:
 - `placement=pages` (default): extracted figure blocks are appended after references
@@ -27,6 +36,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from build_profile import load_config, resolve_profile
 
 
@@ -36,6 +47,14 @@ FIGURE_LINE_RE = re.compile(
 )
 FIGURE_ID_RE = re.compile(r"#(?P<id>[\w.-]+)")
 SUPPLEMENTARY_ID_RE = re.compile(r"-s\d+$", re.IGNORECASE)
+DOCX_PAGEBREAK_OPENXML = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+TITLE_HEADING_RE = re.compile(r"^\s*#\s+\S+")
+AUTHORS_PLACEHOLDER_RE = re.compile(
+    r"^\s*<div\s+[^>]*\bid\s*=\s*['\"]authors['\"][^>]*>(?:\s*</div>\s*)?$",
+    re.IGNORECASE,
+)
+INTRO_SECTION_RE = re.compile(r"^\s*#{1,6}\s+introduction\b", re.IGNORECASE)
+MAJOR_SECTION_RE = re.compile(r"^\s*##\s+\S+")
 
 
 @dataclass(frozen=True)
@@ -45,6 +64,15 @@ class FigureBlock:
     title: str
     src: str
     attrs: str
+
+
+@dataclass(frozen=True)
+class AuthorRecord:
+    name: str
+    affiliations: list[str]
+    corresponding: bool
+    email: str
+    orcid: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,6 +95,174 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _as_nonempty_str(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Author metadata '{label}' must be a non-empty string.")
+    return value.strip()
+
+
+def _load_author_metadata(path: Path) -> tuple[str, list[AuthorRecord], dict[str, str]]:
+    if not path.exists():
+        raise ValueError(f"Author metadata file not found: {path}")
+
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+
+    if not isinstance(payload, dict):
+        raise ValueError("Author metadata root must be a mapping.")
+
+    title_note = str(payload.get("title_note", "") or "").strip()
+
+    affiliations_raw = payload.get("affiliations")
+    if not isinstance(affiliations_raw, dict) or not affiliations_raw:
+        raise ValueError("Author metadata key 'affiliations' must be a non-empty mapping.")
+    affiliations: dict[str, str] = {}
+    for aff_id, aff_text in affiliations_raw.items():
+        aff_key = _as_nonempty_str(aff_id, label="affiliations key")
+        affiliations[aff_key] = _as_nonempty_str(
+            aff_text, label=f"affiliations.{aff_key}"
+        )
+
+    authors_raw = payload.get("authors")
+    if not isinstance(authors_raw, list) or not authors_raw:
+        raise ValueError("Author metadata key 'authors' must be a non-empty list.")
+
+    authors: list[AuthorRecord] = []
+    for index, item in enumerate(authors_raw, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Author metadata authors[{index}] must be a mapping.")
+
+        name = _as_nonempty_str(item.get("name"), label=f"authors[{index}].name")
+        aff_ids_raw = item.get("affiliations")
+        if not isinstance(aff_ids_raw, list) or not aff_ids_raw:
+            raise ValueError(
+                f"Author metadata authors[{index}].affiliations must be a non-empty list."
+            )
+
+        aff_ids: list[str] = []
+        for aff_id in aff_ids_raw:
+            aff_key = _as_nonempty_str(
+                aff_id, label=f"authors[{index}].affiliations item"
+            )
+            if aff_key not in affiliations:
+                raise ValueError(
+                    f"Author metadata authors[{index}] references unknown affiliation ID '{aff_key}'."
+                )
+            aff_ids.append(aff_key)
+
+        corresponding = bool(item.get("corresponding", False))
+        email = str(item.get("email", "") or "").strip()
+        orcid = str(item.get("orcid", "") or "").strip()
+
+        authors.append(
+            AuthorRecord(
+                name=name,
+                affiliations=aff_ids,
+                corresponding=corresponding,
+                email=email,
+                orcid=orcid,
+            )
+        )
+
+    return title_note, authors, affiliations
+
+
+def _author_block_lines(author_metadata_path: str) -> list[str]:
+    title_note, authors, affiliations = _load_author_metadata(Path(author_metadata_path))
+
+    ordered_affiliations: list[str] = []
+    for author in authors:
+        for aff_id in author.affiliations:
+            if aff_id not in ordered_affiliations:
+                ordered_affiliations.append(aff_id)
+
+    if not ordered_affiliations:
+        raise ValueError(
+            "Author metadata includes no referenced affiliations. Check authors.affiliations."
+        )
+
+    aff_number = {aff_id: idx for idx, aff_id in enumerate(ordered_affiliations, start=1)}
+
+    author_fragments: list[str] = []
+    corresponding_contacts: list[str] = []
+    for author in authors:
+        superscripts = ",".join(str(aff_number[aff_id]) for aff_id in author.affiliations)
+        display_name = f"{author.name}*" if author.corresponding else author.name
+        author_text = f"{display_name}^{superscripts}^"
+        if author.orcid:
+            author_text = f"{author_text} (ORCID: {author.orcid})"
+        author_fragments.append(author_text)
+
+        if author.corresponding:
+            if author.email:
+                corresponding_contacts.append(f"{author.name} ({author.email})")
+            else:
+                corresponding_contacts.append(author.name)
+
+    lines: list[str] = [", ".join(author_fragments), ""]
+
+    if title_note:
+        lines.append(f"*{title_note}*")
+        lines.append("")
+
+    for aff_id in ordered_affiliations:
+        lines.append(f"{aff_number[aff_id]}. {affiliations[aff_id]}")
+
+    if corresponding_contacts:
+        lines.append("")
+        label = "**Corresponding author:**" if len(corresponding_contacts) == 1 else "**Corresponding authors:**"
+        lines.append(f"{label} {'; '.join(corresponding_contacts)}")
+
+    return lines
+
+
+def apply_author_metadata(lines: list[str], author_metadata_path: str) -> list[str]:
+    if not author_metadata_path.strip():
+        return lines
+
+    block_lines = _author_block_lines(author_metadata_path)
+
+    in_code_fence = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+        if in_code_fence:
+            continue
+        if AUTHORS_PLACEHOLDER_RE.match(line):
+            return (
+                lines[:index]
+                + block_lines
+                + [""]
+                + _page_break_lines()
+                + [""]
+                + lines[index + 1 :]
+            )
+
+    in_code_fence = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+        if in_code_fence:
+            continue
+        if TITLE_HEADING_RE.match(line):
+            return (
+                lines[: index + 1]
+                + [""]
+                + block_lines
+                + [""]
+                + _page_break_lines()
+                + [""]
+                + lines[index + 1 :]
+            )
+
+    raise ValueError(
+        "author_metadata is set but no insertion point found. Add <div id=\"authors\"></div> "
+        "or ensure the manuscript starts with a '# Title' heading."
+    )
+
+
 def has_refs_anchor(lines: list[str], index: int) -> bool:
     for offset in range(0, 8):
         if index + offset >= len(lines):
@@ -77,6 +273,96 @@ def has_refs_anchor(lines: list[str], index: int) -> bool:
     return False
 
 
+def _is_page_break_line(line: str) -> bool:
+    stripped = line.strip()
+    return stripped == "\\clearpage" or 'w:type="page"' in stripped
+
+
+def _has_trailing_page_break(lines: list[str]) -> bool:
+    cursor = len(lines) - 1
+    saw_page_break_token = False
+
+    while cursor >= 0:
+        stripped = lines[cursor].strip()
+        if not stripped:
+            cursor -= 1
+            continue
+        if _is_page_break_line(lines[cursor]):
+            saw_page_break_token = True
+            cursor -= 1
+            continue
+        if stripped.startswith("```"):
+            cursor -= 1
+            continue
+        return saw_page_break_token
+
+    return saw_page_break_token
+
+
+def _page_break_lines() -> list[str]:
+    return _page_break_block().splitlines()
+
+
+def _append_page_break(lines: list[str]) -> None:
+    if lines and lines[-1].strip():
+        lines.append("")
+    lines.extend(_page_break_lines())
+    lines.append("")
+
+
+def apply_introduction_page_break(lines: list[str]) -> list[str]:
+    out_lines: list[str] = []
+    in_code_fence = False
+    inserted = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+            out_lines.append(line)
+            continue
+        if in_code_fence:
+            out_lines.append(line)
+            continue
+
+        if not inserted and INTRO_SECTION_RE.match(line):
+            if not _has_trailing_page_break(out_lines):
+                _append_page_break(out_lines)
+            inserted = True
+        out_lines.append(line)
+
+    return out_lines
+
+
+def apply_major_section_spacing(lines: list[str]) -> list[str]:
+    out_lines: list[str] = []
+    in_code_fence = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+            out_lines.append(line)
+            continue
+        if in_code_fence:
+            out_lines.append(line)
+            continue
+
+        if MAJOR_SECTION_RE.match(line) and out_lines:
+            trailing_blanks = 0
+            cursor = len(out_lines) - 1
+            while cursor >= 0 and not out_lines[cursor].strip():
+                trailing_blanks += 1
+                cursor -= 1
+            while trailing_blanks < 2:
+                out_lines.append("")
+                trailing_blanks += 1
+
+        out_lines.append(line)
+
+    return out_lines
+
+
 def reference_placement(lines: list[str]) -> list[str]:
     out_lines: list[str] = []
     refs_injected = False
@@ -84,6 +370,8 @@ def reference_placement(lines: list[str]) -> list[str]:
     for index, line in enumerate(lines):
         if not refs_injected and REFERENCE_SECTION_RE.match(line.strip()):
             refs_injected = True
+            if not _has_trailing_page_break(out_lines):
+                _append_page_break(out_lines)
             out_lines.append(line)
             if not has_refs_anchor(lines, index):
                 out_lines.append("")
@@ -218,6 +506,17 @@ def _image_without_caption_text(figure: FigureBlock) -> str:
     return f"![]({figure.src}){attrs_block}"
 
 
+def _page_break_block() -> str:
+    return (
+        "```{=latex}\n"
+        "\\clearpage\n"
+        "```\n\n"
+        "```{=openxml}\n"
+        f"{DOCX_PAGEBREAK_OPENXML}\n"
+        "```"
+    )
+
+
 def build_figure_blocks(
     figures: list[FigureBlock],
     caption_position: str,
@@ -231,15 +530,19 @@ def build_figure_blocks(
     blocks: list[str] = []
 
     if placement == "captions_page":
-        blocks.append("\\clearpage\n## Figure Captions")
+        blocks.append(f"{_page_break_block()}\n\n## Figure Captions")
         for label, figure in ordered:
             blocks.append(_title_line(label, figure))
         for label, figure in main_figures:
-            blocks.append(f"\\clearpage\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}")
+            blocks.append(
+                f"{_page_break_block()}\n\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}"
+            )
         if supplementary_figures:
-            blocks.append("\\clearpage\n## Supplementary Information")
+            blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
             for label, figure in supplementary_figures:
-                blocks.append(f"\\clearpage\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}")
+                blocks.append(
+                    f"{_page_break_block()}\n\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}"
+                )
         return "\n\n".join(blocks) + ("\n" if blocks else "")
 
     if placement == "inline":
@@ -249,12 +552,16 @@ def build_figure_blocks(
         return "\n\n".join(blocks) + ("\n" if blocks else "")
 
     for label, figure in main_figures:
-        blocks.append(f"\\clearpage\n{_build_figure_block_with_caption_position(label, figure, caption_position)}")
+        blocks.append(
+            f"{_page_break_block()}\n\n"
+            f"{_build_figure_block_with_caption_position(label, figure, caption_position)}"
+        )
     if supplementary_figures:
-        blocks.append("\\clearpage\n## Supplementary Information")
+        blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
         for label, figure in supplementary_figures:
             blocks.append(
-                f"\\clearpage\n{_build_figure_block_with_caption_position(label, figure, caption_position)}"
+                f"{_page_break_block()}\n\n"
+                f"{_build_figure_block_with_caption_position(label, figure, caption_position)}"
             )
     if not blocks:
         return ""
@@ -313,10 +620,13 @@ def main() -> int:
 
     raw = load_markdown_sources(profile.manuscript_sources)
     lines = raw.splitlines()
+    lines = apply_author_metadata(lines, profile.author_metadata)
     lines_without_figures, figures = extract_figures(lines)
-    refs_lines = reference_placement(lines_without_figures)
+    intro_paginated = apply_introduction_page_break(lines_without_figures)
+    refs_lines = reference_placement(intro_paginated)
+    spaced_lines = apply_major_section_spacing(refs_lines)
     prepared_lines = apply_figure_placement(
-        lines=refs_lines,
+        lines=spaced_lines,
         figures=figures,
         profile=profile,
     )

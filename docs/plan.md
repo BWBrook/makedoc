@@ -294,6 +294,10 @@ Out of scope for this iteration:
 - 2026-02-13: Updated layout generation warnings so missing `lineno`, `etoolbox`, or `geometry` packages are surfaced at build time (with PDF output continuing where possible).
 - 2026-02-13: Split fixture configuration into `settings/fixture.yaml` to keep active manuscript config lean and reduce default-build confusion.
 - 2026-02-13: Routed fixture outputs to `dist/fixture/*` and updated Make/CI routing checks so active and fixture artifacts are clearly separated.
+- 2026-02-13: Added profile key `author_metadata` (manuscript-specific YAML path) and source-prep author block injection using `<div id="authors"></div>` with after-title fallback.
+- 2026-02-13: Added synthetic author metadata fixture (`testbed/manuscript/authors.yaml`) and regression guard `make test-author-injection`.
+- 2026-02-13: Updated author rendering to Pandoc-native superscripts (`Name*^1,2^`) and added default hard page break immediately after the generated author block.
+- 2026-02-13: Added default section-flow normalization in source prep: hard page break before first `Introduction`, hard page break before `References`, and at-least-two-blank-line separation for level-2 headings.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
