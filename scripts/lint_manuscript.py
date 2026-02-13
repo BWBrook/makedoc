@@ -140,7 +140,7 @@ def lint_source(source: Path) -> list[LintError]:
 
 def emit_error(err: LintError) -> None:
     print(f"{err.source}:{err.line}: {err.message}")
-    if os.getenv("GITHUB_ACTIONS") == "true":
+    if os.getenv("GITHUB_ACTIONS") == "true" and os.getenv("DISABLE_GHA_ANNOTATIONS") != "1":
         msg = err.message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error file={err.source},line={err.line}::{msg}")
 

@@ -140,6 +140,7 @@ Out of scope for this iteration:
 - 2026-02-13: Added `scripts/lint_manuscript.py` with markdown table validation and GitHub annotation support.
 - 2026-02-13: Added edge-case fixtures and `check-fixture-guards` to assert expected failures for unknown citekeys/manual citations/malformed tables.
 - 2026-02-13: Hardened CI into three jobs (`guard-tests`, `build-main`, `build-fixture`) with artifact summaries and uploads.
+- 2026-02-13: Suppressed GitHub error annotations for expected-failure guard fixtures via `DISABLE_GHA_ANNOTATIONS=1`.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

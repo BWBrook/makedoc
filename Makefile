@@ -118,11 +118,11 @@ check-fixture-guards:
 		fi; \
 	}; \
 	expect_fail "refs audit catches unknown citation key" \
-		python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIB)" --source "$(EDGECASE_UNKNOWN_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIB)" --source "$(EDGECASE_UNKNOWN_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
 	expect_fail "lint catches manual author-year citation" \
-		python3 "$(LINT_SCRIPT)" --source "$(EDGECASE_MANUAL_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(EDGECASE_MANUAL_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
 	expect_fail "lint catches malformed markdown table" \
-		python3 "$(LINT_SCRIPT)" --source "$(EDGECASE_TABLE_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(EDGECASE_TABLE_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
 	if [ "$$status" -eq 0 ]; then \
 		echo "Fixture guard regression tests passed."; \
 	fi; \

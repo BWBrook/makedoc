@@ -19,6 +19,7 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Execute synthetic fixture workstream before CI hardening so hardening can target a controlled test corpus.
 - 2026-02-13: Add explicit negative guard tests so CI proves failure-detection behavior, not just happy-path builds.
 - 2026-02-13: Split CI into fast guard job + parallel build jobs to improve diagnostics and reduce time-to-failure.
+- 2026-02-13: Disable GitHub `::error` annotations during expected-failure guard tests to avoid misleading CI noise.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -75,6 +76,7 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `make check-fixture-guards` -> PASS (all three edge-case failures detected as expected)
 - `make check-fixture-guards && make check && make check-fixture` -> PASS (combined local verification after hardening changes)
 - `gh run watch 21972231252 --repo BWBrook/makedoc --exit-status` -> PASS (CI run with fixture pipeline steps completed successfully)
+- `make check-fixture-guards` (after annotation suppression fix) -> PASS (expected failures still detected; no shell invocation errors)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

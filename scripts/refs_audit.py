@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
 
 def emit_error(message: str, source: Path | None = None, line: int | None = None) -> None:
     print(message)
-    if os.getenv("GITHUB_ACTIONS") == "true":
+    if os.getenv("GITHUB_ACTIONS") == "true" and os.getenv("DISABLE_GHA_ANNOTATIONS") != "1":
         msg = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         if source is not None and line is not None:
             print(f"::error file={source},line={line}::{msg}")
