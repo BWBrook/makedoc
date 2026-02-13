@@ -1,7 +1,7 @@
 # Builder Notes
 
 Last updated: 2026-02-13
-Context: Phase 1-5 implementation (build scaffold, normalization, citations, figures, CI, and hardening)
+Context: Phase 1-7 implementation (build scaffold through config-driven and onboarding automation hardening)
 
 ## Decision Log
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
@@ -23,6 +23,10 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Switch build orchestration to profile YAML (`settings/build.yaml`) so sources can point to other repositories without changing Make targets.
 - 2026-02-13: Keep synthetic testbed as default profile baseline while preserving dedicated fixture profile for hardening checks.
 - 2026-02-13: Implement journal-name CSL resolver with local-first matching and Zotero style-index fallback download.
+- 2026-02-13: Add a profile scaffold helper and Make wrapper so onboarding new manuscript repositories does not require manual YAML editing.
+- 2026-02-13: Add fixture golden checks based on rendered DOCX/PDF structure rather than brittle byte-for-byte snapshots.
+- 2026-02-13: Provide an Ubuntu/WSL installer script with minimal/full package tiers and apt simulation size reporting.
+- 2026-02-13: Use cached apt package installs in CI to reduce repeated dependency provisioning overhead.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -57,6 +61,11 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Added `scripts/build_profile.py` and refactored `Makefile` to resolve active/fixture variables from YAML config.
 - 2026-02-13: Added `scripts/csl_resolver.py` and Make targets `csl-search` / `csl-source`.
 - 2026-02-13: Added root `README.md` documenting quickstart, profile schema, CSL tooling, and external path wiring.
+- 2026-02-13: Added `scripts/install_ubuntu_deps.sh` and dependency helper targets (`deps-estimate-*`, `deps-install-*`, `deps-dry-run-*`).
+- 2026-02-13: Added `scripts/profile_scaffold.py` and `make profile-scaffold` wrapper target for profile generation/appending.
+- 2026-02-13: Added `scripts/fixture_golden_check.py` and integrated it into `check-fixture`.
+- 2026-02-13: Updated GitHub Actions CI to use cached apt package setup and run fixture golden checks.
+- 2026-02-13: Expanded `README.md` with Ubuntu/WSL bootstrap and profile scaffold instructions.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -93,6 +102,13 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `make csl-search JOURNAL="Oikos"` -> PASS (local and remote CSL candidates listed)
 - `make csl-source JOURNAL="Oikos"` -> PASS (local-first resolution to `testbed/csl/fixture_style.csl`)
 - `python3 scripts/csl_resolver.py source --journal "Ecology Letters" --search-dir testbed/csl --dest-dir dist/csl_smoke --force --path-only` -> PASS (`dist/csl_smoke/ecology-letters.csl` downloaded)
+- `make deps-estimate-minimal` -> PASS (prints minimal package set and apt simulated disk estimate)
+- `make deps-estimate-full` -> PASS (prints full package set and apt simulated disk estimate)
+- `make deps-dry-run-minimal` -> PASS (simulated minimal install without root privileges)
+- `make deps-dry-run-full` -> PASS (simulated full install without root privileges)
+- `make profile-scaffold PROFILE_NAME=demo_profile` -> PASS (prints scaffold YAML snippet without file writes)
+- `make check-fixture` -> PASS (fixture lint/audit/build plus fixture golden checks passed)
+- `python3 -m py_compile scripts/build_profile.py scripts/csl_resolver.py scripts/profile_scaffold.py scripts/fixture_golden_check.py scripts/lint_manuscript.py scripts/refs_audit.py` -> PASS
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
@@ -100,4 +116,4 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 ## Open Issues
 - 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
 - Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.
-- Further CI hardening options remain (dependency caching and richer PR annotations), now supported by both real and synthetic guard suites.
+- Further CI hardening options remain (for example richer PR annotations), now supported by both real and synthetic guard suites.

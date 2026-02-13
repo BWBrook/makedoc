@@ -18,6 +18,10 @@ In scope for this iteration:
 - Synthetic fixture manuscript and testbed checks for CI regression testing
 - Config-driven profile selection for manuscript source locations
 - Journal-name-based CSL discovery and sourcing utility
+- Profile scaffolding helper for new external-manuscript onboarding
+- Lightweight fixture golden checks to detect structural regressions in rendered outputs
+- Ubuntu/WSL dependency installer script with minimal/full install tiers and size estimation
+- CI package-install caching to reduce repeated dependency provisioning time
 
 Out of scope for this iteration:
 - Journal-specific Word style template (`reference.docx`) tuning
@@ -29,6 +33,7 @@ Out of scope for this iteration:
 4. Phase 4 (completed): Figure/caption integration + cross-references
 5. Phase 5 (completed): CI/reproducibility guardrails
 6. Phase 6 (completed): Config-driven orchestration + onboarding docs
+7. Phase 7 (completed): Onboarding automation + fixture golden hardening
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -121,6 +126,22 @@ Out of scope for this iteration:
 - `make csl-source JOURNAL="..."` resolves a local style or downloads a suitable one
 - `README.md` documents quickstart, config schema, and external-repo path usage
 
+## Phase 7 Work Package
+### Deliverables
+- Ubuntu installer script with install tiers at `scripts/install_ubuntu_deps.sh`
+- Make targets for dependency estimation/install workflows (`deps-*`)
+- Profile scaffolding utility at `scripts/profile_scaffold.py` and `make profile-scaffold` wrapper
+- Fixture golden-check script at `scripts/fixture_golden_check.py` and `make fixture-golden-check`
+- CI updates to use cached apt package installs and execute fixture golden checks
+- `README.md` updates covering WSL/Ubuntu bootstrap and scaffold workflows
+
+### Acceptance Criteria
+- `make deps-estimate-minimal` and `make deps-estimate-full` report package sets and size estimates
+- `make profile-scaffold PROFILE_NAME=<name>` prints a usable profile snippet
+- `make check-fixture` includes and passes fixture golden checks
+- CI `build-fixture` job runs fixture golden checks after build
+- CI provisioning uses cached apt package setup across jobs
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -168,6 +189,10 @@ Out of scope for this iteration:
 - 2026-02-13: Added root `README.md` with quickstart and external repository wiring guidance.
 - 2026-02-13: Added journal-style resolver (`scripts/csl_resolver.py`) and Make targets `csl-search` / `csl-source`.
 - 2026-02-13: Revalidated gates after config transition (`make check`, `make check-fixture`, `make check-fixture-guards` all passed).
+- 2026-02-13: Added Ubuntu installer script (`scripts/install_ubuntu_deps.sh`) with minimal/full tiers and apt size simulation reporting.
+- 2026-02-13: Added profile scaffold helper (`scripts/profile_scaffold.py`) and Make wrapper target (`profile-scaffold`).
+- 2026-02-13: Added fixture golden checks (`scripts/fixture_golden_check.py`) and integrated into `check-fixture`.
+- 2026-02-13: Updated CI to use cached apt package installs and run fixture golden checks in `build-fixture`.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

@@ -9,12 +9,27 @@ PROFILE ?=
 FIXTURE_PROFILE ?= fixture
 
 CONFIG_SCRIPT ?= scripts/build_profile.py
+PROFILE_SCAFFOLD ?= scripts/profile_scaffold.py
 LINT_SCRIPT ?= scripts/lint_manuscript.py
 REFS_AUDIT ?= scripts/refs_audit.py
 CSL_RESOLVER ?= scripts/csl_resolver.py
+GOLDEN_CHECK ?= scripts/fixture_golden_check.py
+INSTALLER ?= scripts/install_ubuntu_deps.sh
 
 CSL_DEST_DIR ?= csl
 JOURNAL ?=
+
+PROFILE_NAME ?=
+PROFILE_MAIN ?=
+PROFILE_FIGS ?=
+PROFILE_BIB ?=
+PROFILE_CSL ?=
+PROFILE_JOURNAL ?=Journal Name
+PROFILE_OUTPUT_DIR ?=dist
+PROFILE_OUTPUT_STEM ?=manuscript
+PROFILE_APPEND ?=0
+PROFILE_SET_DEFAULT ?=0
+PROFILE_OVERWRITE ?=0
 
 PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
 FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
@@ -40,7 +55,7 @@ endif
 PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
 FIXTURE_PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
 
-.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit check-fixture-guards check check-fixture clean profiles profile-show csl-search csl-source
+.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-golden-check check-fixture-guards check check-fixture clean profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx
 
@@ -81,6 +96,24 @@ profiles:
 profile-show:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) show --format yaml
 
+profile-scaffold:
+	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
+	@args=( \
+		--name "$(PROFILE_NAME)" \
+		--config "$(CONFIG)" \
+		--journal "$(PROFILE_JOURNAL)" \
+		--output-dir "$(PROFILE_OUTPUT_DIR)" \
+		--output-stem "$(PROFILE_OUTPUT_STEM)" \
+	); \
+	if [ -n "$(PROFILE_MAIN)" ]; then args+=(--manuscript-source "$(PROFILE_MAIN)"); fi; \
+	if [ -n "$(PROFILE_FIGS)" ]; then args+=(--manuscript-source "$(PROFILE_FIGS)"); fi; \
+	if [ -n "$(PROFILE_BIB)" ]; then args+=(--bibliography "$(PROFILE_BIB)"); fi; \
+	if [ -n "$(PROFILE_CSL)" ]; then args+=(--csl "$(PROFILE_CSL)"); fi; \
+	if [ "$(PROFILE_APPEND)" = "1" ]; then args+=(--append); fi; \
+	if [ "$(PROFILE_SET_DEFAULT)" = "1" ]; then args+=(--set-default); fi; \
+	if [ "$(PROFILE_OVERWRITE)" = "1" ]; then args+=(--overwrite); fi; \
+	python3 "$(PROFILE_SCAFFOLD)" "$${args[@]}"
+
 lint-manuscript:
 	@echo "Running manuscript lint checks..."
 	@args=(); \
@@ -112,6 +145,10 @@ fixture-refs-audit:
 		args+=(--source "$$src"); \
 	done; \
 	python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" "$${args[@]}"
+
+fixture-golden-check: $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
+	@echo "Running fixture golden-output checks..."
+	@python3 "$(GOLDEN_CHECK)" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
 
 check-fixture-guards:
 	@echo "Running fixture guard regression tests..."
@@ -162,7 +199,26 @@ check: check-tools lint-manuscript refs-audit
 
 check-fixture: check-tools fixture-lint fixture-refs-audit
 	@$(MAKE) --no-print-directory fixture-all
+	@$(MAKE) --no-print-directory fixture-golden-check
 	@echo "Fixture build check passed."
+
+deps-estimate-minimal:
+	@bash "$(INSTALLER)" --mode minimal --estimate-only
+
+deps-estimate-full:
+	@bash "$(INSTALLER)" --mode full --estimate-only
+
+deps-dry-run-minimal:
+	@bash "$(INSTALLER)" --mode minimal --dry-run
+
+deps-dry-run-full:
+	@bash "$(INSTALLER)" --mode full --dry-run
+
+deps-install-minimal:
+	@bash "$(INSTALLER)" --mode minimal
+
+deps-install-full:
+	@bash "$(INSTALLER)" --mode full
 
 clean:
 	rm -rf dist

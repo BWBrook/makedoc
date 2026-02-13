@@ -23,11 +23,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install guard dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            ripgrep \
-            python3-yaml
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: ripgrep python3-yaml
+          version: guard-deps-v1
+          execute_install_scripts: true
 
       - name: Print tool versions
         run: |
@@ -52,13 +52,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-xetex \
-            ripgrep \
-            python3-yaml
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: pandoc texlive-xetex ripgrep python3-yaml
+          version: build-main-deps-v1
+          execute_install_scripts: true
 
       - name: Build main manuscript outputs
         run: |
@@ -89,18 +87,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-xetex \
-            ripgrep \
-            python3-yaml
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: pandoc texlive-xetex ripgrep python3-yaml poppler-utils
+          version: build-fixture-deps-v2
+          execute_install_scripts: true
 
       - name: Build fixture outputs
         run: |
           make check-tools
           make fixture-all
+          make fixture-golden-check
 
       - name: Summarize fixture artifacts
         run: |

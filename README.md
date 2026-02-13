@@ -4,13 +4,36 @@ Config-driven manuscript build tooling for generating journal-submission outputs
 
 This repository now uses a synthetic regression fixture (`testbed/`) as the default build input, so the pipeline is always runnable in isolation.
 
-## Requirements
+## Ubuntu/WSL Bootstrap
 
-- Ubuntu (tested on 24.04 LTS)
-- `pandoc`
-- `xelatex` (via `texlive-xetex`)
-- `python3` + `python3-yaml`
-- `ripgrep` (used in checks/CI)
+Use the installer helper for first-time setup on Ubuntu 24.04 (including WSL Ubuntu):
+
+```bash
+make deps-estimate-minimal
+make deps-install-minimal
+```
+
+Optional "full monty" profile with extra tooling:
+
+```bash
+make deps-estimate-full
+make deps-install-full
+```
+
+Install modes:
+- `minimal`: build/check essentials for this repo (`pandoc`, `xelatex`, `python3-yaml`, `ripgrep`, etc.)
+- `full`: `minimal` plus heavier optional tools (`libreoffice`, broader TeX extras, hunspell locales, `poppler-utils`)
+
+Disk-size note:
+- both estimate targets run `apt-get -s install ...` and print the host-specific "After this operation..." line, which gives a rough install size for that machine.
+- package availability and size can vary across mirrors and preinstalled system state.
+
+Direct script usage is also available:
+
+```bash
+scripts/install_ubuntu_deps.sh --mode minimal --estimate-only
+scripts/install_ubuntu_deps.sh --mode full --dry-run
+```
 
 ## Quick Start
 
@@ -43,6 +66,25 @@ make profiles
 make profile-show
 make PROFILE=fixture all
 make PROFILE=fixture check
+```
+
+Scaffold a new profile snippet:
+
+```bash
+make profile-scaffold PROFILE_NAME=my_ms
+```
+
+Scaffold and append a real profile using paths from another repository:
+
+```bash
+make profile-scaffold \
+  PROFILE_NAME=my_ms \
+  PROFILE_MAIN=/path/to/other-repo/manuscript/text/main.md \
+  PROFILE_FIGS=/path/to/other-repo/manuscript/text/figures.md \
+  PROFILE_BIB=/path/to/other-repo/references/refs.yaml \
+  PROFILE_CSL=/path/to/other-repo/csl/oikos.csl \
+  PROFILE_APPEND=1 \
+  PROFILE_SET_DEFAULT=1
 ```
 
 ## Config Schema
@@ -124,6 +166,10 @@ make check-fixture-guards
 - manual author-year citations
 - malformed Markdown tables
 
+`check-fixture` now includes a lightweight fixture golden check (`scripts/fixture_golden_check.py`) that verifies:
+- DOCX structure includes expected table and image counts
+- PDF remains parseable and contains expected marker headings/text
+
 ## CI
 
 GitHub Actions workflow: `.github/workflows/ci.yml`
@@ -131,4 +177,7 @@ GitHub Actions workflow: `.github/workflows/ci.yml`
 Jobs:
 - `guard-tests`: lint/audit/negative-guard checks
 - `build-main`: build active profile outputs + upload artifacts
-- `build-fixture`: build fixture outputs + upload artifacts
+- `build-fixture`: build fixture outputs, run golden checks, upload artifacts
+
+Dependency caching:
+- CI uses cached apt package installs through `awalsh128/cache-apt-pkgs-action` to reduce repeated provisioning time.
