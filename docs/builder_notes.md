@@ -27,6 +27,7 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - 2026-02-13: Add fixture golden checks based on rendered DOCX/PDF structure rather than brittle byte-for-byte snapshots.
 - 2026-02-13: Provide an Ubuntu/WSL installer script with minimal/full package tiers and apt simulation size reporting.
 - 2026-02-13: Use cached apt package installs in CI to reduce repeated dependency provisioning overhead.
+- 2026-02-13: Keep cached apt setup in CI, but add explicit `apt-get install` verification in build jobs to avoid TeX font availability drift.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -66,6 +67,8 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - 2026-02-13: Added `scripts/fixture_golden_check.py` and integrated it into `check-fixture`.
 - 2026-02-13: Updated GitHub Actions CI to use cached apt package setup and run fixture golden checks.
 - 2026-02-13: Expanded `README.md` with Ubuntu/WSL bootstrap and profile scaffold instructions.
+- 2026-02-13: Detected CI regression (`run 21974358589`) caused by cache-only build dependency restore missing TeX font readiness.
+- 2026-02-13: Added explicit build-job dependency verification step (`apt-get install -y ...`) after cache restore and revalidated green CI.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -110,6 +113,8 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - `make check-fixture` -> PASS (fixture lint/audit/build plus fixture golden checks passed)
 - `python3 -m py_compile scripts/build_profile.py scripts/csl_resolver.py scripts/profile_scaffold.py scripts/fixture_golden_check.py scripts/lint_manuscript.py scripts/refs_audit.py` -> PASS
 - `gh run watch 21974286056 --repo BWBrook/makedoc --exit-status` -> PASS (CI run with cached apt setup and fixture golden checks green across all jobs)
+- `gh run watch 21974358589 --repo BWBrook/makedoc --exit-status` -> FAIL (cache-only restore in build jobs triggered LaTeX font availability error)
+- `gh run watch 21974394354 --repo BWBrook/makedoc --exit-status` -> PASS (cached restore + explicit apt verification produced clean green CI)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

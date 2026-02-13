@@ -194,6 +194,8 @@ Out of scope for this iteration:
 - 2026-02-13: Added fixture golden checks (`scripts/fixture_golden_check.py`) and integrated into `check-fixture`.
 - 2026-02-13: Updated CI to use cached apt package installs and run fixture golden checks in `build-fixture`.
 - 2026-02-13: Verified updated CI passed on GitHub (`manuscript-ci` run `21974286056`) with cached dependency steps and golden-check execution.
+- 2026-02-13: Hardened cached CI dependency provisioning by adding explicit build-job package verification after cache restore.
+- 2026-02-13: Verified hardened cached CI passed on GitHub (`manuscript-ci` run `21974394354`) after resolving transient TeX font readiness regression.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
