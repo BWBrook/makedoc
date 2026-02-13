@@ -20,8 +20,8 @@ Out of scope for this iteration:
 - CI automation
 
 ## Milestones
-1. Phase 1 (current): Build scaffold and repository bootstrap
-2. Phase 2: Manuscript normalization (table/math/unicode cleanup)
+1. Phase 1 (completed): Build scaffold and repository bootstrap
+2. Phase 2 (current): Manuscript normalization (table/math/unicode cleanup)
 3. Phase 3: Citation migration and unresolved-citation reporting
 4. Phase 4: Figure/caption integration + cross-references
 5. Phase 5: CI/reproducibility guardrails
@@ -39,6 +39,19 @@ Out of scope for this iteration:
 - `make pdf` produces `dist/manuscript.pdf`
 - `make all` succeeds from a clean state
 - Git remote `origin` exists and default branch is pushed
+
+## Phase 2 Work Package
+### Deliverables
+- Content-preserving normalization edits in `manuscript/text/draft_ms_v2.md`
+- Removal of Unicode em-space warning source
+- Repair of malformed table row for positive-matched control slope entry
+- Updated execution evidence in `docs/builder_notes.md`
+
+### Acceptance Criteria
+- `make all` succeeds from a clean state
+- `make check` passes
+- PDF build no longer emits the previous `U+2003` warning
+- Table row for `positive-matched control` is valid markdown and renders correctly
 
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
@@ -60,6 +73,8 @@ Out of scope for this iteration:
 - 2026-02-13: Non-blocking warning observed during PDF build for Unicode em-space (`U+2003`) in manuscript text.
 - 2026-02-13: Git initialized on branch `main` and first commit created (`67e6938`).
 - 2026-02-13: Private GitHub remote created and pushed: `https://github.com/BWBrook/makedoc`.
+- 2026-02-13: Phase 2 normalization edits applied to manuscript source (removed standalone em-space and corrected malformed table row).
+- 2026-02-13: `make clean && make all` and `make check` passed after normalization with no previous em-space warning.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

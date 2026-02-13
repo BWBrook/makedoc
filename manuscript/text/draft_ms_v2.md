@@ -9,7 +9,7 @@ Environmental variability is usually destabilising, yet the insurance hypothesis
 ## Keywords
 
 biodiversity; response diversity; ecosystem stability; species synchrony; environmental covariance; stochastic community dynamics; insurance hypothesis.
- 
+
 ## Introduction
 
 Environmental variability generally destabilises populations: as climatic and other drivers fluctuate, population abundances tend to vary more through time, increasing the risk of low-biomass episodes and local collapse (Ives and Carpenter 2007). Against this backdrop, the insurance hypothesis proposes that biodiversity can buffer ecosystem functioning against environmental fluctuations, because different species respond differently in space and time, so that declines in some are offset by increases in others (Yachi and Loreau 1999). This idea, inspired by portfolio theory in economics, predicts that aggregate ecosystem properties such as total biomass or productivity should fluctuate less in more diverse communities than in species-poor systems subject to the same environmental variance (Loreau 2021). Over the last two decades, both experiments and syntheses have produced substantial evidence that biodiversity can stabilise ecosystem functioning (Loreau and de Mazancourt 2013, de Mazancourt et al. 2013, Wagg et al. 2022), but they also reveal that the strength, and even the sign, of diversity–stability relationships depends strongly on the underlying mechanisms (Ives and Carpenter 2007, Loreau 2021).
@@ -86,7 +86,7 @@ Model parameters and baseline values (or ranges) used in the stochastic multispe
 | $\alpha_{\mathrm{inter}}$                 | $0.3$ (set to $0$ in no-competition controls)                                                                                             |
 | $b_i$ (mixed)                             | evenly spaced in $[-0.5, 0.5]$                                                                                                            |
 | $b_i$ (positive)                          | evenly spaced in $[0.1, 1.0]$                                                                                                             |
-| $b_i$ (positive-matched control)          | $                                                                                                                                         | b_i^{\mathrm{mixed}} | $ (all slopes non-negative; evaluated for $S \in \{4, 8\}$) |
+| $b_i$ (positive-matched control)          | $\lvert b_i^{\mathrm{mixed}} \rvert$ (all slopes non-negative; evaluated for $S \in \{4, 8\}$)                                          |
 | $b_i$ (mixed–narrow)                      | evenly spaced in $[-0.25, 0.25]$                                                                                                          |
 | $\sigma_{\mathrm{env}}$                   | $0$–$1.5$ (specific values given in the scenario grids)                                                                                   |
 | $\rho_{\mathrm{env}}$ (requested)         | $-0.5$ to $1.0$                                                                                                                           |
