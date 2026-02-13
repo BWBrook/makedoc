@@ -58,6 +58,15 @@ jobs:
           version: build-main-deps-v1
           execute_install_scripts: true
 
+      - name: Ensure build dependencies are present
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pandoc \
+            texlive-xetex \
+            ripgrep \
+            python3-yaml
+
       - name: Build main manuscript outputs
         run: |
           make check-tools
@@ -92,6 +101,16 @@ jobs:
           packages: pandoc texlive-xetex ripgrep python3-yaml poppler-utils
           version: build-fixture-deps-v2
           execute_install_scripts: true
+
+      - name: Ensure build dependencies are present
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pandoc \
+            texlive-xetex \
+            ripgrep \
+            python3-yaml \
+            poppler-utils
 
       - name: Build fixture outputs
         run: |
