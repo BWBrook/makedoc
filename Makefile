@@ -39,8 +39,8 @@ ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.mk
 FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.mk
 
 $(shell mkdir -p "$(PROFILE_CACHE_DIR)")
-$(shell python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$(ACTIVE_VARS_FILE)")
-$(shell python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$(FIXTURE_VARS_FILE)")
+$(shell tmp="$(ACTIVE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp" && mv "$$tmp" "$(ACTIVE_VARS_FILE)")
+$(shell tmp="$(FIXTURE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp" && mv "$$tmp" "$(FIXTURE_VARS_FILE)")
 
 include $(ACTIVE_VARS_FILE)
 include $(FIXTURE_VARS_FILE)
@@ -55,7 +55,7 @@ endif
 PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
 FIXTURE_PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
 
-.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-golden-check check-fixture-guards check check-fixture clean profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx
 
@@ -201,6 +201,26 @@ check-fixture: check-tools fixture-lint fixture-refs-audit
 	@$(MAKE) --no-print-directory fixture-all
 	@$(MAKE) --no-print-directory fixture-golden-check
 	@echo "Fixture build check passed."
+
+wsl-smoke:
+	@echo "Running WSL smoke checks..."
+	@$(MAKE) --no-print-directory deps-dry-run-minimal
+	@$(MAKE) --no-print-directory profiles
+	@$(MAKE) --no-print-directory profile-show
+	@args=(); \
+	for dir in $(ACTIVE_CSL_SEARCH_DIRS); do \
+		args+=(--search-dir "$$dir"); \
+	done; \
+	if [ -n "$(ACTIVE_JOURNAL)" ]; then \
+		python3 "$(CSL_RESOLVER)" source --journal "$(ACTIVE_JOURNAL)" --local-only --path-only "$${args[@]}" >/dev/null; \
+		echo "Local CSL resolver check passed for journal: $(ACTIVE_JOURNAL)"; \
+	else \
+		echo "Skipping local CSL resolver check (profile journal is empty)."; \
+	fi
+	@$(MAKE) --no-print-directory check
+	@$(MAKE) --no-print-directory check-fixture
+	@$(MAKE) --no-print-directory check-fixture-guards
+	@echo "WSL smoke checks passed."
 
 deps-estimate-minimal:
 	@bash "$(INSTALLER)" --mode minimal --estimate-only

@@ -11,6 +11,7 @@ Use the installer helper for first-time setup on Ubuntu 24.04 (including WSL Ubu
 ```bash
 make deps-estimate-minimal
 make deps-install-minimal
+make wsl-smoke
 ```
 
 Optional "full monty" profile with extra tooling:
@@ -33,6 +34,37 @@ Direct script usage is also available:
 ```bash
 scripts/install_ubuntu_deps.sh --mode minimal --estimate-only
 scripts/install_ubuntu_deps.sh --mode full --dry-run
+```
+
+## Clone in WSL
+
+Two reliable options:
+
+Option A (`https`, quickest):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git gh
+gh auth login --hostname github.com --git-protocol https --web
+mkdir -p ~/git
+cd ~/git
+git clone https://github.com/BWBrook/makedoc.git
+cd makedoc
+```
+
+Option B (`ssh`, best long-term ergonomics):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git gh openssh-client
+[ -f ~/.ssh/id_ed25519.pub ] || ssh-keygen -t ed25519 -C "your_email@example.com"
+gh auth login --hostname github.com --git-protocol ssh --web
+gh ssh-key add ~/.ssh/id_ed25519.pub --title "$(hostname)-wsl"
+ssh -T git@github.com
+mkdir -p ~/git
+cd ~/git
+git clone git@github.com:BWBrook/makedoc.git
+cd makedoc
 ```
 
 ## Quick Start
@@ -159,6 +191,7 @@ Fixture profile:
 ```bash
 make check-fixture
 make check-fixture-guards
+make wsl-smoke
 ```
 
 `check-fixture-guards` asserts expected failures for:

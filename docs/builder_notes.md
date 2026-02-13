@@ -28,6 +28,8 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - 2026-02-13: Provide an Ubuntu/WSL installer script with minimal/full package tiers and apt simulation size reporting.
 - 2026-02-13: Use cached apt package installs in CI to reduce repeated dependency provisioning overhead.
 - 2026-02-13: Keep cached apt setup in CI, but add explicit `apt-get install` verification in build jobs to avoid TeX font availability drift.
+- 2026-02-13: Add `wsl-smoke` aggregate Make target to validate bootstrap, profile resolution, local CSL lookup, builds, fixture golden checks, and guard tests in one command.
+- 2026-02-13: Generate profile cache include files atomically in `Makefile` to avoid parse-time race failures during concurrent make invocations.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -69,6 +71,8 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - 2026-02-13: Expanded `README.md` with Ubuntu/WSL bootstrap and profile scaffold instructions.
 - 2026-02-13: Detected CI regression (`run 21974358589`) caused by cache-only build dependency restore missing TeX font readiness.
 - 2026-02-13: Added explicit build-job dependency verification step (`apt-get install -y ...`) after cache restore and revalidated green CI.
+- 2026-02-13: Added `make wsl-smoke` target and documented WSL clone options (HTTPS and SSH) in README.
+- 2026-02-13: Switched profile cache generation writes to temp-file-and-rename for concurrency safety.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -115,6 +119,8 @@ Context: Phase 1-7 implementation (build scaffold through config-driven and onbo
 - `gh run watch 21974286056 --repo BWBrook/makedoc --exit-status` -> PASS (CI run with cached apt setup and fixture golden checks green across all jobs)
 - `gh run watch 21974358589 --repo BWBrook/makedoc --exit-status` -> FAIL (cache-only restore in build jobs triggered LaTeX font availability error)
 - `gh run watch 21974394354 --repo BWBrook/makedoc --exit-status` -> PASS (cached restore + explicit apt verification produced clean green CI)
+- `make wsl-smoke` -> PASS (all bootstrap and build/guard checks completed successfully in one run)
+- `(make profile-show >/tmp/makedoc_profile_a.out & make profile-show >/tmp/makedoc_profile_b.out & wait)` -> PASS (concurrent profile cache generation remained stable)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
