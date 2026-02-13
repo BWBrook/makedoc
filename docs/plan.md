@@ -127,6 +127,7 @@ Out of scope for this iteration:
 - 2026-02-13: Added GitHub Actions CI workflow (`.github/workflows/ci.yml`) to install dependencies and run `make check` for push/PR/manual runs.
 - 2026-02-13: Added CI artifact upload of `dist/` outputs for inspection.
 - 2026-02-13: Drafted separate synthetic fixture/testbed workstream plan at `docs/testbed_workplan.md`.
+- 2026-02-13: Verified first CI execution passed on GitHub (`manuscript-ci` run `21971671370`, job `build-and-check`).
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

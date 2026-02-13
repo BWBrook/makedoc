@@ -59,6 +59,7 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `make clean && make all` (after Phase 4) -> PASS (`dist/manuscript.pdf` 500K, `dist/manuscript.docx` 445K, includes figures)
 - `python3 - <<'PY' ... yaml.safe_load('.github/workflows/ci.yml') ...` -> PASS (workflow YAML parses)
 - `make check` (Phase 5 local revalidation) -> PASS (same full gate as CI target command)
+- `gh run watch 21971671370 --repo BWBrook/makedoc --exit-status` -> PASS (GitHub Actions workflow `manuscript-ci` completed successfully)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
@@ -66,5 +67,4 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 ## Open Issues
 - 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
 - Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.
-- CI workflow has been added but has not yet been observed running on GitHub within this terminal session.
 - Synthetic fixture workflow is planned (`docs/testbed_workplan.md`) and pending implementation.
