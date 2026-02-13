@@ -1,7 +1,7 @@
 # Synthetic Manuscript Testbed Workplan
 
 Last updated: 2026-02-13
-Status: implemented (phase-one fixture baseline)
+Status: implemented (baseline + edge-case guards)
 
 ## Purpose
 Create a stable, low-complexity fixture manuscript for CI and regression testing so pipeline behavior can be validated independently of bespoke scientific manuscript content.
@@ -88,8 +88,13 @@ testbed/
 - Make targets:
   - `fixture-pdf`, `fixture-docx`, `fixture-all`
   - `fixture-lint`, `fixture-refs-audit`, `check-fixture`
+  - `check-fixture-guards` (negative tests that must fail for invalid inputs)
+- Edge-case fixtures:
+  - `testbed/edgecases/unknown_cite_main.md`
+  - `testbed/edgecases/manual_cite_main.md`
+  - `testbed/edgecases/malformed_table_main.md`
 - CI integration:
-  - `.github/workflows/ci.yml` runs `make check` and `make check-fixture`
+  - `.github/workflows/ci.yml` runs guard tests first, then parallel main/fixture builds
 
 ## Acceptance Criteria
 - `make check` continues to pass for the real manuscript.
@@ -100,4 +105,5 @@ testbed/
 ## Suggested Next Commands (future work)
 - `make fixture-pdf`
 - `make fixture-docx`
-- `make fixture-check`
+- `make check-fixture`
+- `make check-fixture-guards`

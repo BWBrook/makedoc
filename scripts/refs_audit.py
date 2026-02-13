@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -57,25 +58,35 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def emit_error(message: str, source: Path | None = None, line: int | None = None) -> None:
+    print(message)
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        msg = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        if source is not None and line is not None:
+            print(f"::error file={source},line={line}::{msg}")
+        else:
+            print(f"::error::{msg}")
+
+
 def main() -> int:
     args = parse_args()
     bibliography = Path(args.bibliography)
     sources = [Path(s) for s in args.source]
 
     if not bibliography.exists():
-        print(f"Error: bibliography not found: {bibliography}")
+        emit_error(f"Error: bibliography not found: {bibliography}")
         return 1
 
     missing_sources = [s for s in sources if not s.exists()]
     if missing_sources:
-        print("Error: missing source files:")
+        emit_error("Error: missing source files:")
         for src in missing_sources:
-            print(f"  - {src}")
+            emit_error(f"  - {src}")
         return 1
 
     bibliography_keys = load_bibliography_keys(bibliography)
     if not bibliography_keys:
-        print(f"Error: no citation keys found in bibliography: {bibliography}")
+        emit_error(f"Error: no citation keys found in bibliography: {bibliography}")
         return 1
 
     citation_hits: list[CitationHit] = []
@@ -92,12 +103,16 @@ def main() -> int:
     print(f"Unused keys: {len(unused_keys)}")
 
     if unknown_keys:
-        print("\nUnknown citation keys (must fix):")
+        emit_error("\nUnknown citation keys (must fix):")
         for key in unknown_keys:
-            print(f"  - {key}")
+            emit_error(f"  - {key}")
             for hit in citation_hits:
                 if hit.key == key:
-                    print(f"    at {hit.source}:{hit.line}")
+                    emit_error(
+                        f"Unknown citation key '{key}' referenced in manuscript.",
+                        source=hit.source,
+                        line=hit.line,
+                    )
         return 1
 
     print("\nReference audit passed.")

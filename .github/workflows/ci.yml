@@ -14,7 +14,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-check:
+  guard-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install guard dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ripgrep \
+            python3-yaml
+
+      - name: Print tool versions
+        run: |
+          python3 --version
+          rg --version | head -n 1
+
+      - name: Run manuscript and fixture guards
+        run: |
+          make lint-manuscript
+          make refs-audit
+          make fixture-lint
+          make fixture-refs-audit
+          make check-fixture-guards
+
+  build-main:
+    needs: guard-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -22,7 +51,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -31,23 +60,58 @@ jobs:
             ripgrep \
             python3-yaml
 
-      - name: Print tool versions
+      - name: Build main manuscript outputs
         run: |
-          pandoc --version | head -n 2
-          xelatex --version | head -n 2
-          python3 --version
-          rg --version | head -n 1
+          make check-tools
+          make all
 
-      - name: Run full check pipeline
-        run: make check
-
-      - name: Run fixture check pipeline
-        run: make check-fixture
+      - name: Summarize main artifacts
+        run: |
+          ls -lh dist/manuscript.pdf dist/manuscript.docx >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: manuscript-build-artifacts
-          path: dist/
+          name: manuscript-main-artifacts
+          path: |
+            dist/manuscript.pdf
+            dist/manuscript.docx
+          if-no-files-found: ignore
+
+  build-fixture:
+    needs: guard-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pandoc \
+            texlive-xetex \
+            ripgrep \
+            python3-yaml
+
+      - name: Build fixture outputs
+        run: |
+          make check-tools
+          make fixture-all
+
+      - name: Summarize fixture artifacts
+        run: |
+          ls -lh dist/testbed/fixture_manuscript.pdf dist/testbed/fixture_manuscript.docx >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fixture artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manuscript-fixture-artifacts
+          path: |
+            dist/testbed/fixture_manuscript.pdf
+            dist/testbed/fixture_manuscript.docx
           if-no-files-found: ignore

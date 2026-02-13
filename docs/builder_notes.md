@@ -1,7 +1,7 @@
 # Builder Notes
 
 Last updated: 2026-02-13
-Context: Phase 1-5 implementation (build scaffold, normalization, citations, figures, CI)
+Context: Phase 1-5 implementation (build scaffold, normalization, citations, figures, CI, and hardening)
 
 ## Decision Log
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
@@ -17,6 +17,8 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Use GitHub Actions as the baseline reproducibility gate and run `make check` in CI.
 - 2026-02-13: Track synthetic fixture manuscript as a separate follow-on workstream, not bundled into immediate CI rollout.
 - 2026-02-13: Execute synthetic fixture workstream before CI hardening so hardening can target a controlled test corpus.
+- 2026-02-13: Add explicit negative guard tests so CI proves failure-detection behavior, not just happy-path builds.
+- 2026-02-13: Split CI into fast guard job + parallel build jobs to improve diagnostics and reduce time-to-failure.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -43,6 +45,10 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Implemented synthetic fixture manuscript, references, and dummy figures under `testbed/`.
 - 2026-02-13: Added fixture build/lint/audit targets to `Makefile` and integrated fixture checks into CI.
 - 2026-02-13: Updated `docs/testbed_workplan.md` status from proposed to implemented baseline.
+- 2026-02-13: Added `scripts/lint_manuscript.py` and switched lint targets to script-driven checks.
+- 2026-02-13: Added fixture edge-case sources for unknown citekey/manual citation/malformed table.
+- 2026-02-13: Added `check-fixture-guards` target to assert expected failures for edge-case inputs.
+- 2026-02-13: Hardened CI workflow into `guard-tests`, `build-main`, and `build-fixture` jobs with artifact summaries.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -66,6 +72,9 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `gh run watch 21971671370 --repo BWBrook/makedoc --exit-status` -> PASS (GitHub Actions workflow `manuscript-ci` completed successfully)
 - `make check-fixture` -> PASS (`fixture-lint`, `fixture-refs-audit`, and fixture PDF/DOCX builds passed)
 - `gh run watch 21971721843 --repo BWBrook/makedoc --exit-status` -> PASS (workflow passed again after CI/doc updates)
+- `make check-fixture-guards` -> PASS (all three edge-case failures detected as expected)
+- `make check-fixture-guards && make check && make check-fixture` -> PASS (combined local verification after hardening changes)
+- `gh run watch 21972231252 --repo BWBrook/makedoc --exit-status` -> PASS (CI run with fixture pipeline steps completed successfully)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
@@ -73,4 +82,4 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 ## Open Issues
 - 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
 - Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.
-- CI hardening (caching/speed/diagnostics) is pending and now can be tuned against both real manuscript and synthetic fixture checks.
+- Further CI hardening options remain (dependency caching and richer PR annotations), now supported by both real and synthetic guard suites.

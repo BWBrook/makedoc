@@ -88,6 +88,9 @@ Out of scope for this iteration:
 - CI execution of `make check` on push/PR/manual dispatch
 - Build artifact upload (`dist/`) in CI
 - Separate synthetic fixture strategy drafted at `docs/testbed_workplan.md`
+- Synthetic fixture implementation under `testbed/` with fixture check targets
+- Deliberate edge-case guards for unknown citekeys, manual citations, and malformed tables
+- Hardened CI job structure: guard tests first, then parallel main/fixture build jobs
 
 ### Acceptance Criteria
 - CI workflow file is valid YAML and tracked in repo
@@ -95,6 +98,8 @@ Out of scope for this iteration:
 - Workflow runs `make check` end-to-end
 - Workflow uploads `dist/` artifacts for inspection
 - Synthetic fixture strategy is documented as an independent follow-on stream
+- `make check-fixture` passes locally and in CI
+- `make check-fixture-guards` passes by asserting expected failures for edge-case fixtures
 
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
@@ -132,6 +137,9 @@ Out of scope for this iteration:
 - 2026-02-13: Implemented synthetic fixture assets and build pipeline under `testbed/`.
 - 2026-02-13: Added `check-fixture` and fixture lint/refs-audit targets; verified local pass.
 - 2026-02-13: Updated CI to run both `make check` and `make check-fixture`.
+- 2026-02-13: Added `scripts/lint_manuscript.py` with markdown table validation and GitHub annotation support.
+- 2026-02-13: Added edge-case fixtures and `check-fixture-guards` to assert expected failures for unknown citekeys/manual citations/malformed tables.
+- 2026-02-13: Hardened CI into three jobs (`guard-tests`, `build-main`, `build-fixture`) with artifact summaries and uploads.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
