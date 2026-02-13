@@ -18,14 +18,13 @@ In scope for this iteration:
 
 Out of scope for this iteration:
 - Journal-specific Word style template (`reference.docx`) tuning
-- CI automation
 
 ## Milestones
 1. Phase 1 (completed): Build scaffold and repository bootstrap
 2. Phase 2 (completed): Manuscript normalization (table/math/unicode cleanup)
 3. Phase 3 (completed): Citation migration and unresolved-citation reporting
 4. Phase 4 (completed): Figure/caption integration + cross-references
-5. Phase 5: CI/reproducibility guardrails
+5. Phase 5 (completed): CI/reproducibility guardrails
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -81,6 +80,21 @@ Out of scope for this iteration:
 - `make refs-audit` passes with zero unknown citation keys
 - `make check` passes with tool check, manuscript lint, refs audit, and build steps
 
+## Phase 5 Work Package
+### Deliverables
+- GitHub Actions workflow at `.github/workflows/ci.yml`
+- CI provisioning of required toolchain (`pandoc`, `xelatex`, `ripgrep`, `python3-yaml`)
+- CI execution of `make check` on push/PR/manual dispatch
+- Build artifact upload (`dist/`) in CI
+- Separate synthetic fixture strategy drafted at `docs/testbed_workplan.md`
+
+### Acceptance Criteria
+- CI workflow file is valid YAML and tracked in repo
+- Workflow triggers on `push`, `pull_request`, and `workflow_dispatch`
+- Workflow runs `make check` end-to-end
+- Workflow uploads `dist/` artifacts for inspection
+- Synthetic fixture strategy is documented as an independent follow-on stream
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -110,6 +124,9 @@ Out of scope for this iteration:
 - 2026-02-13: Switched build to render combined sources (`draft_ms_v2.md` + `figure_captions_v2.md`) and converted captions file to actual figure blocks with IDs.
 - 2026-02-13: Linked in-text `Fig.` references to figure anchors (`#fig-main-insurance`, `#fig-main-richness`) and validated anchor generation in LaTeX output.
 - 2026-02-13: Locked citation caveats as final per user confirmation.
+- 2026-02-13: Added GitHub Actions CI workflow (`.github/workflows/ci.yml`) to install dependencies and run `make check` for push/PR/manual runs.
+- 2026-02-13: Added CI artifact upload of `dist/` outputs for inspection.
+- 2026-02-13: Drafted separate synthetic fixture/testbed workstream plan at `docs/testbed_workplan.md`.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

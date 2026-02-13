@@ -1,7 +1,7 @@
 # Builder Notes
 
 Last updated: 2026-02-13
-Context: Phase 1-4 implementation (build scaffold, normalization, citations, figures)
+Context: Phase 1-5 implementation (build scaffold, normalization, citations, figures, CI)
 
 ## Decision Log
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
@@ -14,6 +14,8 @@ Context: Phase 1-4 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: User confirmed both citation caveats; lock them as final project decisions.
 - 2026-02-13: Keep figure captions in a separate source file and render via multi-file pandoc inputs for maintainability.
 - 2026-02-13: Add `refs-audit` as a non-optional quality gate in `make check`.
+- 2026-02-13: Use GitHub Actions as the baseline reproducibility gate and run `make check` in CI.
+- 2026-02-13: Track synthetic fixture manuscript as a separate follow-on workstream, not bundled into immediate CI rollout.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -34,6 +36,9 @@ Context: Phase 1-4 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Replaced plain caption prose with renderable figure blocks and stable IDs in `figure_captions_v2.md`.
 - 2026-02-13: Linked in-text figure mentions in results text to figure anchors.
 - 2026-02-13: Validated generated LaTeX contains expected figure labels and hyperlink targets.
+- 2026-02-13: Added `.github/workflows/ci.yml` to provision dependencies and run `make check` on push/PR/manual dispatch.
+- 2026-02-13: Added CI artifact upload for `dist/` outputs.
+- 2026-02-13: Drafted synthetic testbed proposal in `docs/testbed_workplan.md`.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -52,6 +57,8 @@ Context: Phase 1-4 implementation (build scaffold, normalization, citations, fig
 - `make refs-audit` -> PASS (`Unknown keys: 0`; reports 14 unused bibliography keys as non-fatal)
 - `make check` (after refs-audit + Phase 4) -> PASS (`check-tools`, `lint-manuscript`, `refs-audit`, and build stages passed)
 - `make clean && make all` (after Phase 4) -> PASS (`dist/manuscript.pdf` 500K, `dist/manuscript.docx` 445K, includes figures)
+- `python3 - <<'PY' ... yaml.safe_load('.github/workflows/ci.yml') ...` -> PASS (workflow YAML parses)
+- `make check` (Phase 5 local revalidation) -> PASS (same full gate as CI target command)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
@@ -59,3 +66,5 @@ Context: Phase 1-4 implementation (build scaffold, normalization, citations, fig
 ## Open Issues
 - 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
 - Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.
+- CI workflow has been added but has not yet been observed running on GitHub within this terminal session.
+- Synthetic fixture workflow is planned (`docs/testbed_workplan.md`) and pending implementation.
