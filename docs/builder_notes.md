@@ -83,6 +83,7 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - 2026-02-13: Added fixture contract file `testbed/expected/golden_contract.yaml` and wired contract-aware fixture checks.
 - 2026-02-13: Updated CI to run config validation, publish manifest artifacts, and upload diagnostics bundles on failure.
 - 2026-02-13: Updated README and fixture expectation docs for contract/manifests/diagnostics workflows.
+- 2026-02-13: Verified updated CI run (`21975285208`) passed with new config-validation, manifest artifact, and failure-diagnostics steps.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -142,6 +143,7 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - `make fixture-diagnose` -> PASS (created `dist/diagnostics/<timestamp>_fixture` bundle)
 - `make fixture-golden-check` -> PASS (backward-compatible alias to contract check remains valid)
 - `make manifest && make fixture-manifest` -> PASS (manifests present; make reports up-to-date)
+- `gh run watch 21975285208 --repo BWBrook/makedoc --exit-status` -> PASS (Phase 8 CI run green; diagnostics upload steps skipped because no failures)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

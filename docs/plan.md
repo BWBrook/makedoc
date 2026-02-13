@@ -232,6 +232,7 @@ Out of scope for this iteration:
 - 2026-02-13: Added diagnostics bundling (`scripts/diagnose_build.py`) and Make targets (`diagnose`, `fixture-diagnose`).
 - 2026-02-13: Externalized fixture golden expectations to `testbed/expected/golden_contract.yaml` and wired `make fixture-contract-check`.
 - 2026-02-13: Updated CI to validate config, publish manifest artifacts, and upload diagnostics bundles on failure.
+- 2026-02-13: Verified Phase 8 CI run passed on GitHub (`manuscript-ci` run `21975285208`) with all three jobs succeeding and diagnostic-upload steps skipped as expected on green.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
