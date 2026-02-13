@@ -4,43 +4,49 @@ PANDOC ?= pandoc
 PDF_ENGINE ?= xelatex
 PANDOC_FROM ?= markdown+tex_math_dollars+tex_math_single_backslash
 
-SRC_MAIN ?= manuscript/text/draft_ms_v2.md
-SRC_FIGS ?= manuscript/text/figure_captions_v2.md
-SRC_FILES ?= $(SRC_MAIN) $(SRC_FIGS)
-LINT_SRCS ?= $(SRC_FILES)
-BIB ?= references/ih_references.yaml
-CSL ?= csl/oikos.csl
-REFS_AUDIT ?= scripts/refs_audit.py
+CONFIG ?= settings/build.yaml
+PROFILE ?=
+FIXTURE_PROFILE ?= fixture
+
+CONFIG_SCRIPT ?= scripts/build_profile.py
 LINT_SCRIPT ?= scripts/lint_manuscript.py
+REFS_AUDIT ?= scripts/refs_audit.py
+CSL_RESOLVER ?= scripts/csl_resolver.py
 
-DIST ?= dist
-PDF_OUT ?= $(DIST)/manuscript.pdf
-DOCX_OUT ?= $(DIST)/manuscript.docx
+CSL_DEST_DIR ?= csl
+JOURNAL ?=
 
-FIXTURE_SRC_MAIN ?= testbed/manuscript/text/fixture_main.md
-FIXTURE_SRC_FIGS ?= testbed/manuscript/text/fixture_figures.md
-FIXTURE_SRC_FILES ?= $(FIXTURE_SRC_MAIN) $(FIXTURE_SRC_FIGS)
-FIXTURE_LINT_SRCS ?= $(FIXTURE_SRC_FILES)
-FIXTURE_BIB ?= testbed/references/fixture_refs.yaml
-FIXTURE_CSL ?= testbed/csl/fixture_style.csl
-FIXTURE_DIST ?= $(DIST)/testbed
-FIXTURE_PDF_OUT ?= $(FIXTURE_DIST)/fixture_manuscript.pdf
-FIXTURE_DOCX_OUT ?= $(FIXTURE_DIST)/fixture_manuscript.docx
-EDGECASE_DIR ?= testbed/edgecases
-EDGECASE_UNKNOWN_SRC ?= $(EDGECASE_DIR)/unknown_cite_main.md
-EDGECASE_MANUAL_SRC ?= $(EDGECASE_DIR)/manual_cite_main.md
-EDGECASE_TABLE_SRC ?= $(EDGECASE_DIR)/malformed_table_main.md
+PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
+FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
 
-PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(BIB) --csl $(CSL)
-FIXTURE_PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIB) --csl $(FIXTURE_CSL)
+PROFILE_CACHE_DIR := .cache
+ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.mk
+FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.mk
 
-.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit check-fixture-guards check check-fixture clean
+$(shell mkdir -p "$(PROFILE_CACHE_DIR)")
+$(shell python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$(ACTIVE_VARS_FILE)")
+$(shell python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$(FIXTURE_VARS_FILE)")
+
+include $(ACTIVE_VARS_FILE)
+include $(FIXTURE_VARS_FILE)
+
+ifeq ($(strip $(ACTIVE_MANUSCRIPT_SOURCES)),)
+$(error Failed to load active build profile from $(CONFIG))
+endif
+ifeq ($(strip $(FIXTURE_MANUSCRIPT_SOURCES)),)
+$(error Failed to load fixture profile '$(FIXTURE_PROFILE)' from $(CONFIG))
+endif
+
+PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
+FIXTURE_PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
+
+.PHONY: all pdf docx fixture-all fixture-pdf fixture-docx check-tools lint-manuscript refs-audit fixture-lint fixture-refs-audit check-fixture-guards check check-fixture clean profiles profile-show csl-search csl-source
 
 all: pdf docx
 
-pdf: $(PDF_OUT)
+pdf: $(ACTIVE_PDF_OUT)
 
-docx: $(DOCX_OUT)
+docx: $(ACTIVE_DOCX_OUT)
 
 fixture-all: fixture-pdf fixture-docx
 
@@ -48,23 +54,20 @@ fixture-pdf: $(FIXTURE_PDF_OUT)
 
 fixture-docx: $(FIXTURE_DOCX_OUT)
 
-$(DIST):
-	mkdir -p $(DIST)
+$(ACTIVE_OUTPUT_DIR) $(FIXTURE_OUTPUT_DIR):
+	mkdir -p "$@"
 
-$(FIXTURE_DIST):
-	mkdir -p $(FIXTURE_DIST)
+$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+	$(PANDOC) $(ACTIVE_MANUSCRIPT_SOURCES) $(PANDOC_COMMON) --pdf-engine=$(PDF_ENGINE) -o $@
 
-$(PDF_OUT): $(SRC_FILES) $(BIB) $(CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(DIST)
-	$(PANDOC) $(SRC_FILES) $(PANDOC_COMMON) --pdf-engine=$(PDF_ENGINE) -o $@
+$(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+	$(PANDOC) $(ACTIVE_MANUSCRIPT_SOURCES) $(PANDOC_COMMON) -o $@
 
-$(DOCX_OUT): $(SRC_FILES) $(BIB) $(CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(DIST)
-	$(PANDOC) $(SRC_FILES) $(PANDOC_COMMON) -o $@
+$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+	$(PANDOC) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_PANDOC_COMMON) --pdf-engine=$(PDF_ENGINE) -o $@
 
-$(FIXTURE_PDF_OUT): $(FIXTURE_SRC_FILES) $(FIXTURE_BIB) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_DIST)
-	$(PANDOC) $(FIXTURE_SRC_FILES) $(FIXTURE_PANDOC_COMMON) --pdf-engine=$(PDF_ENGINE) -o $@
-
-$(FIXTURE_DOCX_OUT): $(FIXTURE_SRC_FILES) $(FIXTURE_BIB) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_DIST)
-	$(PANDOC) $(FIXTURE_SRC_FILES) $(FIXTURE_PANDOC_COMMON) -o $@
+$(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+	$(PANDOC) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_PANDOC_COMMON) -o $@
 
 check-tools:
 	@for cmd in "$(PANDOC)" "$(PDF_ENGINE)"; do \
@@ -72,10 +75,16 @@ check-tools:
 	done
 	@echo "Tool check passed."
 
+profiles:
+	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" list-profiles
+
+profile-show:
+	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) show --format yaml
+
 lint-manuscript:
 	@echo "Running manuscript lint checks..."
 	@args=(); \
-	for src in $(LINT_SRCS); do \
+	for src in $(ACTIVE_LINT_SOURCES); do \
 		args+=(--source "$$src"); \
 	done; \
 	python3 "$(LINT_SCRIPT)" "$${args[@]}"
@@ -83,15 +92,15 @@ lint-manuscript:
 refs-audit:
 	@echo "Running reference audit..."
 	@args=(); \
-	for src in $(SRC_FILES); do \
+	for src in $(ACTIVE_MANUSCRIPT_SOURCES); do \
 		args+=(--source "$$src"); \
 	done; \
-	python3 "$(REFS_AUDIT)" --bibliography "$(BIB)" "$${args[@]}"
+	python3 "$(REFS_AUDIT)" --bibliography "$(ACTIVE_BIBLIOGRAPHY)" "$${args[@]}"
 
 fixture-lint:
 	@echo "Running fixture manuscript lint checks..."
 	@args=(); \
-	for src in $(FIXTURE_LINT_SRCS); do \
+	for src in $(FIXTURE_LINT_SOURCES); do \
 		args+=(--source "$$src"); \
 	done; \
 	python3 "$(LINT_SCRIPT)" "$${args[@]}"
@@ -99,13 +108,16 @@ fixture-lint:
 fixture-refs-audit:
 	@echo "Running fixture reference audit..."
 	@args=(); \
-	for src in $(FIXTURE_SRC_FILES); do \
+	for src in $(FIXTURE_MANUSCRIPT_SOURCES); do \
 		args+=(--source "$$src"); \
 	done; \
-	python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIB)" "$${args[@]}"
+	python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" "$${args[@]}"
 
 check-fixture-guards:
 	@echo "Running fixture guard regression tests..."
+	@test -n "$(FIXTURE_EDGECASE_UNKNOWN_CITE)" || { echo "Missing fixture edgecase: unknown_cite"; exit 1; }
+	@test -n "$(FIXTURE_EDGECASE_MANUAL_CITE)" || { echo "Missing fixture edgecase: manual_cite"; exit 1; }
+	@test -n "$(FIXTURE_EDGECASE_MALFORMED_TABLE)" || { echo "Missing fixture edgecase: malformed_table"; exit 1; }
 	@status=0; \
 	expect_fail() { \
 		label="$$1"; \
@@ -118,15 +130,31 @@ check-fixture-guards:
 		fi; \
 	}; \
 	expect_fail "refs audit catches unknown citation key" \
-		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIB)" --source "$(EDGECASE_UNKNOWN_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" --source "$(FIXTURE_EDGECASE_UNKNOWN_CITE)"; \
 	expect_fail "lint catches manual author-year citation" \
-		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(EDGECASE_MANUAL_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(FIXTURE_EDGECASE_MANUAL_CITE)"; \
 	expect_fail "lint catches malformed markdown table" \
-		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(EDGECASE_TABLE_SRC)" --source "$(FIXTURE_SRC_FIGS)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(FIXTURE_EDGECASE_MALFORMED_TABLE)"; \
 	if [ "$$status" -eq 0 ]; then \
 		echo "Fixture guard regression tests passed."; \
 	fi; \
 	exit "$$status"
+
+csl-search:
+	@test -n "$(JOURNAL)" || { echo "Usage: make csl-search JOURNAL='Journal Name'"; exit 1; }
+	@args=(); \
+	for dir in $(ACTIVE_CSL_SEARCH_DIRS); do \
+		args+=(--search-dir "$$dir"); \
+	done; \
+	python3 "$(CSL_RESOLVER)" search --journal "$(JOURNAL)" "$${args[@]}"
+
+csl-source:
+	@test -n "$(JOURNAL)" || { echo "Usage: make csl-source JOURNAL='Journal Name'"; exit 1; }
+	@args=(); \
+	for dir in $(ACTIVE_CSL_SEARCH_DIRS); do \
+		args+=(--search-dir "$$dir"); \
+	done; \
+	python3 "$(CSL_RESOLVER)" source --journal "$(JOURNAL)" --dest-dir "$(CSL_DEST_DIR)" "$${args[@]}"
 
 check: check-tools lint-manuscript refs-audit
 	@$(MAKE) --no-print-directory all
@@ -137,4 +165,4 @@ check-fixture: check-tools fixture-lint fixture-refs-audit
 	@echo "Fixture build check passed."
 
 clean:
-	rm -rf $(DIST)
+	rm -rf dist

@@ -16,6 +16,8 @@ In scope for this iteration:
 - Figure/caption integration and in-document cross-reference links
 - Citation key audit checks against bibliography
 - Synthetic fixture manuscript and testbed checks for CI regression testing
+- Config-driven profile selection for manuscript source locations
+- Journal-name-based CSL discovery and sourcing utility
 
 Out of scope for this iteration:
 - Journal-specific Word style template (`reference.docx`) tuning
@@ -26,6 +28,7 @@ Out of scope for this iteration:
 3. Phase 3 (completed): Citation migration and unresolved-citation reporting
 4. Phase 4 (completed): Figure/caption integration + cross-references
 5. Phase 5 (completed): CI/reproducibility guardrails
+6. Phase 6 (completed): Config-driven orchestration + onboarding docs
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -101,6 +104,23 @@ Out of scope for this iteration:
 - `make check-fixture` passes locally and in CI
 - `make check-fixture-guards` passes by asserting expected failures for edge-case fixtures
 
+## Phase 6 Work Package
+### Deliverables
+- Profile YAML config in `settings/build.yaml` for default and fixture runs
+- Profile resolver utility `scripts/build_profile.py`
+- Refactored `Makefile` that sources profile variables from YAML
+- Root onboarding documentation at `README.md`
+- Journal-style resolver utility `scripts/csl_resolver.py` with search and source/download flows
+- Make targets for CSL operations (`csl-search`, `csl-source`)
+
+### Acceptance Criteria
+- `make all` and `make check` run from the configured default profile without bespoke manuscript folders
+- `make PROFILE=fixture all` and `make check-fixture` continue to pass
+- `make profiles` and `make profile-show` report active config state
+- `make csl-search JOURNAL="..."` surfaces style matches
+- `make csl-source JOURNAL="..."` resolves a local style or downloads a suitable one
+- `README.md` documents quickstart, config schema, and external-repo path usage
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -143,6 +163,11 @@ Out of scope for this iteration:
 - 2026-02-13: Suppressed GitHub error annotations for expected-failure guard fixtures via `DISABLE_GHA_ANNOTATIONS=1`.
 - 2026-02-13: Verified hardened CI passed on GitHub (`manuscript-ci` run `21972670054`) with all three jobs green.
 - 2026-02-13: Revalidated hardened CI on GitHub (`manuscript-ci` run `21972735861`) with `guard-tests`, `build-main`, and `build-fixture` all succeeding.
+- 2026-02-13: Introduced profile-driven build configuration (`settings/build.yaml`) and resolver script (`scripts/build_profile.py`).
+- 2026-02-13: Refactored `Makefile` to consume resolved profile values for main and fixture pipelines.
+- 2026-02-13: Added root `README.md` with quickstart and external repository wiring guidance.
+- 2026-02-13: Added journal-style resolver (`scripts/csl_resolver.py`) and Make targets `csl-search` / `csl-source`.
+- 2026-02-13: Revalidated gates after config transition (`make check`, `make check-fixture`, `make check-fixture-guards` all passed).
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

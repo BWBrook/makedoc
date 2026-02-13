@@ -20,6 +20,9 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Add explicit negative guard tests so CI proves failure-detection behavior, not just happy-path builds.
 - 2026-02-13: Split CI into fast guard job + parallel build jobs to improve diagnostics and reduce time-to-failure.
 - 2026-02-13: Disable GitHub `::error` annotations during expected-failure guard tests to avoid misleading CI noise.
+- 2026-02-13: Switch build orchestration to profile YAML (`settings/build.yaml`) so sources can point to other repositories without changing Make targets.
+- 2026-02-13: Keep synthetic testbed as default profile baseline while preserving dedicated fixture profile for hardening checks.
+- 2026-02-13: Implement journal-name CSL resolver with local-first matching and Zotero style-index fallback download.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -50,6 +53,10 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Added fixture edge-case sources for unknown citekey/manual citation/malformed table.
 - 2026-02-13: Added `check-fixture-guards` target to assert expected failures for edge-case inputs.
 - 2026-02-13: Hardened CI workflow into `guard-tests`, `build-main`, and `build-fixture` jobs with artifact summaries.
+- 2026-02-13: Added `settings/build.yaml` with `default` and `fixture` profiles.
+- 2026-02-13: Added `scripts/build_profile.py` and refactored `Makefile` to resolve active/fixture variables from YAML config.
+- 2026-02-13: Added `scripts/csl_resolver.py` and Make targets `csl-search` / `csl-source`.
+- 2026-02-13: Added root `README.md` documenting quickstart, profile schema, CSL tooling, and external path wiring.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -79,6 +86,13 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `make check-fixture-guards` (after annotation suppression fix) -> PASS (expected failures still detected; no shell invocation errors)
 - `gh run watch 21972670054 --repo BWBrook/makedoc --exit-status` -> PASS (hardened CI with `guard-tests`, `build-main`, and `build-fixture` all succeeded)
 - `gh run watch 21972735861 --repo BWBrook/makedoc --exit-status` -> PASS (repeat validation of hardened CI on latest `main` commit)
+- `make profiles` -> PASS (lists `default` and `fixture`; active profile marked)
+- `make profile-show` -> PASS (resolved profile values emitted from `settings/build.yaml`)
+- `make check` (post-config refactor) -> PASS (default profile testbed build + lint/audit checks)
+- `make check-fixture-guards && make check-fixture` (post-config refactor) -> PASS
+- `make csl-search JOURNAL="Oikos"` -> PASS (local and remote CSL candidates listed)
+- `make csl-source JOURNAL="Oikos"` -> PASS (local-first resolution to `testbed/csl/fixture_style.csl`)
+- `python3 scripts/csl_resolver.py source --journal "Ecology Letters" --search-dir testbed/csl --dest-dir dist/csl_smoke --force --path-only` -> PASS (`dist/csl_smoke/ecology-letters.csl` downloaded)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

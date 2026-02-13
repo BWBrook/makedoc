@@ -1,4 +1,7 @@
 dist/
+.cache/
+__pycache__/
+*.pyc
 
 # LaTeX/PDF intermediate files
 *.aux
