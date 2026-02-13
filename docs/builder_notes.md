@@ -16,6 +16,7 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Add `refs-audit` as a non-optional quality gate in `make check`.
 - 2026-02-13: Use GitHub Actions as the baseline reproducibility gate and run `make check` in CI.
 - 2026-02-13: Track synthetic fixture manuscript as a separate follow-on workstream, not bundled into immediate CI rollout.
+- 2026-02-13: Execute synthetic fixture workstream before CI hardening so hardening can target a controlled test corpus.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -39,6 +40,9 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - 2026-02-13: Added `.github/workflows/ci.yml` to provision dependencies and run `make check` on push/PR/manual dispatch.
 - 2026-02-13: Added CI artifact upload for `dist/` outputs.
 - 2026-02-13: Drafted synthetic testbed proposal in `docs/testbed_workplan.md`.
+- 2026-02-13: Implemented synthetic fixture manuscript, references, and dummy figures under `testbed/`.
+- 2026-02-13: Added fixture build/lint/audit targets to `Makefile` and integrated fixture checks into CI.
+- 2026-02-13: Updated `docs/testbed_workplan.md` status from proposed to implemented baseline.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -60,6 +64,8 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 - `python3 - <<'PY' ... yaml.safe_load('.github/workflows/ci.yml') ...` -> PASS (workflow YAML parses)
 - `make check` (Phase 5 local revalidation) -> PASS (same full gate as CI target command)
 - `gh run watch 21971671370 --repo BWBrook/makedoc --exit-status` -> PASS (GitHub Actions workflow `manuscript-ci` completed successfully)
+- `make check-fixture` -> PASS (`fixture-lint`, `fixture-refs-audit`, and fixture PDF/DOCX builds passed)
+- `gh run watch 21971721843 --repo BWBrook/makedoc --exit-status` -> PASS (workflow passed again after CI/doc updates)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
@@ -67,4 +73,4 @@ Context: Phase 1-5 implementation (build scaffold, normalization, citations, fig
 ## Open Issues
 - 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
 - Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.
-- Synthetic fixture workflow is planned (`docs/testbed_workplan.md`) and pending implementation.
+- CI hardening (caching/speed/diagnostics) is pending and now can be tuned against both real manuscript and synthetic fixture checks.

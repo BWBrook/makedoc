@@ -15,6 +15,7 @@ In scope for this iteration:
 - Citation token migration (`(Author year)` -> `[@citekey]`) with ambiguity reporting
 - Figure/caption integration and in-document cross-reference links
 - Citation key audit checks against bibliography
+- Synthetic fixture manuscript and testbed checks for CI regression testing
 
 Out of scope for this iteration:
 - Journal-specific Word style template (`reference.docx`) tuning
@@ -128,6 +129,9 @@ Out of scope for this iteration:
 - 2026-02-13: Added CI artifact upload of `dist/` outputs for inspection.
 - 2026-02-13: Drafted separate synthetic fixture/testbed workstream plan at `docs/testbed_workplan.md`.
 - 2026-02-13: Verified first CI execution passed on GitHub (`manuscript-ci` run `21971671370`, job `build-and-check`).
+- 2026-02-13: Implemented synthetic fixture assets and build pipeline under `testbed/`.
+- 2026-02-13: Added `check-fixture` and fixture lint/refs-audit targets; verified local pass.
+- 2026-02-13: Updated CI to run both `make check` and `make check-fixture`.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

@@ -1,7 +1,7 @@
 # Synthetic Manuscript Testbed Workplan
 
 Last updated: 2026-02-13
-Status: proposed (not yet implemented)
+Status: implemented (phase-one fixture baseline)
 
 ## Purpose
 Create a stable, low-complexity fixture manuscript for CI and regression testing so pipeline behavior can be validated independently of bespoke scientific manuscript content.
@@ -66,11 +66,30 @@ testbed/
 - PDF + DOCX generated from multi-source input
 
 ## Implementation Milestones
-1. Create synthetic content files and assets.
-2. Add Makefile variables/targets for fixture builds.
-3. Add fixture-specific lint and refs-audit checks.
-4. Extend CI to run both primary manuscript checks and fixture checks.
-5. Document expected behavior and known limitations.
+1. Create synthetic content files and assets. `Done`
+2. Add Makefile variables/targets for fixture builds. `Done`
+3. Add fixture-specific lint and refs-audit checks. `Done`
+4. Extend CI to run both primary manuscript checks and fixture checks. `Done`
+5. Document expected behavior and known limitations. `Done`
+
+## Implemented Artifacts
+- Fixture manuscript sources:
+  - `testbed/manuscript/text/fixture_main.md`
+  - `testbed/manuscript/text/fixture_figures.md`
+- Fixture figures:
+  - `testbed/manuscript/figures/fig1_dummy.png`
+  - `testbed/manuscript/figures/fig2_dummy.png`
+  - `testbed/manuscript/figures/figS1_dummy.png`
+- Fixture references and style:
+  - `testbed/references/fixture_refs.yaml`
+  - `testbed/csl/fixture_style.csl`
+- Fixture expectations doc:
+  - `testbed/expected/README.md`
+- Make targets:
+  - `fixture-pdf`, `fixture-docx`, `fixture-all`
+  - `fixture-lint`, `fixture-refs-audit`, `check-fixture`
+- CI integration:
+  - `.github/workflows/ci.yml` runs `make check` and `make check-fixture`
 
 ## Acceptance Criteria
 - `make check` continues to pass for the real manuscript.

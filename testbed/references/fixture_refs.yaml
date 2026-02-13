@@ -1,0 +1,66 @@
+---
+references:
+  - id: alpha2020SyntheticWorkflow
+    citation-key: alpha2020SyntheticWorkflow
+    type: article-journal
+    title: Synthetic workflow validation for reproducible manuscript pipelines
+    author:
+      - family: Alpha
+        given: Alice
+      - family: Mason
+        given: Lee
+    issued:
+      - year: 2020
+    container-title: Journal of Reproducible Publishing
+    volume: '12'
+    issue: '3'
+    page: 101-118
+
+  - id: beta2021DummyFigures
+    citation-key: beta2021DummyFigures
+    type: article-journal
+    title: Dummy figures as structural regression probes
+    author:
+      - family: Beta
+        given: Ben
+    issued:
+      - year: 2021
+    container-title: Systems and Layout Methods
+    volume: '7'
+    issue: '2'
+    page: 45-58
+
+  - id: gamma2022DummyTables
+    citation-key: gamma2022DummyTables
+    type: article-journal
+    title: Testing markdown table stability across publication toolchains
+    author:
+      - family: Gamma
+        given: Gia
+      - family: Rivera
+        given: Sol
+    issued:
+      - year: 2022
+    container-title: Computational Authoring Reports
+    volume: '5'
+    issue: '4'
+    page: 200-214
+
+  - id: delta2023LayoutRegression
+    citation-key: delta2023LayoutRegression
+    type: article-journal
+    title: Layout regression detection in CI-first writing workflows
+    author:
+      - family: Delta
+        given: Dana
+      - family: Quinn
+        given: Rob
+      - family: Imani
+        given: Noor
+    issued:
+      - year: 2023
+    container-title: Journal of Toolchain Engineering
+    volume: '9'
+    issue: '1'
+    page: 1-17
+...

@@ -41,6 +41,9 @@ jobs:
       - name: Run full check pipeline
         run: make check
 
+      - name: Run fixture check pipeline
+        run: make check-fixture
+
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
