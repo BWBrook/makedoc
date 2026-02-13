@@ -141,6 +141,7 @@ Out of scope for this iteration:
 - 2026-02-13: Added edge-case fixtures and `check-fixture-guards` to assert expected failures for unknown citekeys/manual citations/malformed tables.
 - 2026-02-13: Hardened CI into three jobs (`guard-tests`, `build-main`, `build-fixture`) with artifact summaries and uploads.
 - 2026-02-13: Suppressed GitHub error annotations for expected-failure guard fixtures via `DISABLE_GHA_ANNOTATIONS=1`.
+- 2026-02-13: Verified hardened CI passed on GitHub (`manuscript-ci` run `21972670054`) with all three jobs green.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
