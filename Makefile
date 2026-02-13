@@ -2,6 +2,7 @@ SHELL := /bin/bash
 
 PANDOC ?= pandoc
 PDF_ENGINE ?= xelatex
+PDF_ENGINE_OUTPUT_DIR ?= .cache/latex
 PANDOC_FROM ?= markdown+tex_math_dollars+tex_math_single_backslash
 
 CONFIG ?= settings/build.yaml
@@ -18,9 +19,17 @@ GOLDEN_CHECK ?= scripts/fixture_golden_check.py
 MANIFEST_SCRIPT ?= scripts/build_manifest.py
 DIAGNOSE_SCRIPT ?= scripts/diagnose_build.py
 INSTALLER ?= scripts/install_ubuntu_deps.sh
+LAYOUT_RENDER ?= scripts/render_pdf_layout.py
+SOURCE_RENDER ?= scripts/prepare_markdown_sources.py
 
 CSL_DEST_DIR ?= csl
 JOURNAL ?=
+
+ifneq ($(filter xelatex pdflatex lualatex,$(PDF_ENGINE)),)
+PDF_ENGINE_OPTS := --pdf-engine-opt=-output-directory=$(PDF_ENGINE_OUTPUT_DIR)
+else
+PDF_ENGINE_OPTS :=
+endif
 
 PROFILE_NAME ?=
 PROFILE_MAIN ?=
@@ -30,6 +39,9 @@ PROFILE_CSL ?=
 PROFILE_JOURNAL ?=Journal Name
 PROFILE_OUTPUT_DIR ?=dist
 PROFILE_OUTPUT_STEM ?=manuscript
+PROFILE_PAGE_NUMBERS ?= lower_right
+PROFILE_LINE_SPACING ?= single
+PROFILE_LINE_NUMBERING ?= continuous
 PROFILE_APPEND ?=0
 PROFILE_SET_DEFAULT ?=0
 PROFILE_OVERWRITE ?=0
@@ -41,10 +53,19 @@ FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROF
 PROFILE_CACHE_DIR := .cache
 ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.mk
 FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.mk
+ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.tex
+FIXTURE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/fixture_layout.tex
+ACTIVE_SOURCE_MD := $(PROFILE_CACHE_DIR)/active_sources.md
+FIXTURE_SOURCE_MD := $(PROFILE_CACHE_DIR)/fixture_sources.md
 
-$(shell mkdir -p "$(PROFILE_CACHE_DIR)")
-$(shell tmp="$(ACTIVE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp" && mv "$$tmp" "$(ACTIVE_VARS_FILE)")
-$(shell tmp="$(FIXTURE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp" && mv "$$tmp" "$(FIXTURE_VARS_FILE)")
+$(shell mkdir -p "$(PROFILE_CACHE_DIR)" "$(PDF_ENGINE_OUTPUT_DIR)")
+$(shell rm -f "$(ACTIVE_VARS_FILE)" "$(FIXTURE_VARS_FILE)")
+$(shell set -e; tmp="$(ACTIVE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp" && mv "$$tmp" "$(ACTIVE_VARS_FILE)")
+$(shell set -e; tmp="$(FIXTURE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp" && mv "$$tmp" "$(FIXTURE_VARS_FILE)")
+$(shell set -e; tmp="$(ACTIVE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(ACTIVE_LAYOUT_TEX)")
+$(shell set -e; tmp="$(FIXTURE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_LAYOUT_TEX)")
+$(shell set -e; tmp="$(ACTIVE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(ACTIVE_SOURCE_MD)")
+$(shell set -e; tmp="$(FIXTURE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_SOURCE_MD)")
 
 include $(ACTIVE_VARS_FILE)
 include $(FIXTURE_VARS_FILE)
@@ -56,15 +77,19 @@ ifeq ($(strip $(FIXTURE_MANUSCRIPT_SOURCES)),)
 $(error Failed to load fixture profile '$(FIXTURE_PROFILE)' from $(CONFIG))
 endif
 
-PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
-FIXTURE_PANDOC_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
+ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --include-in-header="$(ACTIVE_LAYOUT_TEX)"
+ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
+FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --include-in-header="$(FIXTURE_LAYOUT_TEX)"
+FIXTURE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
 ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/build_manifest.json
 FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx manifest
+
+testbed testbed/ testbed-all: fixture-all
 
 pdf: $(ACTIVE_PDF_OUT)
 
@@ -72,30 +97,44 @@ docx: $(ACTIVE_DOCX_OUT)
 
 fixture-all: fixture-pdf fixture-docx fixture-manifest
 
-fixture-pdf: $(FIXTURE_PDF_OUT)
+OUTPUT_DIRS := $(sort $(ACTIVE_OUTPUT_DIR) $(FIXTURE_OUTPUT_DIR))
 
-fixture-docx: $(FIXTURE_DOCX_OUT)
-
-$(ACTIVE_OUTPUT_DIR) $(FIXTURE_OUTPUT_DIR):
+$(OUTPUT_DIRS):
 	mkdir -p "$@"
 
-$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
-	$(PANDOC) $(ACTIVE_MANUSCRIPT_SOURCES) $(PANDOC_COMMON) --pdf-engine=$(PDF_ENGINE) -o $@
+ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
+fixture-pdf: $(ACTIVE_PDF_OUT)
+fixture-docx: $(ACTIVE_DOCX_OUT)
+fixture-manifest: $(ACTIVE_MANIFEST_OUT)
+else
+fixture-pdf: $(FIXTURE_PDF_OUT)
+fixture-docx: $(FIXTURE_DOCX_OUT)
+fixture-manifest: $(FIXTURE_MANIFEST_OUT)
+endif
 
-$(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
-	$(PANDOC) $(ACTIVE_MANUSCRIPT_SOURCES) $(PANDOC_COMMON) -o $@
+$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@
 
-$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
-	$(PANDOC) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_PANDOC_COMMON) --pdf-engine=$(PDF_ENGINE) -o $@
+$(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_DOCX_COMMON) -o $@
 
-$(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
-	$(PANDOC) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_PANDOC_COMMON) -o $@
+ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
+else
+$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+		$(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@
+
+$(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+		$(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_DOCX_COMMON) -o $@
+endif
 
 $(ACTIVE_MANIFEST_OUT): $(ACTIVE_PDF_OUT) $(ACTIVE_DOCX_OUT) $(MANIFEST_SCRIPT) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(if $(strip $(ACTIVE_GOLDEN_CONTRACT)),$(ACTIVE_GOLDEN_CONTRACT),)
 	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output "$@" --pdf "$(ACTIVE_PDF_OUT)" --docx "$(ACTIVE_DOCX_OUT)"
 
+ifeq ($(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE)))
+else
 $(FIXTURE_MANIFEST_OUT): $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT) $(MANIFEST_SCRIPT) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),)
 	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
+endif
 
 check-tools:
 	@for cmd in "$(PANDOC)" "$(PDF_ENGINE)"; do \
@@ -120,6 +159,9 @@ diagnose:
 fixture-diagnose:
 	@python3 "$(DIAGNOSE_SCRIPT)" --config "$(CONFIG)" --profile "$(FIXTURE_PROFILE)" --output-root "$(DIAG_OUTPUT_ROOT)" --manifest "$(FIXTURE_MANIFEST_OUT)"
 
+test-output-routing:
+	@bash scripts/test_output_routing.sh
+
 profiles:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" list-profiles
 
@@ -127,7 +169,7 @@ profile-show:
 	@python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) show --format yaml
 
 profile-scaffold:
-	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
+	@test -n "$(PROFILE_NAME)" || { echo "Usage: make profile-scaffold PROFILE_NAME=<name> [PROFILE_MAIN=<path>] [PROFILE_FIGS=<path>] [PROFILE_BIB=<path>] [PROFILE_CSL=<path>] [PROFILE_PAGE_NUMBERS=lower_right] [PROFILE_LINE_SPACING=single] [PROFILE_LINE_NUMBERING=continuous] [PROFILE_APPEND=1] [PROFILE_SET_DEFAULT=1]"; exit 1; }
 	@args=( \
 		--name "$(PROFILE_NAME)" \
 		--config "$(CONFIG)" \
@@ -139,6 +181,9 @@ profile-scaffold:
 	if [ -n "$(PROFILE_FIGS)" ]; then args+=(--manuscript-source "$(PROFILE_FIGS)"); fi; \
 	if [ -n "$(PROFILE_BIB)" ]; then args+=(--bibliography "$(PROFILE_BIB)"); fi; \
 	if [ -n "$(PROFILE_CSL)" ]; then args+=(--csl "$(PROFILE_CSL)"); fi; \
+	args+=(--page-numbers "$(PROFILE_PAGE_NUMBERS)"); \
+	args+=(--line-spacing "$(PROFILE_LINE_SPACING)"); \
+	args+=(--line-numbering "$(PROFILE_LINE_NUMBERING)"); \
 	if [ "$(PROFILE_APPEND)" = "1" ]; then args+=(--append); fi; \
 	if [ "$(PROFILE_SET_DEFAULT)" = "1" ]; then args+=(--set-default); fi; \
 	if [ "$(PROFILE_OVERWRITE)" = "1" ]; then args+=(--overwrite); fi; \
@@ -274,4 +319,11 @@ deps-install-full:
 	@bash "$(INSTALLER)" --mode full
 
 clean:
-	rm -rf dist
+	rm -rf dist .cache
+	rm -f texput.log test-*.log test-*.aux test-*.pdf test-*.out
+
+clean-all: clean tidy
+
+tidy:
+	rm -f texput.log test-*.log test-*.aux test-*.pdf test-*.out test-*.fdb_latexmk test-*.fls
+	rm -rf .cache/latex

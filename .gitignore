@@ -15,3 +15,10 @@ __pycache__/
 *.run.xml
 *.synctex.gz
 *.toc
+
+# Ad-hoc local scratch PDFs/logs used during layout experiments
+test-*.aux
+test-*.log
+test-*.out
+test-*.pdf
+texput.log

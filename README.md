@@ -84,6 +84,29 @@ Fixture outputs:
 - `dist/testbed/fixture_manuscript.pdf`
 - `dist/testbed/fixture_manuscript.docx`
 
+Fixture-only build:
+```bash
+make testbed
+```
+This runs the dedicated fixture profile and writes into `dist/testbed/` only (no files are emitted to the `dist/` root by this path).
+
+Regression check:
+```bash
+make test-output-routing
+```
+Runs a unit-style routing test that validates fixture-only and default output locations.
+
+Workspace cleanup:
+```bash
+make tidy
+make clean
+make clean-all
+```
+
+- `make tidy`: remove only local build scratch artifacts (`test-*` files, `texput.log`, LaTeX scratch artifacts in `.cache/latex`).
+- `make clean`: remove generated outputs (`dist/`, `.cache/`) and root scratch logs (`texput.log`, `test-*`).
+- `make clean-all`: alias for `make clean tidy`.
+
 ## Build Profiles (YAML-Driven)
 
 Build inputs are defined in `settings/build.yaml`.
@@ -116,6 +139,9 @@ make profile-scaffold \
   PROFILE_FIGS=/path/to/other-repo/manuscript/text/figures.md \
   PROFILE_BIB=/path/to/other-repo/references/refs.yaml \
   PROFILE_CSL=/path/to/other-repo/csl/oikos.csl \
+  PROFILE_PAGE_NUMBERS=lower_right \
+  PROFILE_LINE_SPACING=single \
+  PROFILE_LINE_NUMBERING=continuous \
   PROFILE_APPEND=1 \
   PROFILE_SET_DEFAULT=1
 ```
@@ -133,6 +159,14 @@ Each profile supports:
 - `output_dir`: output folder
 - `output_stem`: output basename (without extension)
 - `golden_contract`: optional fixture/contract expectations file used by structure checks
+- `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)
+- `line_spacing`: line spacing mode (`single`, `1.5`, `2`)
+- `line_numbering`: line-numbering mode (`continuous`, `page`, `section`, `none`)
+- These styling controls apply to PDF generation paths.
+- `References` placement behavior:
+  - If any source markdown file contains a heading matching `References` (case-insensitive), the build inserts a `<div id="refs"></div>` anchor immediately after that heading in the prepared markdown pipeline, so Pandoc places the bibliography there.
+  - If no such heading exists, Pandoc appends the bibliography at the end of the document.
+  - The behavior is implemented while concatenating sources: `scripts/prepare_markdown_sources.py` builds `$(PROFILE_CACHE_DIR)/<profile>_sources.md` and normalizes it before handing it to Pandoc.
 - `edgecases` (optional):
   - `unknown_cite`
   - `manual_cite`
@@ -158,6 +192,9 @@ profiles:
       - csl
     output_dir: dist
     output_stem: manuscript
+    page_numbers: lower_right
+    line_spacing: single
+    line_numbering: continuous
 ```
 
 ## CSL Search and Sourcing by Journal

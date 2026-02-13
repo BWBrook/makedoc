@@ -17,6 +17,9 @@ profiles:
       - csl
     output_dir: dist
     output_stem: manuscript
+    page_numbers: lower_right
+    line_spacing: single
+    line_numbering: continuous
     golden_contract: testbed/expected/golden_contract.yaml
 
   fixture:
@@ -35,6 +38,9 @@ profiles:
       - csl
     output_dir: dist/testbed
     output_stem: fixture_manuscript
+    page_numbers: lower_right
+    line_spacing: single
+    line_numbering: continuous
     golden_contract: testbed/expected/golden_contract.yaml
     edgecases:
       unknown_cite: testbed/edgecases/unknown_cite_main.md

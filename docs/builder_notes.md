@@ -34,6 +34,8 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - 2026-02-13: Emit machine-readable build manifests for active and fixture profiles to improve reproducibility and evidence capture.
 - 2026-02-13: Keep fixture expectations in a versioned YAML contract and treat `fixture-golden-check` as a compatibility alias to `fixture-contract-check`.
 - 2026-02-13: Collect diagnostics bundles on CI failure for faster triage without rerunning jobs locally.
+- 2026-02-13: Add profile-driven PDF layout controls through generated include files (page numbers, line spacing, line numbering), applied via `--include-in-header`.
+- 2026-02-13: Add source-merge normalization step (`scripts/prepare_markdown_sources.py`) that injects `<div id="refs"></div>` after first `## References` heading to allow in-document bibliography placement.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -78,12 +80,15 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - 2026-02-13: Added `make wsl-smoke` target and documented WSL clone options (HTTPS and SSH) in README.
 - 2026-02-13: Switched profile cache generation writes to temp-file-and-rename for concurrency safety.
 - 2026-02-13: Added `scripts/validate_build_config.py` and integrated `make validate-config` into `check` and `check-fixture`.
+- 2026-02-13: Added `scripts/render_pdf_layout.py`, integrated layout header generation into PDF build targets, and extended `settings/build.yaml` with layout keys.
+- 2026-02-13: Updated `scripts/profile_scaffold.py` and `Makefile` to include `PAGE_NUMBERS`, `LINE_SPACING`, and `LINE_NUMBERING` options in scaffold and profile-driven builds.
 - 2026-02-13: Added `scripts/build_manifest.py` and `scripts/diagnose_build.py`.
 - 2026-02-13: Added `Makefile` targets for manifests (`manifest`, `fixture-manifest`, `show-manifest`) and diagnostics (`diagnose`, `fixture-diagnose`).
 - 2026-02-13: Added fixture contract file `testbed/expected/golden_contract.yaml` and wired contract-aware fixture checks.
 - 2026-02-13: Updated CI to run config validation, publish manifest artifacts, and upload diagnostics bundles on failure.
 - 2026-02-13: Updated README and fixture expectation docs for contract/manifests/diagnostics workflows.
 - 2026-02-13: Verified updated CI run (`21975285208`) passed with new config-validation, manifest artifact, and failure-diagnostics steps.
+- 2026-02-13: Verified `## References` in testbed main is honored as bibliography insertion point via fixture output.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -144,6 +149,18 @@ Context: Phase 1-8 implementation (build scaffold through pre-iteration hardenin
 - `make fixture-golden-check` -> PASS (backward-compatible alias to contract check remains valid)
 - `make manifest && make fixture-manifest` -> PASS (manifests present; make reports up-to-date)
 - `gh run watch 21975285208 --repo BWBrook/makedoc --exit-status` -> PASS (Phase 8 CI run green; diagnostics upload steps skipped because no failures)
+- `make testbed` -> PASS (created `dist/testbed/fixture_manuscript.pdf`, `dist/testbed/fixture_manuscript.docx`, `dist/testbed/build_manifest.json` and no root `dist/` files)
+- `make PROFILE=fixture check-fixture` -> PASS (fixture pipeline + contract check; `Build config` validated and outputs remain under `dist/testbed/*`)
+- `make test-output-routing` -> PASS (`dist/testbed` outputs only for fixture flows; default `make all` routes to `dist/` as expected)
+- `python3 -m py_compile scripts/build_profile.py scripts/render_pdf_layout.py scripts/validate_build_config.py scripts/profile_scaffold.py` -> PASS
+- `make clean && make all` -> PASS (layout-aware PDF/DOCX and manifest generation succeed for default profile)
+- `make PROFILE=fixture all` -> PASS (fixture profile builds to `dist/testbed` with layout-aware includes)
+- `make check` -> PASS (`check-tools`, validation, lint, refs-audit, build, manifest path all pass)
+- `make check-fixture` -> PASS (fixture checks + contract checks pass with layout header generation)
+- `make test-output-routing` -> PASS (routing regression passes)
+- `python3 -m py_compile scripts/prepare_markdown_sources.py` -> PASS
+- `make check` -> PASS (reference-anchor normalization in source merge path included)
+- `make check-fixture` -> PASS (`## References` heading in fixture now anchors rendered bibliography).
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.

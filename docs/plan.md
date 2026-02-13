@@ -26,6 +26,7 @@ In scope for this iteration:
 - Build manifest generation for reproducibility (active + fixture profiles)
 - Failure diagnostics bundling for CI/local triage
 - Fixture golden-check contract externalized to YAML
+- Profile-level PDF styling controls for generated output (page numbers, line spacing, line numbering)
 
 Out of scope for this iteration:
 - Journal-specific Word style template (`reference.docx`) tuning
@@ -39,6 +40,7 @@ Out of scope for this iteration:
 6. Phase 6 (completed): Config-driven orchestration + onboarding docs
 7. Phase 7 (completed): Onboarding automation + fixture golden hardening
 8. Phase 8 (completed): Pre-iteration hardening (config validation, manifests, diagnostics)
+9. Phase 9 (in progress): Profile-controlled layout options for PDF output
 
 ## Phase 1 Work Package
 ### Deliverables
@@ -172,6 +174,25 @@ Out of scope for this iteration:
 - `make check-fixture` runs contract-based fixture checks using `golden_contract` path
 - CI workflow uploads manifests with build artifacts and uploads diagnostics bundles when jobs fail
 
+## Phase 9 Work Package
+### Deliverables
+- Page-number mode control with sane defaults and profile overrides
+- Line-spacing controls (single, 1.5, 2) driven by profile config
+- Line-numbering controls (continuous, by page, by section, off)
+- LaTeX header generation per profile and integration into PDF rules
+- Config validation, scaffold, and README schema docs updated for new keys
+- Reference placement behavior:
+  - If any source markdown file contains a heading matching `References` (case-insensitive),
+    Bibliography is anchored there by inserting `<div id="refs"></div>` in prepared merged sources.
+  - If no heading is present, references default to document end.
+
+### Acceptance Criteria
+- `settings/build.yaml` includes the new formatting keys in default and fixture profiles
+- `scripts/render_pdf_layout.py` emits profile-driven LaTeX fragments
+- `make clean && make all` and `make PROFILE=fixture all` succeed using configured values
+- `make validate-config` passes after new schema keys are added
+- `## References` headings in source markdown are respected as bibliography insertion points for PDF and DOCX targets.
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -233,6 +254,10 @@ Out of scope for this iteration:
 - 2026-02-13: Externalized fixture golden expectations to `testbed/expected/golden_contract.yaml` and wired `make fixture-contract-check`.
 - 2026-02-13: Updated CI to validate config, publish manifest artifacts, and upload diagnostics bundles on failure.
 - 2026-02-13: Verified Phase 8 CI run passed on GitHub (`manuscript-ci` run `21975285208`) with all three jobs succeeding and diagnostic-upload steps skipped as expected on green.
+- 2026-02-13: Fixed fixture-only build routing so `make testbed` (and aliases `testbed/`, `testbed-all`) writes only `dist/testbed/*` and no root `dist/` artifacts.
+- 2026-02-13: Added `scripts/test_output_routing.sh` and `make test-output-routing` unit-style regression check for output routing.
+- 2026-02-13: Added profile-driven PDF layout options (`page_numbers`, `line_spacing`, `line_numbering`) and profile-aware layout header generation.
+- 2026-02-13: Added source normalization hook (`scripts/prepare_markdown_sources.py`) to honor `## References` headings in merged markdown and keep default-end placement when no placeholder exists.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.

@@ -24,6 +24,9 @@ ALLOWED_PROFILE_KEYS = {
     "output_stem",
     "golden_contract",
     "edgecases",
+    "page_numbers",
+    "line_spacing",
+    "line_numbering",
 }
 ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
 

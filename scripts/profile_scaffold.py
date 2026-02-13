@@ -45,6 +45,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", default="dist", help="Output directory.")
     parser.add_argument("--output-stem", default="manuscript", help="Output stem.")
+    parser.add_argument(
+        "--page-numbers",
+        default="lower_right",
+        help="Page-numbering mode: lower_right (default) or none.",
+    )
+    parser.add_argument(
+        "--line-spacing",
+        default="single",
+        help="Line-spacing mode: single, 1.5, or 2.",
+    )
+    parser.add_argument(
+        "--line-numbering",
+        default="continuous",
+        help="Line-numbering mode: continuous, page, section, or none.",
+    )
     parser.add_argument("--edgecase-unknown-cite", help="Optional unknown-cite edge case path.")
     parser.add_argument("--edgecase-manual-cite", help="Optional manual-cite edge case path.")
     parser.add_argument("--edgecase-malformed-table", help="Optional malformed-table edge case path.")
@@ -105,6 +120,9 @@ def build_profile(args: argparse.Namespace) -> dict[str, Any]:
         "csl_search_dirs": csl_search_dirs,
         "output_dir": args.output_dir,
         "output_stem": args.output_stem,
+        "page_numbers": args.page_numbers,
+        "line_spacing": args.line_spacing,
+        "line_numbering": args.line_numbering,
     }
 
     edgecases: dict[str, str] = {}

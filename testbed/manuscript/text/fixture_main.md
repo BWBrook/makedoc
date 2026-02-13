@@ -20,13 +20,13 @@ The principal result references Fig. [1](#fig-fixture-main) and Fig. [2](#fig-fi
 
 ### Fixture Table
 
-| Component | Presence | Notes |
-| --- | --- | --- |
-| Citation group | yes | Includes multiple keys in one bracketed citation |
-| Equation block | yes | Uses display math via `\\[ ... \\]` |
-| Table math | yes | Includes $\sigma^2$ in a table cell |
-| Figure refs | yes | Anchor links target figure IDs |
-| Variance marker | yes | $\sigma^2$ is represented as a non-content regression probe |
+| Component       | Presence | Notes                                                       |
+| --------------- | -------- | ----------------------------------------------------------- |
+| Citation group  | yes      | Includes multiple keys in one bracketed citation            |
+| Equation block  | yes      | Uses display math via `\\[ ... \\]`                         |
+| Table math      | yes      | Includes $\sigma^2$ in a table cell                         |
+| Figure refs     | yes      | Anchor links target figure IDs                              |
+| Variance marker | yes      | $\sigma^2$ is represented as a non-content regression probe |
 
 ## Results
 
@@ -35,3 +35,5 @@ Citations continue to resolve in results text [@alpha2020SyntheticWorkflow; @del
 ## Discussion
 
 This fixture prioritizes predictable structure over domain realism, enabling regression detection for layout and tooling changes.
+
+## References

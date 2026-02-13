@@ -15,6 +15,11 @@ import yaml
 
 DEFAULT_CONFIG = Path("settings/build.yaml")
 
+PAGE_NUMBERING_DEFAULT = "lower_right"
+LINE_SPACING_OPTIONS = {"single", "1.5", "2"}
+LINE_NUMBERING_OPTIONS = {"continuous", "page", "section", "none"}
+PAGE_NUMBERING_OPTIONS = {"lower_right", "none"}
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -34,6 +39,9 @@ class Profile:
     edgecase_unknown_cite: str
     edgecase_manual_cite: str
     edgecase_malformed_table: str
+    page_numbers: str
+    line_spacing: str
+    line_numbering: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -55,6 +63,9 @@ class Profile:
                 "manual_cite": self.edgecase_manual_cite,
                 "malformed_table": self.edgecase_malformed_table,
             },
+            "page_numbers": self.page_numbers,
+            "line_spacing": self.line_spacing,
+            "line_numbering": self.line_numbering,
         }
 
 
@@ -154,6 +165,28 @@ def dedupe_keep_order(items: list[str]) -> list[str]:
     return out
 
 
+def normalize_page_numbers(raw_value: str) -> str:
+    value = raw_value.strip().lower().replace("-", "_")
+    if value in {"right", "lr", "lower_right"}:
+        return "lower_right"
+    if value in {"off", "0", "false", "no", "none"}:
+        return "none"
+    if value == "lowerright":
+        return "lower_right"
+    return value
+
+
+def normalize_line_numbering(raw_value: str) -> str:
+    value = raw_value.strip().lower().replace("-", "_")
+    if value in {"page", "by_page"}:
+        return "page"
+    if value in {"section", "by_section"}:
+        return "section"
+    if value in {"continuous", "cont"}:
+        return "continuous"
+    return value
+
+
 def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile:
     profiles = config.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
@@ -208,6 +241,36 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         if value and not isinstance(value, str):
             raise ValueError(f"Profile key '{key}' must be a string path.")
 
+    page_numbers = expect_str(
+        raw_profile,
+        "page_numbers",
+        required=False,
+        default=PAGE_NUMBERING_DEFAULT,
+    )
+    page_numbers = normalize_page_numbers(page_numbers)
+    if page_numbers not in PAGE_NUMBERING_OPTIONS:
+        raise ValueError(f"Profile key 'page_numbers' resolved to unsupported value: {page_numbers}")
+
+    line_spacing = expect_str(
+        raw_profile,
+        "line_spacing",
+        required=False,
+        default="single",
+    ).lower()
+    if line_spacing not in LINE_SPACING_OPTIONS:
+        allowed = ", ".join(sorted(LINE_SPACING_OPTIONS))
+        raise ValueError(f"Profile key 'line_spacing' must be one of: {allowed}.")
+
+    line_numbering_raw = expect_str(
+        raw_profile,
+        "line_numbering",
+        required=False,
+        default="continuous",
+    )
+    line_numbering = normalize_line_numbering(line_numbering_raw)
+    if line_numbering not in LINE_NUMBERING_OPTIONS:
+        raise ValueError(f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}")
+
     pdf_out = str(Path(output_dir) / f"{output_stem}.pdf")
     docx_out = str(Path(output_dir) / f"{output_stem}.docx")
 
@@ -228,6 +291,9 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         edgecase_unknown_cite=edge_unknown.strip(),
         edgecase_manual_cite=edge_manual.strip(),
         edgecase_malformed_table=edge_table.strip(),
+        page_numbers=page_numbers,
+        line_spacing=line_spacing,
+        line_numbering=line_numbering,
     )
 
 
@@ -266,6 +332,9 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_EDGECASE_UNKNOWN_CITE": profile.edgecase_unknown_cite,
         f"{base}_EDGECASE_MANUAL_CITE": profile.edgecase_manual_cite,
         f"{base}_EDGECASE_MALFORMED_TABLE": profile.edgecase_malformed_table,
+        f"{base}_PAGE_NUMBERS": profile.page_numbers,
+        f"{base}_LINE_SPACING": profile.line_spacing,
+        f"{base}_LINE_NUMBERING": profile.line_numbering,
     }
     lines = [f"{name} := {format_make_value(value)}" for name, value in values.items()]
     return "\n".join(lines)
