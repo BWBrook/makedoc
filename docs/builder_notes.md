@@ -1,7 +1,7 @@
 # Builder Notes
 
 Last updated: 2026-02-13
-Context: Phase 1-3 implementation (build scaffold, normalization, citation migration)
+Context: Phase 1-4 implementation (build scaffold, normalization, citations, figures)
 
 ## Decision Log
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
@@ -11,6 +11,9 @@ Context: Phase 1-3 implementation (build scaffold, normalization, citation migra
 - 2026-02-13: Add a strict manuscript lint gate for unresolved placeholders and manual author-year citation patterns.
 - 2026-02-13: Resolve `[REF]` using an inferred synchrony-framework citation pair; record as an explicit inference in report.
 - 2026-02-13: Map `Wagg et al. 2022` text citation to available bibliography key `@wagg2021DiversityAsynchronySoil` and log year mismatch caveat.
+- 2026-02-13: User confirmed both citation caveats; lock them as final project decisions.
+- 2026-02-13: Keep figure captions in a separate source file and render via multi-file pandoc inputs for maintainability.
+- 2026-02-13: Add `refs-audit` as a non-optional quality gate in `make check`.
 
 ## Work Log
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
@@ -26,6 +29,11 @@ Context: Phase 1-3 implementation (build scaffold, normalization, citation migra
 - 2026-02-13: Converted manual citations in `manuscript/text/draft_ms_v2.md` to Pandoc citation keys.
 - 2026-02-13: Added `docs/citation_conversion_report.md` with mapping details, inferences, and caveats.
 - 2026-02-13: Re-ran lint and full check pipeline after citation conversion.
+- 2026-02-13: Added `scripts/refs_audit.py` and `make refs-audit` for citation-key/bibliography validation.
+- 2026-02-13: Updated `Makefile` to build from `manuscript/text/draft_ms_v2.md` and `manuscript/text/figure_captions_v2.md`.
+- 2026-02-13: Replaced plain caption prose with renderable figure blocks and stable IDs in `figure_captions_v2.md`.
+- 2026-02-13: Linked in-text figure mentions in results text to figure anchors.
+- 2026-02-13: Validated generated LaTeX contains expected figure labels and hyperlink targets.
 
 ## Command Evidence
 - `make check-tools` -> PASS (`Tool check passed.`)
@@ -41,11 +49,13 @@ Context: Phase 1-3 implementation (build scaffold, normalization, citation migra
 - `make lint-manuscript` (after conversion) -> PASS (`Manuscript lint passed.`)
 - `make check` (after conversion) -> PASS (`Tool check`, `lint-manuscript`, and both builds passed)
 - `make clean && make all` (after conversion) -> PASS (`dist/manuscript.pdf` 48K, `dist/manuscript.docx` 19K)
+- `make refs-audit` -> PASS (`Unknown keys: 0`; reports 14 unused bibliography keys as non-fatal)
+- `make check` (after refs-audit + Phase 4) -> PASS (`check-tools`, `lint-manuscript`, `refs-audit`, and build stages passed)
+- `make clean && make all` (after Phase 4) -> PASS (`dist/manuscript.pdf` 500K, `dist/manuscript.docx` 445K, includes figures)
 
 ## Build Warnings
 - Previous PDF warning for Unicode em-space (`U+2003`) no longer reproduced after Phase 2 edits.
 
 ## Open Issues
-- Figure files exist but are not yet integrated in manuscript markdown as renderable figure blocks.
-- Citation caveat: manuscript originally referenced `Wagg et al. 2022` while bibliography key used is `@wagg2021DiversityAsynchronySoil` (year 2021); verify intended source/year.
-- Citation caveat: one former placeholder (`[REF]`) was resolved by inference; confirm this is the intended citation pair.
+- 14 bibliography keys are currently unused (reported by `make refs-audit`); non-blocking but useful for future bibliography pruning.
+- Figures are linked and rendered, but panel-level references (e.g., 1A, 1B) still point to whole-figure anchors by design.

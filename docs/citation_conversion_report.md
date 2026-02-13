@@ -26,7 +26,11 @@ Bibliography source: `references/ih_references.yaml`
   - Rationale: adjacent sentence explicitly references the same synchrony framework.
 - Text cited `Wagg et al. 2022`, but bibliography currently contains `@wagg2021DiversityAsynchronySoil` (issued year 2021).
   - Applied available key as best match.
-  - Recommended follow-up: confirm whether manuscript intended `2021` or a different Wagg et al. paper/year.
+  - Manuscript decision confirmed by user on 2026-02-13; keep this mapping as final.
+
+## Finalized Decisions (User Confirmed)
+- 2026-02-13: Keep inferred replacement for former `[REF]` as `[@loreau2008SpeciesSynchronyIts; @loreau2013BiodiversityEcosystemStability]`.
+- 2026-02-13: Keep `Wagg et al. 2022` prose mapped to available key `@wagg2021DiversityAsynchronySoil`.
 
 ## Remaining Manual Citations
 - None detected by current lint pattern (`make lint-manuscript`).

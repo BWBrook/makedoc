@@ -13,9 +13,10 @@ In scope for this iteration:
 - Git repository initialization and first push to a private GitHub remote
 - Planning and decision documentation
 - Citation token migration (`(Author year)` -> `[@citekey]`) with ambiguity reporting
+- Figure/caption integration and in-document cross-reference links
+- Citation key audit checks against bibliography
 
 Out of scope for this iteration:
-- Figure/cross-reference wiring and numbering conventions
 - Journal-specific Word style template (`reference.docx`) tuning
 - CI automation
 
@@ -23,7 +24,7 @@ Out of scope for this iteration:
 1. Phase 1 (completed): Build scaffold and repository bootstrap
 2. Phase 2 (completed): Manuscript normalization (table/math/unicode cleanup)
 3. Phase 3 (completed): Citation migration and unresolved-citation reporting
-4. Phase 4: Figure/caption integration + cross-references
+4. Phase 4 (completed): Figure/caption integration + cross-references
 5. Phase 5: CI/reproducibility guardrails
 
 ## Phase 1 Work Package
@@ -66,6 +67,20 @@ Out of scope for this iteration:
 - No manual author-year citations remain in converted manuscript sections
 - Citation conversion caveats are documented
 
+## Phase 4 Work Package
+### Deliverables
+- Multi-source rendering from manuscript + figure-captions files
+- Figure caption file converted into renderable figure blocks with stable IDs
+- In-text figure references linked to figure IDs
+- `refs-audit` command added to verify cited keys exist in bibliography
+- User-confirmed citation caveats locked as final in `docs/citation_conversion_report.md`
+
+### Acceptance Criteria
+- `make clean && make all` succeeds with figures included from `manuscript/text/figure_captions_v2.md`
+- In-text figure references resolve to internal anchors in output
+- `make refs-audit` passes with zero unknown citation keys
+- `make check` passes with tool check, manuscript lint, refs audit, and build steps
+
 ## Risks and Mitigations
 - Citation placeholders and non-token citations may limit final bibliography formatting
   - Mitigation: keep Phase 1 focused on build plumbing; handle citation migration in Phase 3
@@ -91,6 +106,10 @@ Out of scope for this iteration:
 - 2026-02-13: Added `lint-manuscript` target and integrated it into `make check`.
 - 2026-02-13: Converted manual author-year citations in manuscript to Pandoc citekeys and removed `[REF]` placeholder.
 - 2026-02-13: Recorded citation mapping caveats in `docs/citation_conversion_report.md` and revalidated with `make lint-manuscript` + `make check`.
+- 2026-02-13: Added `refs-audit` target and integrated it into `make check`.
+- 2026-02-13: Switched build to render combined sources (`draft_ms_v2.md` + `figure_captions_v2.md`) and converted captions file to actual figure blocks with IDs.
+- 2026-02-13: Linked in-text `Fig.` references to figure anchors (`#fig-main-insurance`, `#fig-main-richness`) and validated anchor generation in LaTeX output.
+- 2026-02-13: Locked citation caveats as final per user confirmation.
 
 ## Update Protocol
 - Update this file whenever scope, milestones, acceptance criteria, or status changes.
