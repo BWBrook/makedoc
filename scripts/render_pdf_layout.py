@@ -59,6 +59,8 @@ def page_numbers_block(mode: str) -> list[str]:
 def line_spacing_block(mode: str) -> list[str]:
     mapping = {
         "single": "1",
+        "1.1": "1.05",
+        "1.25": "1.125",
         "1.5": "1.25",
         "2": "2",
     }

@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--line-spacing",
         default="single",
-        help="Line-spacing mode: single, 1.5, or 2.",
+        help="Line-spacing mode: single, 1.1, 1.25, 1.5, or 2.",
     )
     parser.add_argument(
         "--line-numbering",

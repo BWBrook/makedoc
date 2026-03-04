@@ -178,7 +178,7 @@ Out of scope for this iteration:
 ## Phase 9 Work Package
 ### Deliverables
 - Page-number mode control with sane defaults and profile overrides
-- Line-spacing controls (single, 1.5, 2) driven by profile config
+- Line-spacing controls (single, 1.1, 1.25, 1.5, 2) driven by profile config
 - Line-numbering controls (continuous, by page, by section, off)
 - Margin controls:
   - `margins.unit` (`cm`, `in`)

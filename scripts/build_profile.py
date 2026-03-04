@@ -16,7 +16,7 @@ import yaml
 DEFAULT_CONFIG = Path("settings/build.yaml")
 
 PAGE_NUMBERING_DEFAULT = "lower_right"
-LINE_SPACING_OPTIONS = {"single", "1.5", "2"}
+LINE_SPACING_OPTIONS = {"single", "1.1", "1.25", "1.5", "2"}
 LINE_NUMBERING_OPTIONS = {"continuous", "page", "section", "none"}
 PAGE_NUMBERING_OPTIONS = {"lower_right", "none"}
 FIGURE_PLACEMENT_OPTIONS = {"pages", "captions_page", "inline"}

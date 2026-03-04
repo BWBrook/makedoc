@@ -243,7 +243,7 @@ profiles:
     output_stem: manuscript
 
     page_numbers: lower_right      # lower_right | none
-    line_spacing: single           # single | 1.5 | 2
+    line_spacing: single           # single | 1.1 | 1.25 | 1.5 | 2
     line_numbering: continuous     # continuous | page | section | none
 
     figures:

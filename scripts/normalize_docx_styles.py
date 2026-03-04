@@ -30,6 +30,8 @@ LINE_NUMBERING_DISTANCE_ATTR = f"{{{W_NS}}}distance"
 LINE_NUMBERING_START_ATTR = f"{{{W_NS}}}start"
 LINE_SPACING_VALUES = {
     "single": "240",
+    "1.1": "264",
+    "1.25": "300",
     "1.5": "360",
     "2": "480",
 }
@@ -50,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--line-spacing",
-        choices=("single", "1.5", "2"),
+        choices=("single", "1.1", "1.25", "1.5", "2"),
         default="single",
         help="Paragraph line spacing mode for DOCX output.",
     )

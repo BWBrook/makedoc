@@ -197,7 +197,7 @@ Each profile supports:
 - `output_stem`: output basename (without extension)
 - `golden_contract`: optional fixture/contract expectations file used by structure checks
 - `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)
-- `line_spacing`: line spacing mode (`single`, `1.5`, `2`)
+- `line_spacing`: line spacing mode (`single`, `1.1`, `1.25`, `1.5`, `2`)
 - `line_numbering`: line-numbering mode (`continuous`, `page`, `section`, `none`)
 - `figures`:
   - `placement`: `pages` (default, one figure per page after references),
@@ -248,7 +248,7 @@ Each profile supports:
 - DOCX post-processing:
   - `scripts/normalize_docx_styles.py` runs after DOCX generation to:
     - normalize heading styles to black (`000000`) by default
-    - apply profile-driven line spacing (`single`, `1.5`, `2`)
+    - apply profile-driven line spacing (`single`, `1.1`, `1.25`, `1.5`, `2`)
     - apply profile-driven line numbering (`continuous`, `page`, `section`, `none`)
 - `edgecases` (optional):
   - `unknown_cite`
