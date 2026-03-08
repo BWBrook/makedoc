@@ -10,6 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from markdown_scan import scan_markdown_lines
 import yaml
 
 
@@ -39,10 +40,10 @@ def load_bibliography_keys(path: Path) -> set[str]:
 
 def scan_citations(source: Path) -> list[CitationHit]:
     hits: list[CitationHit] = []
-    with source.open("r", encoding="utf-8") as handle:
-        for line_num, line in enumerate(handle, start=1):
-            for match in CITE_PATTERN.finditer(line):
-                hits.append(CitationHit(key=match.group(1), source=source, line=line_num))
+    for line in scan_markdown_lines(source):
+        for match in CITE_PATTERN.finditer(line.searchable):
+            key = match.group(1).rstrip(".")
+            hits.append(CitationHit(key=key, source=source, line=line.line))
     return hits
 
 

@@ -1,9 +1,12 @@
 # Builder Notes
 
-Last updated: 2026-02-13
-Context: Phase 1-10 implementation (through profile-driven figure placement)
+Last updated: 2026-03-08
+Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover test and Makefile hardening
 
 ## Decision Log
+- 2026-03-08: Add a stdlib `unittest` safety net for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases rather than introducing a new test dependency.
+- 2026-03-08: Refactor lint/reference scanning around a shared markdown visibility helper so fenced code/raw blocks and inline literal citation examples do not trigger false positives.
+- 2026-03-08: Move generated profile/layout/source cache artefacts toward explicit Make targets keyed by config/profile selection, reducing parse-time side effects while preserving current entrypoints.
 - 2026-02-13: Use plain `Makefile` + pandoc directly for Phase 1 (Quarto remains available for future phases).
 - 2026-02-13: Keep Phase 1 content-preserving; do not rewrite manuscript prose/citations yet.
 - 2026-02-13: Support current manuscript math style by setting pandoc input format to `markdown+tex_math_dollars+tex_math_single_backslash`.
@@ -44,6 +47,11 @@ Context: Phase 1-10 implementation (through profile-driven figure placement)
 - 2026-02-13: Extend figure handling with `placement: captions_page` for a dedicated Figure Captions page and title-bearing figure blocks.
 
 ## Work Log
+- 2026-03-08: Added `tests/` coverage for `build_profile`, `normalize_docx_styles`, `fixture_golden_check`, and markdown scanning edge cases.
+- 2026-03-08: Added `make python-tests`, added explicit Poppler preflight for fixture contract checks, and updated CI to run Python unit tests plus `make test-output-routing`.
+- 2026-03-08: Added shared helper `scripts/markdown_scan.py` and updated lint/reference audit flows to ignore fenced code blocks, raw blocks, and inline code examples while preserving CLI behaviour.
+- 2026-03-08: Added shared schema constants in `scripts/profile_schema.py` and reused them across resolver, validator, scaffold, and DOCX normalization paths.
+- 2026-03-08: Refactored `Makefile` cache generation so profile include files, prepared markdown, and layout fragments are generated as explicit cache targets keyed by selected config/profile.
 - 2026-02-13: Reviewed repository structure and manuscript/reference/CSL inputs.
 - 2026-02-13: Verified core tooling (`pandoc`, `quarto`, `xelatex`, `latexmk`, `biber`, `tectonic`, `hunspell`).
 - 2026-02-13: Initialized planning artifacts (`docs/plan.md`, `docs/builder_notes.md`).
@@ -100,6 +108,12 @@ Context: Phase 1-10 implementation (through profile-driven figure placement)
 - 2026-02-13: Extended `make profile-scaffold` to include margin-related arguments for `paper_size` and per-side values.
 
 ## Command Evidence
+- `python3 -m unittest discover -s tests -p 'test_*.py'` -> PASS (13 tests covering output routing logic, DOCX XML normalization, fixture-contract failure paths, and markdown scanning behaviour)
+- `make python-tests` -> PASS (same 13 stdlib unit tests through the canonical Make target)
+- `make validate-config` -> PASS (`Build config validation passed for selected profile(s): default` and `fixture`)
+- `make test-output-routing` -> PASS (fixture-only, default-profile, and fallback-output routing all succeed with keyed cache artefacts)
+- `make check && make check-fixture && make check-fixture-guards` -> PASS (full sequential repo validation passes after markdown-scanning, schema-sharing, and Makefile refactors)
+- `make profiles && make profile-show && make show-manifest` -> PASS (profile listing/show and manifest display remain functional after the Make bootstrap refactor)
 - `make check-tools` -> PASS (`Tool check passed.`)
 - `make clean && make all` -> PASS (`dist/manuscript.pdf` and `dist/manuscript.docx` generated)
 - `make check` -> PASS (`Build check passed.`)

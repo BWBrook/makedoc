@@ -10,32 +10,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from profile_schema import (
+    DEFAULT_CONFIG,
+    DEFAULT_FIGURE_SETTINGS,
+    DEFAULT_MARGINS,
+    FIGURE_CAPTION_POSITION_CHOICES,
+    FIGURE_PLACEMENT_CHOICES,
+    LINE_NUMBERING_CHOICES,
+    LINE_SPACING_CHOICES,
+    MARGIN_PAPER_SIZE_CHOICES,
+    MARGIN_UNIT_CHOICES,
+    PAGE_NUMBERING_CHOICES,
+    PAGE_NUMBERING_DEFAULT,
+)
 import yaml
-
-
-DEFAULT_CONFIG = Path("settings/build.yaml")
-
-PAGE_NUMBERING_DEFAULT = "lower_right"
-LINE_SPACING_OPTIONS = {"single", "1.1", "1.25", "1.5", "2"}
-LINE_NUMBERING_OPTIONS = {"continuous", "page", "section", "none"}
-PAGE_NUMBERING_OPTIONS = {"lower_right", "none"}
-FIGURE_PLACEMENT_OPTIONS = {"pages", "captions_page", "inline"}
-FIGURE_CAPTION_POSITION_OPTIONS = {"top", "bottom"}
-DEFAULT_FIGURE_SETTINGS = {
-    "placement": "pages",
-    "caption_position": "top",
-    "placeholder_id": "figures",
-}
-MARGIN_UNIT_OPTIONS = {"cm", "in"}
-MARGIN_PAPER_SIZE_OPTIONS = {"a4", "letter"}
-DEFAULT_MARGINS = {
-    "unit": "cm",
-    "paper_size": "a4",
-    "top": 1.5,
-    "right": 1.5,
-    "bottom": 1.5,
-    "left": 1.5,
-}
 
 
 @dataclass(frozen=True)
@@ -473,7 +461,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         default=PAGE_NUMBERING_DEFAULT,
     )
     page_numbers = normalize_page_numbers(page_numbers)
-    if page_numbers not in PAGE_NUMBERING_OPTIONS:
+    if page_numbers not in PAGE_NUMBERING_CHOICES:
         raise ValueError(f"Profile key 'page_numbers' resolved to unsupported value: {page_numbers}")
 
     line_spacing = expect_str_or_number(
@@ -482,8 +470,8 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         required=False,
         default="single",
     ).lower()
-    if line_spacing not in LINE_SPACING_OPTIONS:
-        allowed = ", ".join(sorted(LINE_SPACING_OPTIONS))
+    if line_spacing not in LINE_SPACING_CHOICES:
+        allowed = ", ".join(LINE_SPACING_CHOICES)
         raise ValueError(f"Profile key 'line_spacing' must be one of: {allowed}.")
 
     line_numbering_raw = expect_str(
@@ -493,7 +481,7 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         default="continuous",
     )
     line_numbering = normalize_line_numbering(line_numbering_raw)
-    if line_numbering not in LINE_NUMBERING_OPTIONS:
+    if line_numbering not in LINE_NUMBERING_CHOICES:
         raise ValueError(f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}")
 
     figures_raw = raw_profile.get("figures", {})
@@ -510,8 +498,8 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
             default=DEFAULT_FIGURE_SETTINGS["placement"],
         )
     )
-    if figure_placement not in FIGURE_PLACEMENT_OPTIONS:
-        allowed = ", ".join(sorted(FIGURE_PLACEMENT_OPTIONS))
+    if figure_placement not in FIGURE_PLACEMENT_CHOICES:
+        allowed = ", ".join(FIGURE_PLACEMENT_CHOICES)
         raise ValueError(f"Profile key 'figures.placement' must be one of: {allowed}.")
 
     figure_caption_position = normalize_caption_position(
@@ -522,8 +510,8 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
             default=DEFAULT_FIGURE_SETTINGS["caption_position"],
         )
     )
-    if figure_caption_position not in FIGURE_CAPTION_POSITION_OPTIONS:
-        allowed = ", ".join(sorted(FIGURE_CAPTION_POSITION_OPTIONS))
+    if figure_caption_position not in FIGURE_CAPTION_POSITION_CHOICES:
+        allowed = ", ".join(FIGURE_CAPTION_POSITION_CHOICES)
         raise ValueError(
             f"Profile key 'figures.caption_position' must be one of: {allowed}."
         )
@@ -567,11 +555,11 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
             margins_raw, "left", default=DEFAULT_MARGINS["left"], required=False,
         ),
     }
-    if margins_values["unit"] not in MARGIN_UNIT_OPTIONS:
-        allowed = ", ".join(sorted(MARGIN_UNIT_OPTIONS))
+    if margins_values["unit"] not in MARGIN_UNIT_CHOICES:
+        allowed = ", ".join(MARGIN_UNIT_CHOICES)
         raise ValueError(f"Profile key 'margins.unit' must be one of: {allowed}.")
-    if margins_values["paper_size"] not in MARGIN_PAPER_SIZE_OPTIONS:
-        allowed = ", ".join(sorted(MARGIN_PAPER_SIZE_OPTIONS))
+    if margins_values["paper_size"] not in MARGIN_PAPER_SIZE_CHOICES:
+        allowed = ", ".join(MARGIN_PAPER_SIZE_CHOICES)
         raise ValueError(f"Profile key 'margins.paper_size' must be one of: {allowed}.")
     margins = Margins(
         unit=margins_values["unit"],

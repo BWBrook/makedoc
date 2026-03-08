@@ -63,15 +63,16 @@ DIAG_OUTPUT_ROOT ?=dist/diagnostics
 
 PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
 FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
-SAME_ACTIVE_AND_FIXTURE := $(and $(filter $(abspath $(CONFIG)),$(abspath $(FIXTURE_CONFIG))),$(filter $(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE))))
 
 PROFILE_CACHE_DIR := .cache
-ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.mk
-FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.mk
-ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.tex
-FIXTURE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/fixture_layout.tex
-ACTIVE_SOURCE_MD := $(PROFILE_CACHE_DIR)/active_sources.md
-FIXTURE_SOURCE_MD := $(PROFILE_CACHE_DIR)/fixture_sources.md
+ACTIVE_CACHE_KEY := $(shell printf '%s\n%s\n' '$(abspath $(CONFIG))' '$(PROFILE)' | cksum | cut -d' ' -f1)
+FIXTURE_CACHE_KEY := $(shell printf '%s\n%s\n' '$(abspath $(FIXTURE_CONFIG))' '$(FIXTURE_PROFILE)' | cksum | cut -d' ' -f1)
+ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.$(ACTIVE_CACHE_KEY).mk
+FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.$(FIXTURE_CACHE_KEY).mk
+ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.$(ACTIVE_CACHE_KEY).tex
+FIXTURE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/fixture_layout.$(FIXTURE_CACHE_KEY).tex
+ACTIVE_SOURCE_MD := $(PROFILE_CACHE_DIR)/active_sources.$(ACTIVE_CACHE_KEY).md
+FIXTURE_SOURCE_MD := $(PROFILE_CACHE_DIR)/fixture_sources.$(FIXTURE_CACHE_KEY).md
 
 define render_pdf
 	@tmp="$$(mktemp)"; \
@@ -92,25 +93,54 @@ define render_pdf
 	rm -f "$$tmp"
 endef
 
-$(shell mkdir -p "$(PROFILE_CACHE_DIR)" "$(PDF_ENGINE_OUTPUT_DIR)")
-$(shell rm -f "$(ACTIVE_VARS_FILE)" "$(FIXTURE_VARS_FILE)")
-$(shell set -e; tmp="$(ACTIVE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp" && mv "$$tmp" "$(ACTIVE_VARS_FILE)")
-$(shell set -e; tmp="$(FIXTURE_VARS_FILE).tmp.$$$$"; python3 "$(CONFIG_SCRIPT)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp" && mv "$$tmp" "$(FIXTURE_VARS_FILE)")
-$(shell set -e; tmp="$(ACTIVE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(ACTIVE_LAYOUT_TEX)")
-$(shell set -e; tmp="$(FIXTURE_LAYOUT_TEX).tmp.$$$$"; python3 "$(LAYOUT_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_LAYOUT_TEX)")
-$(shell set -e; tmp="$(ACTIVE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(ACTIVE_SOURCE_MD)")
-$(shell set -e; tmp="$(FIXTURE_SOURCE_MD).tmp.$$$$"; python3 "$(SOURCE_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp" && mv "$$tmp" "$(FIXTURE_SOURCE_MD)")
+$(PROFILE_CACHE_DIR) $(PDF_ENGINE_OUTPUT_DIR):
+	mkdir -p "$@"
 
-include $(ACTIVE_VARS_FILE)
-include $(FIXTURE_VARS_FILE)
+$(ACTIVE_VARS_FILE): $(CONFIG) $(CONFIG_SCRIPT) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+	@tmp="$@.tmp.$$$$"; \
+	python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
+$(FIXTURE_VARS_FILE): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+	@tmp="$@.tmp.$$$$"; \
+	python3 "$(CONFIG_SCRIPT)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
+
+-include $(ACTIVE_VARS_FILE)
+-include $(FIXTURE_VARS_FILE)
+
+ifneq ($(MAKE_RESTARTS),)
 ifeq ($(strip $(ACTIVE_MANUSCRIPT_SOURCES)),)
 $(error Failed to load active build profile from $(CONFIG))
 endif
 ifeq ($(strip $(FIXTURE_MANUSCRIPT_SOURCES)),)
 $(error Failed to load fixture profile '$(FIXTURE_PROFILE)' from $(FIXTURE_CONFIG))
 endif
+endif
 
+SAME_ACTIVE_AND_FIXTURE := $(and $(filter $(abspath $(CONFIG)),$(abspath $(FIXTURE_CONFIG))),$(filter $(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE))))
+
+$(ACTIVE_LAYOUT_TEX): $(CONFIG) $(CONFIG_SCRIPT) $(LAYOUT_RENDER) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+	@tmp="$@.tmp.$$$$"; \
+	python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
+
+$(FIXTURE_LAYOUT_TEX): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) $(LAYOUT_RENDER) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+	@tmp="$@.tmp.$$$$"; \
+	python3 "$(LAYOUT_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
+
+$(ACTIVE_SOURCE_MD): $(CONFIG) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(ACTIVE_MANUSCRIPT_SOURCES) $(if $(strip $(ACTIVE_AUTHOR_METADATA)),$(ACTIVE_AUTHOR_METADATA),) | $(PROFILE_CACHE_DIR)
+	@tmp="$@.tmp.$$$$"; \
+	python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
+
+$(FIXTURE_SOURCE_MD): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(FIXTURE_MANUSCRIPT_SOURCES) $(if $(strip $(FIXTURE_AUTHOR_METADATA)),$(FIXTURE_AUTHOR_METADATA),) | $(PROFILE_CACHE_DIR)
+	@tmp="$@.tmp.$$$$"; \
+	python3 "$(SOURCE_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
+
+ifneq ($(strip $(ACTIVE_OUTPUT_DIR)$(FIXTURE_OUTPUT_DIR)),)
 ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --include-in-header="$(ACTIVE_LAYOUT_TEX)"
 ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
 FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --include-in-header="$(FIXTURE_LAYOUT_TEX)"
@@ -119,7 +149,7 @@ ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/$(ACTIVE_OUTPUT_STEM)_build_manifest
 FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-figure-modes test-author-injection check-tools validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-figure-modes test-author-injection check-tools check-fixture-tools python-tests validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx manifest
 
@@ -146,7 +176,7 @@ fixture-docx: $(FIXTURE_DOCX_OUT)
 fixture-manifest: $(FIXTURE_MANIFEST_OUT)
 endif
 
-$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_LAYOUT_TEX) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
 	$(call render_pdf, $(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
 $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(ACTIVE_OUTPUT_DIR)
@@ -155,7 +185,7 @@ $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BI
 
 ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
-$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_LAYOUT_TEX) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
 		$(call render_pdf, $(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
 $(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(FIXTURE_OUTPUT_DIR)
@@ -177,6 +207,15 @@ check-tools:
 		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required tool: $$cmd"; exit 1; }; \
 	done
 	@echo "Tool check passed."
+
+check-fixture-tools:
+	@for cmd in pdftotext pdfinfo; do \
+		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required fixture tool: $$cmd"; exit 1; }; \
+	done
+	@echo "Fixture tool check passed."
+
+python-tests:
+	@python3 -m unittest discover -s tests -p 'test_*.py'
 
 validate-config:
 	@echo "Validating build profile config..."
@@ -274,7 +313,7 @@ fixture-refs-audit:
 	done; \
 	python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" "$${args[@]}"
 
-fixture-contract-check: $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
+fixture-contract-check: check-fixture-tools $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
 	@echo "Running fixture contract checks..."
 	@python3 "$(GOLDEN_CHECK)" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)" --contract "$(FIXTURE_CONTRACT_PATH)"
 
@@ -324,7 +363,7 @@ csl-source:
 	done; \
 	python3 "$(CSL_RESOLVER)" source --journal "$(JOURNAL)" --dest-dir "$(CSL_DEST_DIR)" "$${args[@]}"
 
-check: check-tools validate-config lint-manuscript refs-audit test-author-injection
+check: check-tools validate-config python-tests lint-manuscript refs-audit test-author-injection
 	@$(MAKE) --no-print-directory all
 	@echo "Build check passed."
 
@@ -352,6 +391,7 @@ wsl-smoke:
 	@$(MAKE) --no-print-directory check-fixture
 	@$(MAKE) --no-print-directory check-fixture-guards
 	@echo "WSL smoke checks passed."
+endif
 
 deps-estimate-minimal:
 	@bash "$(INSTALLER)" --mode minimal --estimate-only

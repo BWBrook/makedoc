@@ -8,10 +8,19 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from profile_schema import (
+    DEFAULT_CONFIG,
+    DEFAULT_MARGINS,
+    FIGURE_CAPTION_POSITION_CHOICES,
+    FIGURE_PLACEMENT_CHOICES,
+    LINE_NUMBERING_CHOICES,
+    LINE_SPACING_CHOICES,
+    MARGIN_PAPER_SIZE_CHOICES,
+    MARGIN_UNIT_CHOICES,
+    PAGE_NUMBERING_CHOICES,
+    PAGE_NUMBERING_DEFAULT,
+)
 import yaml
-
-
-DEFAULT_CONFIG = Path("settings/build.yaml")
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,27 +57,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-stem", default="manuscript", help="Output stem.")
     parser.add_argument(
         "--page-numbers",
-        default="lower_right",
+        choices=PAGE_NUMBERING_CHOICES,
+        default=PAGE_NUMBERING_DEFAULT,
         help="Page-numbering mode: lower_right (default) or none.",
     )
     parser.add_argument(
         "--line-spacing",
-        default="single",
+        choices=LINE_SPACING_CHOICES,
+        default=LINE_SPACING_CHOICES[0],
         help="Line-spacing mode: single, 1.1, 1.25, 1.5, or 2.",
     )
     parser.add_argument(
         "--line-numbering",
-        default="continuous",
+        choices=LINE_NUMBERING_CHOICES,
+        default=LINE_NUMBERING_CHOICES[0],
         help="Line-numbering mode: continuous, page, section, or none.",
     )
     parser.add_argument(
         "--figure-placement",
-        default="pages",
+        choices=FIGURE_PLACEMENT_CHOICES,
+        default=FIGURE_PLACEMENT_CHOICES[0],
         help="Figure placement mode: pages (default), captions_page, or inline.",
     )
     parser.add_argument(
         "--figure-caption-position",
-        default="top",
+        choices=FIGURE_CAPTION_POSITION_CHOICES,
+        default=FIGURE_CAPTION_POSITION_CHOICES[0],
         help="Figure caption position: top (default) or bottom.",
     )
     parser.add_argument(
@@ -78,35 +92,37 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--paper-size",
-        default="a4",
+        choices=MARGIN_PAPER_SIZE_CHOICES,
+        default=DEFAULT_MARGINS["paper_size"],
         help="Paper size for output (a4 or letter).",
     )
     parser.add_argument(
         "--margin-unit",
-        default="cm",
+        choices=MARGIN_UNIT_CHOICES,
+        default=DEFAULT_MARGINS["unit"],
         help="Margin unit (cm or in).",
     )
     parser.add_argument(
         "--margin-top",
-        default=1.5,
+        default=DEFAULT_MARGINS["top"],
         type=float,
         help="Top margin value.",
     )
     parser.add_argument(
         "--margin-right",
-        default=1.5,
+        default=DEFAULT_MARGINS["right"],
         type=float,
         help="Right margin value.",
     )
     parser.add_argument(
         "--margin-bottom",
-        default=1.5,
+        default=DEFAULT_MARGINS["bottom"],
         type=float,
         help="Bottom margin value.",
     )
     parser.add_argument(
         "--margin-left",
-        default=1.5,
+        default=DEFAULT_MARGINS["left"],
         type=float,
         help="Left margin value.",
     )

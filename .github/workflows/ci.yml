@@ -38,6 +38,10 @@ jobs:
         run: |
           make validate-config
 
+      - name: Run Python unit tests
+        run: |
+          make python-tests
+
       - name: Run manuscript and fixture guards
         run: |
           make lint-manuscript
@@ -75,6 +79,7 @@ jobs:
       - name: Build main manuscript outputs
         run: |
           make check-tools
+          make test-output-routing
           make all
 
       - name: Summarize main artifacts

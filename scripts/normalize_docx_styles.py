@@ -9,6 +9,8 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from profile_schema import LINE_NUMBERING_CHOICES, LINE_SPACING_CHOICES
+
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
@@ -52,13 +54,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--line-spacing",
-        choices=("single", "1.1", "1.25", "1.5", "2"),
+        choices=LINE_SPACING_CHOICES,
         default="single",
         help="Paragraph line spacing mode for DOCX output.",
     )
     parser.add_argument(
         "--line-numbering",
-        choices=("continuous", "page", "section", "none"),
+        choices=LINE_NUMBERING_CHOICES,
         default="none",
         help="Line numbering mode for DOCX output.",
     )

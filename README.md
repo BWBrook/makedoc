@@ -100,9 +100,12 @@ This runs the dedicated fixture profile and writes into `dist/fixture/` only (no
 
 Regression checks:
 ```bash
+make python-tests
 make test-output-routing
 ```
-Runs a unit-style routing test that validates fixture-only and default output locations.
+`make python-tests` runs focused stdlib unit tests for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases.
+
+`make test-output-routing` runs a unit-style routing test that validates fixture-only and default output locations.
 
 Figure placement regression:
 ```bash
@@ -318,6 +321,7 @@ Main profile:
 
 ```bash
 make validate-config
+make python-tests
 make check
 ```
 
@@ -338,6 +342,8 @@ make wsl-smoke
 `check-fixture` now includes a lightweight fixture contract check (`scripts/fixture_golden_check.py`) that verifies:
 - DOCX structure includes expected table and image counts
 - PDF remains parseable and contains expected marker headings/text
+
+Fixture contract checks now preflight `pdftotext` and `pdfinfo` explicitly, so missing Poppler tooling fails early with a clear message.
 
 Contract source:
 - defaults to `testbed/expected/golden_contract.yaml`

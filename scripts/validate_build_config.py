@@ -9,30 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from build_profile import load_config, resolve_profile
-
-
-ALLOWED_TOP_LEVEL_KEYS = {"default_profile", "profiles"}
-ALLOWED_PROFILE_KEYS = {
-    "description",
-    "manuscript_sources",
-    "lint_sources",
-    "author_metadata",
-    "bibliography",
-    "csl",
-    "journal",
-    "csl_search_dirs",
-    "output_dir",
-    "output_stem",
-    "golden_contract",
-    "edgecases",
-    "page_numbers",
-    "line_spacing",
-    "line_numbering",
-    "figures",
-    "margins",
-}
-ALLOWED_FIGURE_KEYS = {"placement", "caption_position", "placeholder_id"}
-ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
+from profile_schema import (
+    ALLOWED_EDGECASE_KEYS,
+    ALLOWED_FIGURE_KEYS,
+    ALLOWED_PROFILE_KEYS,
+    ALLOWED_TOP_LEVEL_KEYS,
+)
 
 
 def parse_args() -> argparse.Namespace:
