@@ -141,15 +141,15 @@ $(FIXTURE_SOURCE_MD): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(FIXT
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
 ifneq ($(strip $(ACTIVE_OUTPUT_DIR)$(FIXTURE_OUTPUT_DIR)),)
-ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --include-in-header="$(ACTIVE_LAYOUT_TEX)"
-ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL)
-FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --include-in-header="$(FIXTURE_LAYOUT_TEX)"
-FIXTURE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL)
+ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --resource-path="$(ACTIVE_RESOURCE_PATH)" --include-in-header="$(ACTIVE_LAYOUT_TEX)"
+ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --resource-path="$(ACTIVE_RESOURCE_PATH)"
+FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --resource-path="$(FIXTURE_RESOURCE_PATH)" --include-in-header="$(FIXTURE_LAYOUT_TEX)"
+FIXTURE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --resource-path="$(FIXTURE_RESOURCE_PATH)"
 ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/$(ACTIVE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-figure-modes test-author-injection check-tools check-fixture-tools python-tests validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-external-relative-paths test-figure-modes test-author-injection check-tools check-fixture-tools python-tests validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx manifest
 
@@ -237,6 +237,9 @@ fixture-diagnose:
 
 test-output-routing:
 	@bash scripts/test_output_routing.sh
+
+test-external-relative-paths:
+	@bash scripts/test_external_relative_paths.sh
 
 test-figure-modes:
 	@bash scripts/test_figure_modes.sh

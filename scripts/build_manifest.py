@@ -68,7 +68,7 @@ def main() -> int:
 
     try:
         config = load_config(config_path)
-        profile = resolve_profile(config, args.profile)
+        profile = resolve_profile(config, args.profile, config_path=config_path)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

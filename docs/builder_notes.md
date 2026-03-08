@@ -1,9 +1,12 @@
 # Builder Notes
 
 Last updated: 2026-03-08
-Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover test and Makefile hardening
+Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover hardening and stage-5 external path semantics
 
 ## Decision Log
+- 2026-03-08: Flip external relative-path semantics in one migration: config-entry paths are now config-relative and markdown image paths are source-file-relative.
+- 2026-03-08: Keep `output_dir` semantics unchanged while normalizing all path-like profile inputs to absolute internal paths.
+- 2026-03-08: Use Pandoc `--resource-path` derived from manuscript source directories so merged prepared markdown can retain source-relative image references.
 - 2026-03-08: Add a stdlib `unittest` safety net for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases rather than introducing a new test dependency.
 - 2026-03-08: Refactor lint/reference scanning around a shared markdown visibility helper so fenced code/raw blocks and inline literal citation examples do not trigger false positives.
 - 2026-03-08: Move generated profile/layout/source cache artefacts toward explicit Make targets keyed by config/profile selection, reducing parse-time side effects while preserving current entrypoints.
@@ -47,6 +50,12 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Extend figure handling with `placement: captions_page` for a dedicated Figure Captions page and title-bearing figure blocks.
 
 ## Work Log
+- 2026-03-08: Updated `scripts/build_profile.py` and downstream callers so config-relative profile entries resolve against the config file directory and surface as resolved absolute paths.
+- 2026-03-08: Updated `scripts/prepare_markdown_sources.py` to validate source-relative image resources early and fail with resolved paths for missing assets.
+- 2026-03-08: Added Pandoc `--resource-path` wiring in `Makefile` based on resolved manuscript source directories.
+- 2026-03-08: Added `scripts/test_external_relative_paths.sh` plus CI coverage for a synthetic external-manuscript repo using relative config entries and source-relative image paths.
+- 2026-03-08: Updated in-repo fixture config and figure markdown to follow the new config-relative/source-relative contract.
+- 2026-03-08: Updated AGENTS, README, handover, and external-manuscript primer docs to describe the new path semantics.
 - 2026-03-08: Added `tests/` coverage for `build_profile`, `normalize_docx_styles`, `fixture_golden_check`, and markdown scanning edge cases.
 - 2026-03-08: Added `make python-tests`, added explicit Poppler preflight for fixture contract checks, and updated CI to run Python unit tests plus `make test-output-routing`.
 - 2026-03-08: Added shared helper `scripts/markdown_scan.py` and updated lint/reference audit flows to ignore fenced code blocks, raw blocks, and inline code examples while preserving CLI behaviour.
@@ -108,6 +117,12 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Extended `make profile-scaffold` to include margin-related arguments for `paper_size` and per-side values.
 
 ## Command Evidence
+- `python3 -m unittest discover -s tests -p 'test_*.py'` -> PASS (18 tests including config-relative resolution, resource-path derivation, and source-relative image validation)
+- `make validate-config` -> PASS (default + fixture configs now validate through config-relative path resolution)
+- `make test-figure-modes` -> PASS (temp repo fixture exercises source-relative figure image paths)
+- `make test-external-relative-paths` -> PASS (synthetic external repo succeeds with relative config entries and source-relative image paths)
+- `make test-output-routing` -> PASS (output routing unchanged after config-relative/source-relative migration)
+- `make check && make check-fixture && make check-fixture-guards && make profiles && make profile-show` -> PASS (full sequential repo validation green with absolute resolved profile display)
 - `python3 -m unittest discover -s tests -p 'test_*.py'` -> PASS (13 tests covering output routing logic, DOCX XML normalization, fixture-contract failure paths, and markdown scanning behaviour)
 - `make python-tests` -> PASS (same 13 stdlib unit tests through the canonical Make target)
 - `make validate-config` -> PASS (`Build config validation passed for selected profile(s): default` and `fixture`)

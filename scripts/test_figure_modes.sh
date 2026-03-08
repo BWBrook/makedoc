@@ -131,13 +131,25 @@ assert_line_count_exact() {
 	fi
 }
 
+prepare_fixture_repo() {
+	local repo_dir=$1
+	mkdir -p "$repo_dir/settings" "$repo_dir/manuscript/text" "$repo_dir/manuscript/figures" "$repo_dir/references" "$repo_dir/csl"
+	cp "$REPO_ROOT/testbed/manuscript/figures/fig1_dummy.png" "$repo_dir/manuscript/figures/fig1_dummy.png"
+	cp "$REPO_ROOT/testbed/manuscript/figures/fig2_dummy.png" "$repo_dir/manuscript/figures/fig2_dummy.png"
+	cp "$REPO_ROOT/testbed/manuscript/figures/figS1_dummy.png" "$repo_dir/manuscript/figures/figS1_dummy.png"
+	cp "$REPO_ROOT/testbed/references/fixture_refs.yaml" "$repo_dir/references/fixture_refs.yaml"
+	cp "$REPO_ROOT/testbed/csl/fixture_style.csl" "$repo_dir/csl/fixture_style.csl"
+}
+
 run_pages_mode_check() {
 	local tmp_dir=$1
-	local cfg=$2
-
-	local main_file="$tmp_dir/pages-main.md"
-	local figure_file="$tmp_dir/pages-figures.md"
+	local repo_dir="$tmp_dir/pages-repo"
+	local cfg="$repo_dir/settings/build.yaml"
+	local main_file="$repo_dir/manuscript/text/pages-main.md"
+	local figure_file="$repo_dir/manuscript/text/pages-figures.md"
 	local prepared="$tmp_dir/pages-prepared.md"
+
+	prepare_fixture_repo "$repo_dir"
 
 	cat > "$main_file" <<'EOF'
 # Figure Mode Regression: pages
@@ -149,10 +161,10 @@ This manuscript section has no figure placeholder.
 Dummy reference list placeholder.
 EOF
 
-cat > "$figure_file" <<EOF
-![Fixture main figure used for CI layout and rendering checks.]($REPO_ROOT/testbed/manuscript/figures/fig1_dummy.png){#fig-fixture-main width=95%}
-![Fixture richness figure used for CI cross-reference and image embedding checks.]($REPO_ROOT/testbed/manuscript/figures/fig2_dummy.png){#fig-fixture-richness width=85%}
-![Fixture supplementary figure used for supplementary material rendering checks.]($REPO_ROOT/testbed/manuscript/figures/figS1_dummy.png){#fig-fixture-s1 width=85%}
+	cat > "$figure_file" <<EOF
+![Fixture main figure used for CI layout and rendering checks.](../figures/fig1_dummy.png){#fig-fixture-main width=95%}
+![Fixture richness figure used for CI cross-reference and image embedding checks.](../figures/fig2_dummy.png){#fig-fixture-richness width=85%}
+![Fixture supplementary figure used for supplementary material rendering checks.](../figures/figS1_dummy.png){#fig-fixture-s1 width=85%}
 EOF
 
 	cat > "$cfg" <<EOF
@@ -160,16 +172,16 @@ default_profile: pages
 profiles:
   pages:
     manuscript_sources:
-      - $main_file
-      - $figure_file
+      - ../manuscript/text/pages-main.md
+      - ../manuscript/text/pages-figures.md
     lint_sources:
-      - $main_file
-      - $figure_file
-    bibliography: $REPO_ROOT/testbed/references/fixture_refs.yaml
-    csl: $REPO_ROOT/testbed/csl/fixture_style.csl
+      - ../manuscript/text/pages-main.md
+      - ../manuscript/text/pages-figures.md
+    bibliography: ../references/fixture_refs.yaml
+    csl: ../csl/fixture_style.csl
     journal: Oikos
     csl_search_dirs:
-      - $REPO_ROOT/testbed/csl
+      - ../csl
     output_dir: dist/figures-check
     output_stem: fixture
     page_numbers: lower_right
@@ -197,11 +209,13 @@ EOF
 
 run_inline_bottom_check() {
 	local tmp_dir=$1
-	local cfg=$2
-
-	local main_file="$tmp_dir/inline-main.md"
-	local figure_file="$tmp_dir/inline-figures.md"
+	local repo_dir="$tmp_dir/inline-repo"
+	local cfg="$repo_dir/settings/build.yaml"
+	local main_file="$repo_dir/manuscript/text/inline-main.md"
+	local figure_file="$repo_dir/manuscript/text/inline-figures.md"
 	local prepared="$tmp_dir/inline-prepared.md"
+
+	prepare_fixture_repo "$repo_dir"
 
 	cat > "$main_file" <<'EOF'
 # Figure Mode Regression: inline
@@ -217,8 +231,8 @@ More text after placeholder.
 Dummy reference list placeholder.
 EOF
 
-cat > "$figure_file" <<EOF
-![Fixture main figure used for CI layout and rendering checks.]($REPO_ROOT/testbed/manuscript/figures/fig1_dummy.png){#fig-fixture-main width=95%}
+	cat > "$figure_file" <<EOF
+![Fixture main figure used for CI layout and rendering checks.](../figures/fig1_dummy.png){#fig-fixture-main width=95%}
 EOF
 
 	cat > "$cfg" <<EOF
@@ -226,16 +240,16 @@ default_profile: inline
 profiles:
   inline:
     manuscript_sources:
-      - $main_file
-      - $figure_file
+      - ../manuscript/text/inline-main.md
+      - ../manuscript/text/inline-figures.md
     lint_sources:
-      - $main_file
-      - $figure_file
-    bibliography: $REPO_ROOT/testbed/references/fixture_refs.yaml
-    csl: $REPO_ROOT/testbed/csl/fixture_style.csl
+      - ../manuscript/text/inline-main.md
+      - ../manuscript/text/inline-figures.md
+    bibliography: ../references/fixture_refs.yaml
+    csl: ../csl/fixture_style.csl
     journal: Oikos
     csl_search_dirs:
-      - $REPO_ROOT/testbed/csl
+      - ../csl
     output_dir: dist/figures-check
     output_stem: fixture
     page_numbers: lower_right
@@ -273,11 +287,13 @@ EOF
 
 run_captions_page_check() {
 	local tmp_dir=$1
-	local cfg=$2
-
-	local main_file="$tmp_dir/captions-main.md"
-	local figure_file="$tmp_dir/captions-figures.md"
+	local repo_dir="$tmp_dir/captions-repo"
+	local cfg="$repo_dir/settings/build.yaml"
+	local main_file="$repo_dir/manuscript/text/captions-main.md"
+	local figure_file="$repo_dir/manuscript/text/captions-figures.md"
 	local prepared="$tmp_dir/captions-prepared.md"
+
+	prepare_fixture_repo "$repo_dir"
 
 	cat > "$main_file" <<'EOF'
 # Figure Mode Regression: captions page
@@ -289,10 +305,10 @@ This manuscript section has a references placeholder and no inline figure slot.
 Dummy reference list placeholder.
 EOF
 
-cat > "$figure_file" <<EOF
-![Fixture main figure used for CI layout and rendering checks.]($REPO_ROOT/testbed/manuscript/figures/fig1_dummy.png){#fig-fixture-main width=95%}
-![Fixture richness figure used for CI cross-reference and image embedding checks.]($REPO_ROOT/testbed/manuscript/figures/fig2_dummy.png){#fig-fixture-richness width=85%}
-![Fixture supplementary figure used for supplementary material rendering checks.]($REPO_ROOT/testbed/manuscript/figures/figS1_dummy.png){#fig-fixture-s1 width=85%}
+	cat > "$figure_file" <<EOF
+![Fixture main figure used for CI layout and rendering checks.](../figures/fig1_dummy.png){#fig-fixture-main width=95%}
+![Fixture richness figure used for CI cross-reference and image embedding checks.](../figures/fig2_dummy.png){#fig-fixture-richness width=85%}
+![Fixture supplementary figure used for supplementary material rendering checks.](../figures/figS1_dummy.png){#fig-fixture-s1 width=85%}
 EOF
 
 	cat > "$cfg" <<EOF
@@ -300,16 +316,16 @@ default_profile: captions
 profiles:
   captions:
     manuscript_sources:
-      - $main_file
-      - $figure_file
+      - ../manuscript/text/captions-main.md
+      - ../manuscript/text/captions-figures.md
     lint_sources:
-      - $main_file
-      - $figure_file
-    bibliography: $REPO_ROOT/testbed/references/fixture_refs.yaml
-    csl: $REPO_ROOT/testbed/csl/fixture_style.csl
+      - ../manuscript/text/captions-main.md
+      - ../manuscript/text/captions-figures.md
+    bibliography: ../references/fixture_refs.yaml
+    csl: ../csl/fixture_style.csl
     journal: Oikos
     csl_search_dirs:
-      - $REPO_ROOT/testbed/csl
+      - ../csl
     output_dir: dist/figures-check
     output_stem: fixture
     page_numbers: lower_right
@@ -336,9 +352,9 @@ EOF
 	assert_ordered_lines "$prepared" "## Figure Captions" "**Fig. 2.** Fixture richness figure used for CI cross-reference and image embedding checks." "## Supplementary Information"
 	assert_line_count_at_least "$prepared" "\\clearpage" 5
 	assert_line_count_at_least "$prepared" "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>" 5
-	assert_contains "$prepared" "![]($REPO_ROOT/testbed/manuscript/figures/fig1_dummy.png){#fig-fixture-main width=95%}"
-	assert_contains "$prepared" "![]($REPO_ROOT/testbed/manuscript/figures/fig2_dummy.png){#fig-fixture-richness width=85%}"
-	assert_contains "$prepared" "![]($REPO_ROOT/testbed/manuscript/figures/figS1_dummy.png){#fig-fixture-s1 width=85%}"
+	assert_contains "$prepared" "![](../figures/fig1_dummy.png){#fig-fixture-main width=95%}"
+	assert_contains "$prepared" "![](../figures/fig2_dummy.png){#fig-fixture-richness width=85%}"
+	assert_contains "$prepared" "![](../figures/figS1_dummy.png){#fig-fixture-s1 width=85%}"
 	assert_not_contains "$prepared" "![Fixture main figure used for CI layout and rendering checks.]"
 	assert_not_contains "$prepared" "![Fixture richness figure used for CI cross-reference and image embedding checks.]"
 	assert_not_contains "$prepared" "![Fixture supplementary figure used for supplementary material rendering checks.]"
@@ -350,14 +366,12 @@ EOF
 main() {
 	local tmp_dir
 	tmp_dir="$(mktemp -d)"
-	local cfg
-	cfg="$tmp_dir/test-config.yaml"
 	TMP_DIR="$tmp_dir"
 	trap cleanup_tmpdir EXIT
 
-	run_pages_mode_check "$tmp_dir" "$cfg"
-	run_inline_bottom_check "$tmp_dir" "$cfg"
-	run_captions_page_check "$tmp_dir" "$cfg"
+	run_pages_mode_check "$tmp_dir"
+	run_inline_bottom_check "$tmp_dir"
+	run_captions_page_check "$tmp_dir"
 	echo "PASS: figure mode regression checks passed."
 }
 

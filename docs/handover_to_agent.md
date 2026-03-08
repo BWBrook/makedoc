@@ -98,20 +98,13 @@ For real manuscripts, the system is intended to build other repos by reference.
 - `makedoc` consumes it via `CONFIG=/abs/path/to/other-repo/settings/build.yaml`
 - do not introduce copy/sync workflows
 
-### 2. Absolute paths for external builds
+### 2. External path semantics
 
-For external manuscript repos, prefer absolute paths for:
+For external manuscript repos:
 
-- `manuscript_sources`
-- `lint_sources`
-- `author_metadata`
-- `bibliography`
-- `csl`
-- figure image `src` paths in markdown
-
-Reason:
-
-- current path resolution is from the working directory where `make` runs, not from the external config file directory or manuscript file directory
+- relative profile paths resolve from the external config file directory
+- relative figure image `src` paths in markdown resolve from the Markdown file they appear in
+- absolute paths still work and remain the clearest option when multiple tools touch the same repo
 
 ### 3. Do not parallelize top-level Make runs
 
@@ -123,7 +116,7 @@ make check & make check-fixture
 
 at the same time.
 
-The Makefile writes shared `.cache` intermediates at parse time, so concurrent top-level invocations can interfere with one another. Run the main checks sequentially.
+The build still uses shared scratch/output locations such as `.cache/latex` and `dist/`, so concurrent top-level invocations can interfere with one another. Run the main checks sequentially.
 
 ## Most Relevant Recent Work
 
@@ -134,11 +127,11 @@ The Makefile writes shared `.cache` intermediates at parse time, so concurrent t
 It now explicitly covers:
 
 - external-path-only policy
-- absolute-path guidance
+- config-relative profile paths
 - non-required naming conventions (`main.md` and `refs.yaml` are conventions only)
 - draft vs submission lint policy
 - canonical bibliography file guidance
-- absolute image path requirement in external figure markdown
+- source-relative image path guidance in external figure markdown
 
 ### Real-world road test
 
@@ -150,7 +143,7 @@ That exercise was valuable because it exposed real-world edge cases rather than 
 
 We fixed issues in the manuscript repo, not in `makedoc`, including:
 
-- broken relative figure image paths
+- figure image paths that did not match the manuscript's own source-relative layout
 - malformed markdown table cell with raw `|`
 - title heading cleanup
 - DOCX-math warning caused by `\Bigl` / `\bigl`
@@ -174,21 +167,7 @@ This also confirmed that the current primer guidance is mostly sound.
 
 These are not blockers, but they are the most natural next improvements.
 
-### 1. External figure path ergonomics
-
-Current state:
-
-- external manuscript figure markdown should use absolute image paths for reliable builds
-
-Potential improvement:
-
-- add `pandoc --resource-path` support or equivalent path-resolution logic so external manuscript repos can keep portable relative figure paths
-
-Why it matters:
-
-- this is the main remaining rough edge in the external-path workflow
-
-### 2. Better concurrency hygiene in the Makefile
+### 1. Better concurrency hygiene in the Makefile
 
 Current state:
 
@@ -198,7 +177,7 @@ Potential improvement:
 
 - refactor cache/intermediate generation so `make check` and `make check-fixture` are safe under concurrent invocation
 
-### 3. More direct Zotero export onboarding
+### 2. More direct Zotero export onboarding
 
 Current state:
 
@@ -209,7 +188,7 @@ Potential improvement:
 
 - add a helper script to convert Zotero `CSL JSON` into repo-compatible YAML bibliography format
 
-### 4. Word-template tuning
+### 3. Word-template tuning
 
 Still explicitly out of scope in the main plan:
 
@@ -220,7 +199,7 @@ This may become the next major frontier once the current build system is conside
 ## Known Sharp Edges
 
 - Panel-level figure references (for example `1A`, `1B`) still link to whole-figure anchors by design.
-- External figure markdown with relative image paths is fragile unless the working directory happens to line up.
+- Relative profile paths are now config-relative and relative markdown image paths are source-relative; prefer absolute paths only when you want extra explicitness across tools.
 - The default fixture remains the regression contract; do not casually edit it without rerunning fixture checks.
 
 ## Canonical Commands

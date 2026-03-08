@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -139,6 +140,7 @@ class Profile:
     csl: str
     journal: str
     csl_search_dirs: list[str]
+    resource_paths: list[str]
     output_dir: str
     output_stem: str
     pdf_out: str
@@ -164,6 +166,7 @@ class Profile:
             "csl": self.csl,
             "journal": self.journal,
             "csl_search_dirs": self.csl_search_dirs,
+            "resource_paths": self.resource_paths,
             "output_dir": self.output_dir,
             "output_stem": self.output_stem,
             "pdf_out": self.pdf_out,
@@ -299,6 +302,23 @@ def dedupe_keep_order(items: list[str]) -> list[str]:
     return out
 
 
+def resolve_relative_path(raw_path: str, *, config_dir: Path) -> str:
+    candidate = Path(raw_path).expanduser()
+    if candidate.is_absolute():
+        return str(candidate.resolve())
+    return str((config_dir / candidate).resolve())
+
+
+def resolve_relative_path_list(raw_paths: list[str], *, config_dir: Path) -> list[str]:
+    return [resolve_relative_path(item, config_dir=config_dir) for item in raw_paths]
+
+
+def resolve_optional_relative_path(raw_path: str, *, config_dir: Path) -> str:
+    if not raw_path.strip():
+        return ""
+    return resolve_relative_path(raw_path, config_dir=config_dir)
+
+
 def normalize_page_numbers(raw_value: str) -> str:
     value = raw_value.strip().lower().replace("-", "_")
     if value in {"right", "lr", "lower_right"}:
@@ -398,7 +418,17 @@ def expect_positive_number(mapping: dict[str, Any], key: str, default: float, *,
     return number
 
 
-def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile:
+def resolve_profile(
+    config: dict[str, Any],
+    profile_name: str | None,
+    *,
+    config_path: Path | None = None,
+) -> Profile:
+    config_dir = (
+        config_path.expanduser().resolve().parent
+        if config_path is not None
+        else Path.cwd().resolve()
+    )
     profiles = config.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
         raise ValueError("Config must define a non-empty 'profiles' mapping.")
@@ -413,30 +443,45 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         available = ", ".join(sorted(profiles.keys()))
         raise ValueError(f"Unknown profile '{selected_name}'. Available profiles: {available}")
 
-    manuscript_sources = expect_list_of_str(raw_profile, "manuscript_sources")
-    lint_sources = expect_list_of_str(
+    manuscript_sources = resolve_relative_path_list(
+        expect_list_of_str(raw_profile, "manuscript_sources"),
+        config_dir=config_dir,
+    )
+    lint_sources = resolve_relative_path_list(
+        expect_list_of_str(
         raw_profile,
         "lint_sources",
         required=False,
         default=manuscript_sources,
+        ),
+        config_dir=config_dir,
     )
-    bibliography = expect_str(raw_profile, "bibliography")
-    csl = expect_str(raw_profile, "csl")
-    author_metadata = expect_str(raw_profile, "author_metadata", required=False)
+    bibliography = resolve_relative_path(expect_str(raw_profile, "bibliography"), config_dir=config_dir)
+    csl = resolve_relative_path(expect_str(raw_profile, "csl"), config_dir=config_dir)
+    author_metadata = resolve_optional_relative_path(
+        expect_str(raw_profile, "author_metadata", required=False),
+        config_dir=config_dir,
+    )
     journal = expect_str(raw_profile, "journal", required=False)
     requested_output_dir = expect_str(raw_profile, "output_dir")
     output_dir = _infer_output_dir(requested_output_dir, manuscript_sources)
     output_stem = expect_str(raw_profile, "output_stem")
     description = expect_str(raw_profile, "description", required=False)
-    golden_contract = expect_str(raw_profile, "golden_contract", required=False)
+    golden_contract = resolve_optional_relative_path(
+        expect_str(raw_profile, "golden_contract", required=False),
+        config_dir=config_dir,
+    )
 
     csl_search_dirs = expect_list_of_str(raw_profile, "csl_search_dirs", required=False, default=[])
+    csl_search_dirs = resolve_relative_path_list(csl_search_dirs, config_dir=config_dir)
     if not csl_search_dirs:
         derived_dirs: list[str] = []
         csl_parent = str(Path(csl).parent)
         if csl_parent not in ("", "."):
             derived_dirs.append(csl_parent)
-        derived_dirs.extend(["csl", "testbed/csl"])
+        config_csl_dir = (config_dir / "csl").resolve()
+        if config_csl_dir.exists():
+            derived_dirs.append(str(config_csl_dir))
         csl_search_dirs = dedupe_keep_order(derived_dirs)
 
     edgecases = raw_profile.get("edgecases") or {}
@@ -570,6 +615,20 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         left=margins_values["left"],
     )
 
+    edge_unknown_path = resolve_optional_relative_path(
+        str(edge_unknown).strip(),
+        config_dir=config_dir,
+    )
+    edge_manual_path = resolve_optional_relative_path(
+        str(edge_manual).strip(),
+        config_dir=config_dir,
+    )
+    edge_table_path = resolve_optional_relative_path(
+        str(edge_table).strip(),
+        config_dir=config_dir,
+    )
+
+    resource_paths = dedupe_keep_order([str(Path(source).parent) for source in manuscript_sources])
     pdf_out = str(Path(output_dir) / f"{output_stem}.pdf")
     docx_out = str(Path(output_dir) / f"{output_stem}.docx")
 
@@ -583,14 +642,15 @@ def resolve_profile(config: dict[str, Any], profile_name: str | None) -> Profile
         csl=csl,
         journal=journal,
         csl_search_dirs=csl_search_dirs,
+        resource_paths=resource_paths,
         output_dir=output_dir,
         output_stem=output_stem,
         pdf_out=pdf_out,
         docx_out=docx_out,
         golden_contract=golden_contract,
-        edgecase_unknown_cite=edge_unknown.strip(),
-        edgecase_manual_cite=edge_manual.strip(),
-        edgecase_malformed_table=edge_table.strip(),
+        edgecase_unknown_cite=edge_unknown_path,
+        edgecase_manual_cite=edge_manual_path,
+        edgecase_malformed_table=edge_table_path,
         page_numbers=page_numbers,
         line_spacing=line_spacing,
         line_numbering=line_numbering,
@@ -627,6 +687,8 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_CSL": profile.csl,
         f"{base}_JOURNAL": profile.journal,
         f"{base}_CSL_SEARCH_DIRS": profile.csl_search_dirs,
+        f"{base}_RESOURCE_PATHS": profile.resource_paths,
+        f"{base}_RESOURCE_PATH": os.pathsep.join(profile.resource_paths),
         f"{base}_OUTPUT_DIR": profile.output_dir,
         f"{base}_OUTPUT_STEM": profile.output_stem,
         f"{base}_PDF_OUT": profile.pdf_out,
@@ -665,8 +727,9 @@ def lookup_key(data: Any, dotted_key: str) -> Any:
 def main() -> int:
     args = parse_args()
     try:
-        config = load_config(Path(args.config))
-        profile = resolve_profile(config, args.profile)
+        config_path = Path(args.config)
+        config = load_config(config_path)
+        profile = resolve_profile(config, args.profile, config_path=config_path)
     except (ValueError, yaml.YAMLError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

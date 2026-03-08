@@ -59,7 +59,7 @@ Notes:
 - `authors.yaml` is optional but recommended when you want structured author block generation.
 - `refs.yaml` is a recommended bibliography filename, but it is not required.
 - `journal-style.csl` is your journal citation style.
-- In external-path mode, use absolute paths in the `makedoc` profile for manuscript, bibliography, CSL, and author metadata entries.
+- In external-path mode, profile entries may be absolute or relative to `settings/build.yaml`. Absolute paths remain fine when you want maximum explicitness.
 
 ## 3. Authoritative file contracts
 
@@ -126,11 +126,11 @@ Avoid manual citations like `(Smith 2020)`. `makedoc` lint flags these as errors
 Use one image per markdown figure line, with attribute block and explicit ID:
 
 ```markdown
-![Caption for main figure.](/abs/path/to/your-repo/manuscript/figures/fig1.png){#fig-main-1 width=90%}
+![Caption for main figure.](../figures/fig1.png){#fig-main-1 width=90%}
 
-![Caption for second figure.](/abs/path/to/your-repo/manuscript/figures/fig2.png){#fig-main-2 width=85%}
+![Caption for second figure.](../figures/fig2.png){#fig-main-2 width=85%}
 
-![Caption for supplementary figure.](/abs/path/to/your-repo/manuscript/figures/figS1.png){#fig-main-s1 width=85%}
+![Caption for supplementary figure.](../figures/figS1.png){#fig-main-s1 width=85%}
 ```
 
 Rules:
@@ -139,7 +139,7 @@ Rules:
 2. Include `#fig-...` in attributes for stable linking.
 3. Supplementary detection is ID-based: IDs ending in `-s<number>` (for example `#fig-main-s1`) are treated as supplementary.
 4. Alt text (the text inside `![ ... ]`) is used as caption/title text in figure workflows.
-5. In external-path mode, use absolute image paths in figure markdown. Relative image paths are resolved from the working directory where `make` runs (typically the `makedoc` repo), not from the manuscript file location.
+5. Relative image paths are resolved from the Markdown file they appear in. Absolute image paths still work.
 
 ### 3.4 `manuscript/authors.yaml`
 
@@ -215,7 +215,7 @@ Filename policy:
 
 ## 4. Build profile template (`settings/build.yaml`)
 
-Use this as your starting point. In external-path mode, use absolute paths for referenced manuscript/references/CSL files.
+Use this as your starting point. In external-path mode, profile entries may be absolute or relative to `settings/build.yaml`.
 
 ```yaml
 default_profile: my_ms
@@ -224,20 +224,19 @@ profiles:
   my_ms:
     description: Active manuscript profile
     manuscript_sources:
-      - /abs/path/to/your-repo/manuscript/text/main.md
-      - /abs/path/to/your-repo/manuscript/text/figures.md
+      - ../manuscript/text/main.md
+      - ../manuscript/text/figures.md
     # Optional. If omitted, defaults to manuscript_sources.
     lint_sources:
-      - /abs/path/to/your-repo/manuscript/text/main.md
-      - /abs/path/to/your-repo/manuscript/text/figures.md
+      - ../manuscript/text/main.md
+      - ../manuscript/text/figures.md
 
-    author_metadata: /abs/path/to/your-repo/manuscript/authors.yaml
-    bibliography: /abs/path/to/your-repo/references/refs.yaml
-    csl: /abs/path/to/your-repo/csl/journal-style.csl
+    author_metadata: ../manuscript/authors.yaml
+    bibliography: ../references/refs.yaml
+    csl: ../csl/journal-style.csl
     journal: Journal Name
     csl_search_dirs:
-      - /abs/path/to/your-repo/csl
-      - csl
+      - ../csl
 
     output_dir: dist
     output_stem: manuscript
@@ -290,7 +289,7 @@ profiles:
 3. Introduction is page-broken by default.
 4. Heading spacing is normalized in prepared markdown for `##` headings.
 5. If `output_dir` is `dist`, makedoc auto-routes output to a subfolder (`dist/<profile-root>/`) inferred from manuscript paths/repo/fallback.
-6. Relative paths in profile entries are resolved from the process working directory (typically the `makedoc` repo root when running `make`), not from the config file's directory.
+6. Relative paths in profile entries are resolved from the config file directory, and relative image paths in markdown are resolved from the source Markdown file they appear in.
 
 ## 7. Lint and audit expectations (must pass)
 
@@ -325,7 +324,7 @@ Use this sequence when onboarding a repository.
 4. Create one canonical bibliography YAML file in `references/` with valid citekeys.
 5. Place CSL file in `csl/`.
 6. Create `manuscript/authors.yaml` (if author injection is desired).
-7. Create `settings/build.yaml` profile using absolute paths when called from external makedoc repo.
+7. Create `settings/build.yaml` profile using either absolute paths or config-relative paths.
 8. Ensure markdown cites use `@citekey` syntax only.
 9. Run validations/build from makedoc repo:
 
@@ -381,15 +380,15 @@ Fix:
 
 Fix:
 
-1. Use absolute paths for `manuscript_sources`, `lint_sources`, `author_metadata`, `bibliography`, and `csl`.
-2. If you temporarily keep relative paths, ensure they are relative to the working directory where `make` is run (typically `makedoc` repo root), not the external config file location.
+1. Make relative profile entries relative to the external `settings/build.yaml` file.
+2. Re-run `make validate-config` to confirm the resolved files exist.
 
 ### Problem: figures compile but images are missing in PDF/DOCX
 
 Fix:
 
-1. Use absolute image `src` paths in figure markdown lines.
-2. Verify each path exists on disk and is readable.
+1. Use source-relative image `src` paths in figure markdown lines (for example `../figures/fig1.png` from `manuscript/text/figures.md`) or use absolute paths.
+2. Verify each resolved path exists on disk and is readable.
 3. Rebuild and check for Pandoc warnings like `Could not fetch resource ...`.
 
 ### Problem: multiple bibliography files exist (`refs.yaml` and another copy)
@@ -404,7 +403,11 @@ Fix:
 
 ### Q: Are relative paths in external config resolved relative to that config file?
 
-No. In current `makedoc`, paths are interpreted from the process working directory (normally where `make` is run), not from the config file directory. In external-path mode, treat absolute paths as the standard.
+Yes. Relative profile paths are interpreted from the external config file directory.
+
+### Q: Are relative image paths in markdown resolved from the source file?
+
+Yes. Relative image paths are interpreted from the Markdown file they appear in.
 
 ### Q: Is `main.md` required?
 

@@ -36,6 +36,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from markdown_scan import scan_markdown_lines
 import yaml
 
 from build_profile import load_config, resolve_profile
@@ -46,6 +47,7 @@ FIGURE_LINE_RE = re.compile(
     r"""^(?P<prefix>\s*)!\[(?P<alt>.*?)\]\((?P<src>[^)\n]+)\)\{(?P<attrs>[^\}]*)\}\s*$"""
 )
 FIGURE_ID_RE = re.compile(r"#(?P<id>[\w.-]+)")
+IMAGE_REFERENCE_RE = re.compile(r"!\[[^\]]*\]\((?P<src>[^)\n]+)\)")
 SUPPLEMENTARY_ID_RE = re.compile(r"-s\d+$", re.IGNORECASE)
 DOCX_PAGEBREAK_OPENXML = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
 TITLE_HEADING_RE = re.compile(r"^\s*#\s+\S+")
@@ -439,6 +441,31 @@ def extract_figures(lines: list[str]) -> tuple[list[str], list[FigureBlock]]:
     return out_lines, figures
 
 
+def is_external_resource(src: str) -> bool:
+    if src.startswith("//"):
+        return True
+    return bool(re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", src))
+
+
+def validate_relative_image_resources(source_path: Path) -> None:
+    for line in scan_markdown_lines(source_path):
+        for match in IMAGE_REFERENCE_RE.finditer(line.searchable):
+            src = (match.group("src") or "").strip()
+            if not src or is_external_resource(src):
+                continue
+
+            candidate = Path(src).expanduser()
+            if candidate.is_absolute():
+                continue
+
+            resolved = (source_path.parent / candidate).resolve()
+            if not resolved.exists():
+                raise ValueError(
+                    f"Relative image resource not found in {source_path}:{line.line}: "
+                    f"{src} -> {resolved}"
+                )
+
+
 def _caption_line(label: str) -> str:
     return f"**{label}.**"
 
@@ -608,15 +635,20 @@ def apply_figure_placement(
 
 
 def load_markdown_sources(sources: list[str]) -> str:
-    chunks = [Path(raw).read_text(encoding="utf-8").rstrip() for raw in sources]
+    chunks: list[str] = []
+    for raw in sources:
+        path = Path(raw)
+        validate_relative_image_resources(path)
+        chunks.append(path.read_text(encoding="utf-8").rstrip())
     # Keep a readable separation between merged files.
     return "\n\n".join(chunks) + "\n"
 
 
 def main() -> int:
     args = parse_args()
-    config = load_config(Path(args.config))
-    profile = resolve_profile(config, args.profile.strip() if args.profile else None)
+    config_path = Path(args.config)
+    config = load_config(config_path)
+    profile = resolve_profile(config, args.profile.strip() if args.profile else None, config_path=config_path)
 
     raw = load_markdown_sources(profile.manuscript_sources)
     lines = raw.splitlines()

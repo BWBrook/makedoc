@@ -217,7 +217,7 @@ def main() -> int:
     try:
         config = load_config(config_path)
         profile_name = args.profile.strip() if args.profile else None
-        profile = resolve_profile(config, profile_name)
+        profile = resolve_profile(config, profile_name, config_path=config_path)
     except Exception as exc:  # pragma: no cover - script-level error propagation is intentional
         print(f"Error: {exc}")
         return 1

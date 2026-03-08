@@ -105,6 +105,7 @@ def validate_schema(config: dict[str, Any], errors: list[str]) -> dict[str, Any]
 
 def validate_selected_profiles(
     config: dict[str, Any],
+    config_path: Path,
     profile_names: list[str],
     check_paths: bool,
     errors: list[str],
@@ -119,7 +120,7 @@ def validate_selected_profiles(
             continue
         seen.add(profile_name)
         try:
-            profile = resolve_profile(config, profile_name)
+            profile = resolve_profile(config, profile_name, config_path=config_path)
         except ValueError as exc:
             append_error(errors, f"Profile '{profile_name}' failed resolution: {exc}")
             continue
@@ -174,6 +175,7 @@ def main() -> int:
     if profiles:
         validate_selected_profiles(
             config=config,
+            config_path=config_path,
             profile_names=[item for item in args.profile if item.strip()],
             check_paths=not args.no_check_paths,
             errors=errors,

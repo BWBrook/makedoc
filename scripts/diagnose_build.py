@@ -91,8 +91,9 @@ def gather_logs(bundle_dir: Path) -> list[str]:
 def main() -> int:
     args = parse_args()
     try:
-        config = load_config(Path(args.config))
-        profile = resolve_profile(config, args.profile)
+        config_path = Path(args.config)
+        config = load_config(config_path)
+        profile = resolve_profile(config, args.profile, config_path=config_path)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

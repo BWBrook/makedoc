@@ -80,6 +80,7 @@ jobs:
         run: |
           make check-tools
           make test-output-routing
+          make test-external-relative-paths
           make all
 
       - name: Summarize main artifacts

@@ -41,22 +41,17 @@ For real manuscripts, this project standardizes on external-path mode.
 - `makedoc` consumes it via `CONFIG=/abs/path/to/other-repo/settings/build.yaml`.
 - Do not introduce copy/sync workflows that mirror manuscript files into `makedoc`.
 
-### 2. Prefer absolute paths for external manuscripts
+### 2. External relative paths are now safe
 
-For external configs, prefer absolute paths for:
+For external configs:
 
-- `manuscript_sources`
-- `lint_sources`
-- `author_metadata`
-- `bibliography`
-- `csl`
-- figure image `src` paths inside manuscript Markdown
-
-Relative paths in external configs and figure blocks resolve from the process working directory, not from the external config file location.
+- relative profile paths resolve from the external config file directory
+- relative figure image `src` paths inside manuscript Markdown resolve from the Markdown file they appear in
+- absolute paths remain preferred when teams want maximum explicitness across tools and scripts
 
 ### 3. Do not parallelize top-level Make runs
 
-Do not run `make check` and `make check-fixture` in parallel. The current Makefile writes shared `.cache` profile/intermediate files at parse time, so concurrent top-level invocations can interfere with one another.
+Do not run `make check` and `make check-fixture` in parallel. The current build still uses shared scratch/output locations such as `.cache/latex` and `dist/`, so concurrent top-level invocations can interfere with one another.
 
 Run them sequentially:
 

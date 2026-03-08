@@ -102,10 +102,13 @@ Regression checks:
 ```bash
 make python-tests
 make test-output-routing
+make test-external-relative-paths
 ```
 `make python-tests` runs focused stdlib unit tests for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases.
 
 `make test-output-routing` runs a unit-style routing test that validates fixture-only and default output locations.
+
+`make test-external-relative-paths` builds a synthetic external manuscript repo using config-relative profile entries and source-relative figure image paths.
 
 Figure placement regression:
 ```bash
@@ -265,18 +268,17 @@ default_profile: my_ms
 profiles:
   my_ms:
     manuscript_sources:
-      - /path/to/other-repo/manuscript/text/main.md
-      - /path/to/other-repo/manuscript/text/figures.md
+      - ../manuscript/text/main.md
+      - ../manuscript/text/figures.md
     lint_sources:
-      - /path/to/other-repo/manuscript/text/main.md
-      - /path/to/other-repo/manuscript/text/figures.md
-    author_metadata: /path/to/other-repo/manuscript/authors.yaml
-    bibliography: /path/to/other-repo/references/refs.yaml
-    csl: /path/to/other-repo/csl/journal-style.csl
+      - ../manuscript/text/main.md
+      - ../manuscript/text/figures.md
+    author_metadata: ../manuscript/authors.yaml
+    bibliography: ../references/refs.yaml
+    csl: ../csl/journal-style.csl
     journal: Journal Name
     csl_search_dirs:
-      - /path/to/other-repo/csl
-      - csl
+      - ../csl
     output_dir: dist
     output_stem: manuscript
     page_numbers: lower_right
@@ -294,6 +296,8 @@ profiles:
       bottom: 1.5
       left: 1.5
 ```
+
+Relative profile entries are resolved from the config file directory, and relative image paths inside manuscript Markdown are resolved from the Markdown file they appear in. Absolute paths still work and remain the clearest option when multiple tools touch the same manuscript repo.
 
 ## CSL Search and Sourcing by Journal
 
