@@ -152,6 +152,7 @@ class Profile:
     page_numbers: str
     line_spacing: str
     line_numbering: str
+    references_new_page: bool
     margins: Margins
     figures: Figures
 
@@ -180,6 +181,7 @@ class Profile:
             "page_numbers": self.page_numbers,
             "line_spacing": self.line_spacing,
             "line_numbering": self.line_numbering,
+            "references_new_page": self.references_new_page,
             "margins": self.margins.to_dict(),
             "figures": self.figures.to_dict(),
         }
@@ -418,6 +420,23 @@ def expect_positive_number(mapping: dict[str, Any], key: str, default: float, *,
     return number
 
 
+def expect_bool(mapping: dict[str, Any], key: str, *, required: bool = True, default: bool = False) -> bool:
+    value = mapping.get(key, default)
+    if value is None:
+        value = default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1", "on"}:
+            return True
+        if normalized in {"false", "no", "0", "off"}:
+            return False
+    if required:
+        raise ValueError(f"Profile key '{key}' must be a boolean.")
+    return bool(default)
+
+
 def resolve_profile(
     config: dict[str, Any],
     profile_name: str | None,
@@ -528,6 +547,13 @@ def resolve_profile(
     line_numbering = normalize_line_numbering(line_numbering_raw)
     if line_numbering not in LINE_NUMBERING_CHOICES:
         raise ValueError(f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}")
+
+    references_new_page = expect_bool(
+        raw_profile,
+        "references_new_page",
+        required=False,
+        default=True,
+    )
 
     figures_raw = raw_profile.get("figures", {})
     if figures_raw is None:
@@ -654,6 +680,7 @@ def resolve_profile(
         page_numbers=page_numbers,
         line_spacing=line_spacing,
         line_numbering=line_numbering,
+        references_new_page=references_new_page,
         margins=margins,
         figures=figures,
     )

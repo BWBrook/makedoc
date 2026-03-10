@@ -12,7 +12,6 @@ to immediately after the first `#` title heading.
 Default section layout policy:
 - when author metadata is injected, a page break is inserted after the author block
 - the first `Introduction` heading is forced onto a new page
-- the `References` heading is forced onto a new page
 - level-2 headings are separated by at least two blank lines in prepared markdown
 
 Figure policy is driven by profile settings:
@@ -365,14 +364,14 @@ def apply_major_section_spacing(lines: list[str]) -> list[str]:
     return out_lines
 
 
-def reference_placement(lines: list[str]) -> list[str]:
+def reference_placement(lines: list[str], references_new_page: bool = True) -> list[str]:
     out_lines: list[str] = []
     refs_injected = False
 
     for index, line in enumerate(lines):
         if not refs_injected and REFERENCE_SECTION_RE.match(line.strip()):
             refs_injected = True
-            if not _has_trailing_page_break(out_lines):
+            if references_new_page and not _has_trailing_page_break(out_lines):
                 _append_page_break(out_lines)
             out_lines.append(line)
             if not has_refs_anchor(lines, index):
@@ -655,7 +654,7 @@ def main() -> int:
     lines = apply_author_metadata(lines, profile.author_metadata)
     lines_without_figures, figures = extract_figures(lines)
     intro_paginated = apply_introduction_page_break(lines_without_figures)
-    refs_lines = reference_placement(intro_paginated)
+    refs_lines = reference_placement(intro_paginated, profile.references_new_page)
     spaced_lines = apply_major_section_spacing(refs_lines)
     prepared_lines = apply_figure_placement(
         lines=spaced_lines,

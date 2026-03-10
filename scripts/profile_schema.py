@@ -48,6 +48,7 @@ ALLOWED_PROFILE_KEYS = {
     "page_numbers",
     "line_spacing",
     "line_numbering",
+    "references_new_page",
     "figures",
     "margins",
 }
