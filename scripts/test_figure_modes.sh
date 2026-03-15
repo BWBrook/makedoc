@@ -285,6 +285,68 @@ EOF
 	fi
 }
 
+run_inline_empty_alt_suppresses_auto_caption_check() {
+	local tmp_dir=$1
+	local repo_dir="$tmp_dir/inline-empty-alt-repo"
+	local cfg="$repo_dir/settings/build.yaml"
+	local main_file="$repo_dir/manuscript/text/inline-main.md"
+	local figure_file="$repo_dir/manuscript/text/inline-figures.md"
+	local prepared="$tmp_dir/inline-empty-alt-prepared.md"
+
+	prepare_fixture_repo "$repo_dir"
+
+	cat > "$main_file" <<'EOF'
+# Figure Mode Regression: inline empty alt
+
+Text before inserted figure.
+
+<div id="figures"></div>
+
+Custom caption text after figure.
+
+## References
+
+Dummy reference list placeholder.
+EOF
+
+	cat > "$figure_file" <<EOF
+![](../figures/fig1_dummy.png){#fig-fixture-main width=95%}
+EOF
+
+	cat > "$cfg" <<EOF
+default_profile: inline
+profiles:
+  inline:
+    manuscript_sources:
+      - ../manuscript/text/inline-main.md
+      - ../manuscript/text/inline-figures.md
+    lint_sources:
+      - ../manuscript/text/inline-main.md
+      - ../manuscript/text/inline-figures.md
+    bibliography: ../references/fixture_refs.yaml
+    csl: ../csl/fixture_style.csl
+    journal: Oikos
+    csl_search_dirs:
+      - ../csl
+    output_dir: dist/figures-check
+    output_stem: fixture
+    page_numbers: lower_right
+    line_spacing: single
+    line_numbering: continuous
+    figures:
+      placement: inline
+      caption_position: top
+      placeholder_id: figures
+EOF
+
+	python3 scripts/prepare_markdown_sources.py --config "$cfg" --profile inline --output "$prepared"
+	assert_file_exists "$prepared"
+
+	assert_not_contains "$prepared" "<div id=\"figures\"></div>"
+	assert_contains "$prepared" "![](../figures/fig1_dummy.png){#fig-fixture-main width=95%}"
+	assert_not_contains "$prepared" "**Fig. 1.**"
+}
+
 run_captions_page_check() {
 	local tmp_dir=$1
 	local repo_dir="$tmp_dir/captions-repo"
@@ -371,6 +433,7 @@ main() {
 
 	run_pages_mode_check "$tmp_dir"
 	run_inline_bottom_check "$tmp_dir"
+	run_inline_empty_alt_suppresses_auto_caption_check "$tmp_dir"
 	run_captions_page_check "$tmp_dir"
 	echo "PASS: figure mode regression checks passed."
 }

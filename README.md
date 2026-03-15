@@ -247,9 +247,9 @@ Each profile supports:
   - Level-2 headings (`## ...`) are normalized to at least two blank lines of separation in prepared markdown.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
   - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
-  - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.
+- `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.
   - `placement=captions_page`: creates a dedicated `## Figure Captions` page with one plain caption line per figure (no bullets), then appends each figure on successive pages with label-only titles (`Fig. X.`) and image-only blocks (no repeated caption under the image). Supplementary figures are grouped after a `## Supplementary Information` heading.
-  - captions in `pages`/`inline` modes are generated as `**Fig. X.**` / `**Fig. S1.**`; underlying image elements continue to carry their source alt text.
+- captions in `pages` mode are generated as `**Fig. X.**` / `**Fig. S1.**`; in `inline` mode, the auto label is omitted when the figure alt text is empty so authors can supply a manual caption in prose if preferred.
   - page breaks are emitted in both LaTeX and OpenXML raw blocks so PDF and DOCX respect dedicated figure-page separation.
 - DOCX post-processing:
   - `scripts/normalize_docx_styles.py` runs after DOCX generation to:

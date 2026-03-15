@@ -519,7 +519,11 @@ def _build_figure_block_with_caption_position(
     label: str,
     figure: FigureBlock,
     caption_position: str,
+    *,
+    include_auto_caption: bool = True,
 ) -> str:
+    if not include_auto_caption:
+        return figure.raw
     caption = _caption_line(label)
     if caption_position == "bottom":
         return f"{figure.raw}\n\n{caption}"
@@ -573,7 +577,12 @@ def build_figure_blocks(
 
     if placement == "inline":
         for label, figure in ordered:
-            block = _build_figure_block_with_caption_position(label, figure, caption_position)
+            block = _build_figure_block_with_caption_position(
+                label,
+                figure,
+                caption_position,
+                include_auto_caption=bool((figure.title or "").strip()),
+            )
             blocks.append(block.strip())
         return "\n\n".join(blocks) + ("\n" if blocks else "")
 
