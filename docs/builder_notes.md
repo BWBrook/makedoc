@@ -8,7 +8,7 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-03-17: Prefer `mactex-no-gui` over `basictex` for macOS bootstrap because this repo's default xelatex workflow expects LaTeX packages beyond a minimal TeX install.
 - 2026-03-17: Install `PyYAML` into the macOS Python user site during bootstrap so the profile loader works without requiring a separate virtualenv before first use.
 - 2026-03-08: Flip external relative-path semantics in one migration: config-entry paths are now config-relative and markdown image paths are source-file-relative.
-- 2026-03-08: Keep `output_dir` semantics unchanged while normalizing all path-like profile inputs to absolute internal paths.
+- 2026-03-17: Resolve non-`dist` relative `output_dir` values against the config file directory so external manuscript repos can keep portable local build destinations.
 - 2026-03-08: Use Pandoc `--resource-path` derived from manuscript source directories so merged prepared markdown can retain source-relative image references.
 - 2026-03-08: Add a stdlib `unittest` safety net for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases rather than introducing a new test dependency.
 - 2026-03-08: Refactor lint/reference scanning around a shared markdown visibility helper so fenced code/raw blocks and inline literal citation examples do not trigger false positives.
@@ -56,6 +56,7 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-03-17: Added `scripts/install_deps.sh`, switched `Makefile` dependency targets to use it, and added macOS PATH handling for `/Library/TeX/texbin`.
 - 2026-03-17: Updated `README.md` bootstrap docs so `make deps-*` covers both Ubuntu/WSL and macOS.
 - 2026-03-17: Fixed macOS bootstrap to install `PyYAML` for `python3` and bypass profile-loading during `make deps-*` runs.
+- 2026-03-17: Updated `scripts/build_profile.py` so non-`dist` relative `output_dir` values resolve from the config directory, matching external manuscript expectations on macOS and Linux.
 - 2026-03-08: Updated `scripts/build_profile.py` and downstream callers so config-relative profile entries resolve against the config file directory and surface as resolved absolute paths.
 - 2026-03-08: Updated `scripts/prepare_markdown_sources.py` to validate source-relative image resources early and fail with resolved paths for missing assets.
 - 2026-03-08: Added Pandoc `--resource-path` wiring in `Makefile` based on resolved manuscript source directories.

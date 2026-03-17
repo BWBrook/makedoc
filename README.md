@@ -226,6 +226,7 @@ Each profile supports:
 - `csl_search_dirs`: directories scanned by CSL discovery tools
 - `output_dir`: output folder
 - `dist` values are auto-routed to `dist/<profile-root>`.
+- any other relative `output_dir` value resolves relative to the config file directory.
 - `output_stem`: output basename (without extension)
 - `golden_contract`: optional fixture/contract expectations file used by structure checks
 - `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)

@@ -96,7 +96,7 @@ class ResolveProfileOutputDirTests(unittest.TestCase):
 
             self.assertEqual(profile.output_dir, "dist/paper-engine")
 
-    def test_explicit_non_dist_output_dir_is_preserved(self) -> None:
+    def test_explicit_dist_subdir_output_dir_is_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source_path = root / "manuscript" / "text" / "main.md"
@@ -119,6 +119,36 @@ class ResolveProfileOutputDirTests(unittest.TestCase):
             profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
 
             self.assertEqual(profile.output_dir, "dist/custom-output")
+            self.assertEqual(profile.pdf_out, "dist/custom-output/manuscript.pdf")
+            self.assertEqual(profile.docx_out, "dist/custom-output/manuscript.docx")
+
+    def test_explicit_non_dist_output_dir_resolves_relative_to_config_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_path = root / "manuscript" / "text" / "main.md"
+            bibliography_path = root / "references.yaml"
+            csl_path = root / "journal.csl"
+            config_path = root / "settings" / "build.yaml"
+
+            source_path.parent.mkdir(parents=True)
+            source_path.write_text("# Demo\n", encoding="utf-8")
+            bibliography_path.write_text("references: []\n", encoding="utf-8")
+            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
+            config_path.parent.mkdir(parents=True)
+            self.write_config(
+                config_path=config_path,
+                source_path=source_path,
+                bibliography_path=bibliography_path,
+                csl_path=csl_path,
+                output_dir="../../build",
+            )
+
+            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
+
+            expected_output = str((config_path.parent / "../../build").resolve())
+            self.assertEqual(profile.output_dir, expected_output)
+            self.assertEqual(profile.pdf_out, str(Path(expected_output) / "manuscript.pdf"))
+            self.assertEqual(profile.docx_out, str(Path(expected_output) / "manuscript.docx"))
 
 
 class ResolveProfileRelativePathTests(unittest.TestCase):

@@ -112,21 +112,29 @@ def _next_fallback_dir(prefix: str) -> str:
     return f"{prefix}-{next_n}"
 
 
-def _infer_output_dir(output_dir: str, manuscript_sources: list[str]) -> str:
-    base_output = Path(output_dir).as_posix()
-    if base_output != "dist":
+def _infer_output_dir(output_dir: str, manuscript_sources: list[str], *, config_dir: Path) -> str:
+    candidate = Path(output_dir).expanduser()
+    base_output = candidate.as_posix()
+    if base_output == "dist":
+        repo_name: str | None = None
+        for source in manuscript_sources:
+            resolved = Path(source).expanduser().resolve()
+            repo_root = _find_repo_root(resolved)
+            if repo_root:
+                repo_name = repo_root.name
+                break
+
+        inferred = _derive_output_subdir(manuscript_sources, repo_name=repo_name)
+        return str(Path("dist") / inferred)
+
+    if candidate.parts and candidate.parts[0] == "dist":
         return output_dir
 
-    repo_name: str | None = None
-    for source in manuscript_sources:
-        resolved = Path(source).expanduser().resolve()
-        repo_root = _find_repo_root(resolved)
-        if repo_root:
-            repo_name = repo_root.name
-            break
-
-    inferred = _derive_output_subdir(manuscript_sources, repo_name=repo_name)
-    return str(Path("dist") / inferred)
+    if base_output != "dist":
+        if candidate.is_absolute():
+            return str(candidate.resolve())
+        return str((config_dir / candidate).resolve())
+    return output_dir
 
 
 @dataclass(frozen=True)
@@ -483,7 +491,7 @@ def resolve_profile(
     )
     journal = expect_str(raw_profile, "journal", required=False)
     requested_output_dir = expect_str(raw_profile, "output_dir")
-    output_dir = _infer_output_dir(requested_output_dir, manuscript_sources)
+    output_dir = _infer_output_dir(requested_output_dir, manuscript_sources, config_dir=config_dir)
     output_stem = expect_str(raw_profile, "output_stem")
     description = expect_str(raw_profile, "description", required=False)
     golden_contract = resolve_optional_relative_path(

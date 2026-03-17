@@ -31,7 +31,7 @@ assert_no_root_artifacts() {
 assert_dist_only_has_dir() {
 	local expected_dir=$1
 	local top_dirs
-	top_dirs="$(find dist -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)"
+	top_dirs="$(find dist -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
 	if [ -n "$top_dirs" ] && [ "$top_dirs" != "$expected_dir" ]; then
 		echo "ASSERTION FAILED: expected only dist/$expected_dir directory, found: $top_dirs" >&2
 		exit 1
