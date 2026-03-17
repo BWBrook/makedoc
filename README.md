@@ -4,7 +4,9 @@ Config-driven manuscript build tooling for generating journal-submission outputs
 
 This repository now uses a synthetic regression fixture (`testbed/`) as the default build input, so the pipeline is always runnable in isolation.
 
-## Ubuntu/WSL Bootstrap
+## Bootstrap
+
+### Ubuntu/WSL
 
 Use the installer helper for first-time setup on Ubuntu 24.04 (including WSL Ubuntu):
 
@@ -35,8 +37,32 @@ Disk-size note:
 Direct script usage is also available:
 
 ```bash
-scripts/install_ubuntu_deps.sh --mode minimal --estimate-only
-scripts/install_ubuntu_deps.sh --mode full --dry-run
+scripts/install_deps.sh --mode minimal --estimate-only
+scripts/install_deps.sh --mode full --dry-run
+```
+
+### macOS
+
+On macOS, the same `make deps-*` entrypoints work through Homebrew:
+
+```bash
+make deps-estimate-minimal
+make deps-install-minimal
+make check
+```
+
+Notes:
+- the macOS minimal tier intentionally uses `mactex-no-gui` instead of `basictex` so the default `xelatex` workflow has the LaTeX packages this repo expects
+- `poppler` is installed for fixture contract checks (`pdftotext`, `pdfinfo`)
+- `PyYAML` is installed into the active macOS Python user site so the repo's YAML-backed profile tooling works with `python3`
+- after MacTeX installs, new shells may need `eval "$(/usr/libexec/path_helper)"`, but the repo `Makefile` also prepends `/Library/TeX/texbin` when present
+- "full" mode adds heavier optional desktop tooling such as LibreOffice and `hunspell`
+
+Direct script usage is also available:
+
+```bash
+scripts/install_deps.sh --mode minimal --estimate-only
+scripts/install_deps.sh --mode full --dry-run
 ```
 
 ## Clone in WSL

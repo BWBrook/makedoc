@@ -1,5 +1,11 @@
 SHELL := /bin/bash
 
+ifeq ($(shell uname -s),Darwin)
+ifneq ($(wildcard /Library/TeX/texbin),)
+export PATH := /Library/TeX/texbin:$(PATH)
+endif
+endif
+
 PANDOC ?= pandoc
 PDF_ENGINE ?= xelatex
 PDF_ENGINE_OUTPUT_DIR ?= .cache/latex
@@ -19,7 +25,7 @@ CSL_RESOLVER ?= scripts/csl_resolver.py
 GOLDEN_CHECK ?= scripts/fixture_golden_check.py
 MANIFEST_SCRIPT ?= scripts/build_manifest.py
 DIAGNOSE_SCRIPT ?= scripts/diagnose_build.py
-INSTALLER ?= scripts/install_ubuntu_deps.sh
+INSTALLER ?= scripts/install_deps.sh
 LAYOUT_RENDER ?= scripts/render_pdf_layout.py
 SOURCE_RENDER ?= scripts/prepare_markdown_sources.py
 DOCX_STYLE_NORMALIZER ?= scripts/normalize_docx_styles.py
@@ -73,6 +79,10 @@ ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.$(ACTIVE_CACHE_KEY).tex
 FIXTURE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/fixture_layout.$(FIXTURE_CACHE_KEY).tex
 ACTIVE_SOURCE_MD := $(PROFILE_CACHE_DIR)/active_sources.$(ACTIVE_CACHE_KEY).md
 FIXTURE_SOURCE_MD := $(PROFILE_CACHE_DIR)/fixture_sources.$(FIXTURE_CACHE_KEY).md
+BOOTSTRAP_GOALS := deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+
+$(shell test -s "$(ACTIVE_VARS_FILE)" || rm -f "$(ACTIVE_VARS_FILE)")
+$(shell test -s "$(FIXTURE_VARS_FILE)" || rm -f "$(FIXTURE_VARS_FILE)")
 
 define render_pdf
 	@tmp="$$(mktemp)"; \
@@ -106,15 +116,32 @@ $(FIXTURE_VARS_FILE): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) scripts/profile_schema.
 	python3 "$(CONFIG_SCRIPT)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
+check-tools:
+	@for cmd in "$(PANDOC)" "$(PDF_ENGINE)"; do \
+		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required tool: $$cmd"; exit 1; }; \
+	done
+	@echo "Tool check passed."
+
+check-fixture-tools:
+	@for cmd in pdftotext pdfinfo; do \
+		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required fixture tool: $$cmd"; exit 1; }; \
+	done
+	@echo "Fixture tool check passed."
+
+python-tests:
+	@python3 -m unittest discover -s tests -p 'test_*.py'
+
 -include $(ACTIVE_VARS_FILE)
 -include $(FIXTURE_VARS_FILE)
 
+ifeq ($(strip $(filter $(BOOTSTRAP_GOALS),$(MAKECMDGOALS))),)
 ifneq ($(MAKE_RESTARTS),)
 ifeq ($(strip $(ACTIVE_MANUSCRIPT_SOURCES)),)
 $(error Failed to load active build profile from $(CONFIG))
 endif
 ifeq ($(strip $(FIXTURE_MANUSCRIPT_SOURCES)),)
 $(error Failed to load fixture profile '$(FIXTURE_PROFILE)' from $(FIXTURE_CONFIG))
+endif
 endif
 endif
 
@@ -176,7 +203,7 @@ fixture-docx: $(FIXTURE_DOCX_OUT)
 fixture-manifest: $(FIXTURE_MANIFEST_OUT)
 endif
 
-$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_LAYOUT_TEX) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR)
+$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_LAYOUT_TEX) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR) $(PDF_ENGINE_OUTPUT_DIR)
 	$(call render_pdf, $(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
 $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(ACTIVE_OUTPUT_DIR)
@@ -185,7 +212,7 @@ $(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BI
 
 ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
-$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_LAYOUT_TEX) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR)
+$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_LAYOUT_TEX) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR) $(PDF_ENGINE_OUTPUT_DIR)
 		$(call render_pdf, $(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
 
 $(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(FIXTURE_OUTPUT_DIR)
@@ -201,21 +228,6 @@ else
 $(FIXTURE_MANIFEST_OUT): $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT) $(MANIFEST_SCRIPT) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),)
 	@python3 "$(MANIFEST_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
 endif
-
-check-tools:
-	@for cmd in "$(PANDOC)" "$(PDF_ENGINE)"; do \
-		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required tool: $$cmd"; exit 1; }; \
-	done
-	@echo "Tool check passed."
-
-check-fixture-tools:
-	@for cmd in pdftotext pdfinfo; do \
-		command -v "$$cmd" >/dev/null 2>&1 || { echo "Missing required fixture tool: $$cmd"; exit 1; }; \
-	done
-	@echo "Fixture tool check passed."
-
-python-tests:
-	@python3 -m unittest discover -s tests -p 'test_*.py'
 
 validate-config:
 	@echo "Validating build profile config..."
