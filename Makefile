@@ -9,7 +9,7 @@ endif
 PANDOC ?= pandoc
 PDF_ENGINE ?= xelatex
 PDF_ENGINE_OUTPUT_DIR ?= .cache/latex
-PANDOC_FROM ?= markdown+tex_math_dollars+tex_math_single_backslash
+PANDOC_FROM ?= markdown+yaml_metadata_block+tex_math_dollars+tex_math_single_backslash
 
 CONFIG ?= settings/build.yaml
 PROFILE ?=
