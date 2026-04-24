@@ -15,6 +15,9 @@ from markdown_scan import MarkdownLine, scan_markdown_lines
 
 PLACEHOLDER_RE = re.compile(r"\[REF\]")
 MANUAL_CITE_RE = re.compile(r"\(([A-Z][^)]*(?:19|20)\d{2}[a-z]?[^)]*)\)")
+BRACKETED_PANDOC_CITE_RE = re.compile(r"\[[^\]]*@[-A-Za-z0-9_:.]+[^\]]*\]")
+NARRATIVE_PANDOC_CITE_RE = re.compile(r"@[-A-Za-z0-9_:.]+")
+YEAR_RE = re.compile(r"(?:19|20)\d{2}[a-z]?")
 TABLE_DELIM_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
 
@@ -112,6 +115,17 @@ def check_table_block(
     return errors, idx
 
 
+def has_manual_citation(text: str) -> bool:
+    """Detect parenthetical author-year cites without flagging Pandoc citekeys."""
+    for match in MANUAL_CITE_RE.finditer(text):
+        candidate = match.group(1)
+        candidate = BRACKETED_PANDOC_CITE_RE.sub("", candidate)
+        candidate = NARRATIVE_PANDOC_CITE_RE.sub("", candidate)
+        if YEAR_RE.search(candidate):
+            return True
+    return False
+
+
 def lint_source(source: Path) -> list[LintError]:
     errors: list[LintError] = []
     if not source.exists():
@@ -125,7 +139,7 @@ def lint_source(source: Path) -> list[LintError]:
             errors.append(
                 LintError(source=source, line=line.line, message="Unresolved placeholder [REF] found.")
             )
-        if MANUAL_CITE_RE.search(line.searchable):
+        if has_manual_citation(line.searchable):
             errors.append(
                 LintError(
                     source=source,

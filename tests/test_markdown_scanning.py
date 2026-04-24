@@ -78,6 +78,35 @@ class MarkdownScanningTests(unittest.TestCase):
 
         self.assertEqual(errors, [])
 
+    def test_lint_allows_parenthesized_pandoc_citations_with_acronyms(self) -> None:
+        source = self.write_source(
+            """
+            # Demo
+
+            Fixed-bin distributions (FD [@brown2015FilterDarklyPopulation; @surovell2007NoteUseTemporal])
+            and kernel density estimates (KDE [@bronkramsey2017MethodsSummarizingRadiocarbon])
+            are alternatives.
+            """
+        )
+
+        errors = lint_source(source)
+
+        self.assertEqual(errors, [])
+
+    def test_lint_still_flags_mixed_manual_author_year_citations(self) -> None:
+        source = self.write_source(
+            """
+            # Demo
+
+            This still needs conversion (Smith 2020; @doe2021ConvertedAlready).
+            """
+        )
+
+        errors = lint_source(source)
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Possible manual author-year citation", errors[0].message)
+
 
 if __name__ == "__main__":
     unittest.main()

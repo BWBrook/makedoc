@@ -1,9 +1,13 @@
 # Builder Notes
 
-Last updated: 2026-03-08
+Last updated: 2026-04-24
 Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover hardening and stage-5 external path semantics
 
 ## Decision Log
+- 2026-04-24: Keep manual author-year citation lint strict, but strip valid
+  Pandoc citation tokens before deciding whether a parenthetical contains a
+  manual citation. This allows prose such as acronym definitions with inline
+  Pandoc citations while still flagging mixed manual/Pandoc citations.
 - 2026-03-17: Use a single cross-platform dependency helper entrypoint (`scripts/install_deps.sh`) and keep `make deps-*` stable across Ubuntu/WSL and macOS.
 - 2026-03-17: Prefer `mactex-no-gui` over `basictex` for macOS bootstrap because this repo's default xelatex workflow expects LaTeX packages beyond a minimal TeX install.
 - 2026-03-17: Install `PyYAML` into the macOS Python user site during bootstrap so the profile loader works without requiring a separate virtualenv before first use.
@@ -53,6 +57,10 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Extend figure handling with `placement: captions_page` for a dedicated Figure Captions page and title-bearing figure blocks.
 
 ## Work Log
+- 2026-04-24: Hardened `scripts/lint_manuscript.py` so parenthesized
+  acronym-plus-Pandoc-citation text, such as `FD [@key]`, no longer triggers a
+  false manual-citation failure; added regression tests for the accepted and
+  still-failing mixed citation cases.
 - 2026-03-17: Added `scripts/install_deps.sh`, switched `Makefile` dependency targets to use it, and added macOS PATH handling for `/Library/TeX/texbin`.
 - 2026-03-17: Updated `README.md` bootstrap docs so `make deps-*` covers both Ubuntu/WSL and macOS.
 - 2026-03-17: Fixed macOS bootstrap to install `PyYAML` for `python3` and bypass profile-loading during `make deps-*` runs.
@@ -124,6 +132,10 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Extended `make profile-scaffold` to include margin-related arguments for `paper_size` and per-side values.
 
 ## Command Evidence
+- `PATH="/Users/bwbrook/work/makedoc/.venv/bin:$PATH" make python-tests` -> PASS
+  (23 tests, including the manual-citation lint false-positive regression).
+- `PATH="/Users/bwbrook/work/makedoc/.venv/bin:$PATH" make check CONFIG=/Users/bwbrook/papers/rc-dates/settings/build.yaml` -> PASS
+  (external `rc-dates` profile validates, lints, audits references, builds DOCX/PDF, and writes manifest).
 - `python3 -m unittest discover -s tests -p 'test_*.py'` -> PASS (18 tests including config-relative resolution, resource-path derivation, and source-relative image validation)
 - `make validate-config` -> PASS (default + fixture configs now validate through config-relative path resolution)
 - `make test-figure-modes` -> PASS (temp repo fixture exercises source-relative figure image paths)
