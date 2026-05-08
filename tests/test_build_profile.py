@@ -71,6 +71,30 @@ class ResolveProfileOutputDirTests(unittest.TestCase):
             self.assertEqual(profile.pdf_out, "dist/demo-paper/manuscript.pdf")
             self.assertEqual(profile.docx_out, "dist/demo-paper/manuscript.docx")
 
+    def test_inferred_dist_subdir_is_safe_for_make_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project_dir = root / "demo paper (probe)"
+            source_path = project_dir / "manuscript" / "text" / "main.md"
+            bibliography_path = project_dir / "references.yaml"
+            csl_path = project_dir / "journal.csl"
+            config_path = root / "build.yaml"
+
+            source_path.parent.mkdir(parents=True)
+            source_path.write_text("# Demo\n", encoding="utf-8")
+            bibliography_path.write_text("references: []\n", encoding="utf-8")
+            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
+            self.write_config(
+                config_path=config_path,
+                source_path=source_path,
+                bibliography_path=bibliography_path,
+                csl_path=csl_path,
+            )
+
+            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
+
+            self.assertEqual(profile.output_dir, "dist/demo-paper-probe")
+
     def test_output_dir_falls_back_to_repo_name_when_no_manuscript_dir_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

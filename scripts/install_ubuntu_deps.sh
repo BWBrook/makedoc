@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_NAME="$(basename "$0")"
-
 MODE="minimal"
 DRY_RUN=0
 ESTIMATE_ONLY=0

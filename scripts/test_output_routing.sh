@@ -136,15 +136,120 @@ run_default_profile_all() {
 	assert_file_exists dist/testbed/manuscript.pdf
 	assert_file_exists dist/testbed/manuscript.docx
 	assert_file_exists dist/testbed/manuscript_build_manifest.json
+	python3 - <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path("dist/testbed/manuscript_build_manifest.json").read_text(encoding="utf-8"))
+input_paths = {Path(record["path"]).resolve() for record in manifest["inputs"]}
+expected = {
+    Path("settings/build.yaml").resolve(),
+    Path("testbed/manuscript/authors.yaml").resolve(),
+}
+missing = expected - input_paths
+if missing:
+    print("ASSERTION FAILED: manifest missing provenance inputs:", file=sys.stderr)
+    for path in sorted(missing):
+        print(f"  - {path}", file=sys.stderr)
+    raise SystemExit(1)
+PY
 	if [ -f dist/fixture/fixture_manuscript.pdf ] || [ -f dist/fixture/fixture_manuscript.docx ] || [ -f dist/fixture/golden_check.txt ]; then
 		echo "ASSERTION FAILED: default build unexpectedly created fixture artifacts" >&2
 		exit 1
 	fi
 }
 
+run_config_change_rebuilds_docx() {
+	local tmp_dir
+	local cfg
+	local src
+	local csl
+	local bib
+	local docx_path
+	local manifest_path
+	local before_mtime
+	local after_mtime
+
+	tmp_dir="$(mktemp -d)"
+	cfg="$tmp_dir/build.yaml"
+	src="$tmp_dir/main.md"
+	csl="$tmp_dir/fixture_style.csl"
+	bib="$tmp_dir/fixture_refs.yaml"
+	docx_path="dist/rebuild-probe/manuscript.docx"
+	manifest_path="dist/rebuild-probe/manuscript_build_manifest.json"
+
+	cat > "$src" <<'EOF'
+# Config Rebuild Probe
+
+Citation [@alpha2020SyntheticWorkflow].
+EOF
+
+	cp "testbed/csl/fixture_style.csl" "$csl"
+	cp "testbed/references/fixture_refs.yaml" "$bib"
+
+	cat > "$cfg" <<EOF
+default_profile: rebuild
+
+profiles:
+  rebuild:
+    manuscript_sources:
+      - $src
+    bibliography: $bib
+    csl: $csl
+    output_dir: dist/rebuild-probe
+    output_stem: manuscript
+    page_numbers: lower_right
+    line_spacing: single
+    line_numbering: none
+EOF
+
+	make clean >/dev/null
+	make CONFIG="$cfg" PROFILE=rebuild all >/dev/null
+	assert_file_exists "$docx_path"
+	before_mtime="$(python3 - "$docx_path" <<'PY'
+import sys
+from pathlib import Path
+print(Path(sys.argv[1]).stat().st_mtime_ns)
+PY
+)"
+
+	sleep 1
+	python3 - "$cfg" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+path.write_text(path.read_text(encoding="utf-8").replace("line_spacing: single", "line_spacing: 2"), encoding="utf-8")
+PY
+	make CONFIG="$cfg" PROFILE=rebuild all >/dev/null
+	after_mtime="$(python3 - "$docx_path" <<'PY'
+import sys
+from pathlib import Path
+print(Path(sys.argv[1]).stat().st_mtime_ns)
+PY
+)"
+
+	if [ "$before_mtime" = "$after_mtime" ]; then
+		echo "ASSERTION FAILED: DOCX was not rebuilt after profile line_spacing changed" >&2
+		exit 1
+	fi
+	python3 - "$manifest_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if manifest["profile"]["line_spacing"] != "2":
+    print("ASSERTION FAILED: manifest did not capture updated line_spacing", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+	rm -rf "$tmp_dir" dist/rebuild-probe
+}
+
 run_testbed_target
 run_fixture_profile_all
 run_default_profile_all
 run_fallback_output_dir
+run_config_change_rebuilds_docx
 
 echo "PASS: output routing regression checks passed."

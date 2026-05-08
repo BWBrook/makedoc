@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,6 +70,11 @@ def _find_repo_root(path: Path) -> Path | None:
     return None
 
 
+def _safe_output_subdir(raw_name: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name.strip()).strip("-._")
+    return safe or "manuscript"
+
+
 def _derive_output_subdir(manuscript_sources: list[str], repo_name: str | None = None) -> str:
     source_paths = [Path(source).expanduser() for source in manuscript_sources]
 
@@ -79,7 +86,7 @@ def _derive_output_subdir(manuscript_sources: list[str], repo_name: str | None =
             if ancestor.name.lower() == "manuscript":
                 container = ancestor.parent
                 if container.name:
-                    manuscript_candidates.append(container.name)
+                    manuscript_candidates.append(_safe_output_subdir(container.name))
                 break
 
     if manuscript_candidates:
@@ -92,7 +99,7 @@ def _derive_output_subdir(manuscript_sources: list[str], repo_name: str | None =
             return ranked[0][0]
 
     if repo_name:
-        return repo_name
+        return _safe_output_subdir(repo_name)
 
     # Last-resort collision-safe fallback.
     return _next_fallback_dir("manuscript")
@@ -710,6 +717,19 @@ def format_make_value(value: Any) -> str:
     return escape_make_value(str(value))
 
 
+def format_shell_value(value: Any) -> str:
+    if isinstance(value, list):
+        return " ".join(shlex.quote(str(item)) for item in value)
+    return shlex.quote(str(value))
+
+
+def escape_make_assignment(value: str) -> str:
+    out = value
+    out = out.replace("#", "\\#")
+    out = out.replace("$", "$$")
+    return out
+
+
 def emit_make_vars(profile: Profile, prefix: str) -> str:
     base = prefix.strip().upper() if prefix.strip() else "ACTIVE"
     values: dict[str, Any] = {
@@ -745,7 +765,29 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_MARGIN_BOTTOM": profile.margins.bottom,
         f"{base}_MARGIN_LEFT": profile.margins.left,
     }
+
+    shell_values: dict[str, Any] = {
+        f"{base}_MANUSCRIPT_SOURCES_SH": profile.manuscript_sources,
+        f"{base}_LINT_SOURCES_SH": profile.lint_sources,
+        f"{base}_AUTHOR_METADATA_SH": profile.author_metadata,
+        f"{base}_BIBLIOGRAPHY_SH": profile.bibliography,
+        f"{base}_CSL_SH": profile.csl,
+        f"{base}_CSL_SEARCH_DIRS_SH": profile.csl_search_dirs,
+        f"{base}_RESOURCE_PATH_SH": os.pathsep.join(profile.resource_paths),
+        f"{base}_OUTPUT_DIR_SH": profile.output_dir,
+        f"{base}_PDF_OUT_SH": profile.pdf_out,
+        f"{base}_DOCX_OUT_SH": profile.docx_out,
+        f"{base}_GOLDEN_CONTRACT_SH": profile.golden_contract,
+        f"{base}_EDGECASE_UNKNOWN_CITE_SH": profile.edgecase_unknown_cite,
+        f"{base}_EDGECASE_MANUAL_CITE_SH": profile.edgecase_manual_cite,
+        f"{base}_EDGECASE_MALFORMED_TABLE_SH": profile.edgecase_malformed_table,
+    }
+
     lines = [f"{name} := {format_make_value(value)}" for name, value in values.items()]
+    lines.extend(
+        f"{name} := {escape_make_assignment(format_shell_value(value))}"
+        for name, value in shell_values.items()
+    )
     return "\n".join(lines)
 
 

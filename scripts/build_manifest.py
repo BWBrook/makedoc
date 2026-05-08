@@ -78,7 +78,10 @@ def main() -> int:
             print(f"Error: expected build artifact missing: {artifact}", file=sys.stderr)
             return 1
 
-    input_paths: list[Path] = [Path(item) for item in profile.manuscript_sources]
+    input_paths: list[Path] = [config_path]
+    input_paths.extend(Path(item) for item in profile.manuscript_sources)
+    if profile.author_metadata:
+        input_paths.append(Path(profile.author_metadata))
     input_paths.extend([Path(profile.bibliography), Path(profile.csl)])
     if profile.golden_contract:
         input_paths.append(Path(profile.golden_contract))

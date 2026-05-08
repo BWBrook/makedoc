@@ -23,7 +23,8 @@ main() {
 	TMP_DIR="$(mktemp -d)"
 	trap cleanup_tmpdir EXIT
 
-	local external_repo="$TMP_DIR/external-paper"
+	local spaced_root="$TMP_DIR/with spaces (probe)"
+	local external_repo="$spaced_root/external paper"
 	local settings_dir="$external_repo/settings"
 	local manuscript_text_dir="$external_repo/manuscript/text"
 	local manuscript_figures_dir="$external_repo/manuscript/figures"

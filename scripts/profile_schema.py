@@ -54,3 +54,4 @@ ALLOWED_PROFILE_KEYS = {
 }
 ALLOWED_FIGURE_KEYS = {"placement", "caption_position", "placeholder_id"}
 ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
+ALLOWED_MARGIN_KEYS = {"unit", "paper_size", "top", "right", "bottom", "left"}

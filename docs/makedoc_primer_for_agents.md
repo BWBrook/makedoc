@@ -288,9 +288,9 @@ profiles:
 2. References are page-broken by default.
 3. Introduction is page-broken by default.
 4. Heading spacing is normalized in prepared markdown for `##` headings.
-5. If `output_dir` is `dist`, makedoc auto-routes output to a subfolder (`dist/<profile-root>/`) inferred from manuscript paths/repo/fallback.
+5. If `output_dir` is `dist`, makedoc auto-routes output to a Make-safe subfolder (`dist/<profile-root>/`) inferred from manuscript paths/repo/fallback.
 6. If `output_dir` is any other relative path, it resolves relative to `settings/build.yaml`.
-6. Relative paths in profile entries are resolved from the config file directory, and relative image paths in markdown are resolved from the source Markdown file they appear in.
+7. Relative paths in profile entries are resolved from the config file directory, and relative image paths in markdown are resolved from the source Markdown file they appear in.
 
 ## 7. Lint and audit expectations (must pass)
 

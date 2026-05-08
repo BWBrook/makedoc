@@ -292,6 +292,7 @@ run_inline_empty_alt_suppresses_auto_caption_check() {
 	local main_file="$repo_dir/manuscript/text/inline-main.md"
 	local figure_file="$repo_dir/manuscript/text/inline-figures.md"
 	local prepared="$tmp_dir/inline-empty-alt-prepared.md"
+	local fig1_path="$repo_dir/manuscript/figures/fig1_dummy.png"
 
 	prepare_fixture_repo "$repo_dir"
 
@@ -343,7 +344,7 @@ EOF
 	assert_file_exists "$prepared"
 
 	assert_not_contains "$prepared" "<div id=\"figures\"></div>"
-	assert_contains "$prepared" "![](../figures/fig1_dummy.png){#fig-fixture-main width=95%}"
+	assert_contains "$prepared" "![]($fig1_path){#fig-fixture-main width=95%}"
 	assert_not_contains "$prepared" "**Fig. 1.**"
 }
 
@@ -354,6 +355,9 @@ run_captions_page_check() {
 	local main_file="$repo_dir/manuscript/text/captions-main.md"
 	local figure_file="$repo_dir/manuscript/text/captions-figures.md"
 	local prepared="$tmp_dir/captions-prepared.md"
+	local fig1_path="$repo_dir/manuscript/figures/fig1_dummy.png"
+	local fig2_path="$repo_dir/manuscript/figures/fig2_dummy.png"
+	local figS1_path="$repo_dir/manuscript/figures/figS1_dummy.png"
 
 	prepare_fixture_repo "$repo_dir"
 
@@ -414,9 +418,9 @@ EOF
 	assert_ordered_lines "$prepared" "## Figure Captions" "**Fig. 2.** Fixture richness figure used for CI cross-reference and image embedding checks." "## Supplementary Information"
 	assert_line_count_at_least "$prepared" "\\clearpage" 5
 	assert_line_count_at_least "$prepared" "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>" 5
-	assert_contains "$prepared" "![](../figures/fig1_dummy.png){#fig-fixture-main width=95%}"
-	assert_contains "$prepared" "![](../figures/fig2_dummy.png){#fig-fixture-richness width=85%}"
-	assert_contains "$prepared" "![](../figures/figS1_dummy.png){#fig-fixture-s1 width=85%}"
+	assert_contains "$prepared" "![]($fig1_path){#fig-fixture-main width=95%}"
+	assert_contains "$prepared" "![]($fig2_path){#fig-fixture-richness width=85%}"
+	assert_contains "$prepared" "![]($figS1_path){#fig-fixture-s1 width=85%}"
 	assert_not_contains "$prepared" "![Fixture main figure used for CI layout and rendering checks.]"
 	assert_not_contains "$prepared" "![Fixture richness figure used for CI cross-reference and image embedding checks.]"
 	assert_not_contains "$prepared" "![Fixture supplementary figure used for supplementary material rendering checks.]"

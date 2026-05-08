@@ -18,6 +18,37 @@ class MarkdownLine:
     searchable: str
 
 
+def visible_line_flags(lines: list[str]) -> list[bool]:
+    """Return True for lines that are visible Markdown, False for fenced blocks."""
+    flags: list[bool] = []
+    active_fence_char = ""
+    active_fence_len = 0
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        match = FENCE_OPEN_RE.match(raw_line)
+
+        if active_fence_char:
+            flags.append(False)
+            if stripped.startswith(active_fence_char * active_fence_len):
+                closing = stripped[: len(stripped.rstrip())]
+                if closing and set(closing) == {active_fence_char} and len(closing) >= active_fence_len:
+                    active_fence_char = ""
+                    active_fence_len = 0
+            continue
+
+        if match:
+            flags.append(False)
+            fence = match.group("fence")
+            active_fence_char = fence[0]
+            active_fence_len = len(fence)
+            continue
+
+        flags.append(True)
+
+    return flags
+
+
 def strip_inline_code_spans(text: str) -> str:
     """Replace inline code spans with spaces so literal examples are not linted."""
     out: list[str] = []
@@ -48,25 +79,12 @@ def strip_inline_code_spans(text: str) -> str:
 
 def _iter_visible_lines(lines: list[str]) -> list[MarkdownLine]:
     scanned: list[MarkdownLine] = []
-    active_fence_char = ""
-    active_fence_len = 0
 
-    for line_num, raw_line in enumerate(lines, start=1):
-        stripped = raw_line.strip()
-        match = FENCE_OPEN_RE.match(raw_line)
-
-        if active_fence_char:
-            if stripped.startswith(active_fence_char * active_fence_len):
-                closing = stripped[: len(stripped.rstrip())]
-                if closing and set(closing) == {active_fence_char} and len(closing) >= active_fence_len:
-                    active_fence_char = ""
-                    active_fence_len = 0
-            continue
-
-        if match:
-            fence = match.group("fence")
-            active_fence_char = fence[0]
-            active_fence_len = len(fence)
+    for line_num, (raw_line, visible) in enumerate(
+        zip(lines, visible_line_flags(lines), strict=True),
+        start=1,
+    ):
+        if not visible:
             continue
 
         scanned.append(

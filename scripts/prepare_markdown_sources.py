@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from markdown_scan import scan_markdown_lines
+from markdown_scan import scan_markdown_lines, strip_inline_code_spans, visible_line_flags
 import yaml
 
 from build_profile import load_config, resolve_profile
@@ -223,12 +223,8 @@ def apply_author_metadata(lines: list[str], author_metadata_path: str) -> list[s
 
     block_lines = _author_block_lines(author_metadata_path)
 
-    in_code_fence = False
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_code_fence = not in_code_fence
-        if in_code_fence:
+    for index, (line, visible) in enumerate(zip(lines, visible_line_flags(lines), strict=True)):
+        if not visible:
             continue
         if AUTHORS_PLACEHOLDER_RE.match(line):
             return (
@@ -240,12 +236,8 @@ def apply_author_metadata(lines: list[str], author_metadata_path: str) -> list[s
                 + lines[index + 1 :]
             )
 
-    in_code_fence = False
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_code_fence = not in_code_fence
-        if in_code_fence:
+    for index, (line, visible) in enumerate(zip(lines, visible_line_flags(lines), strict=True)):
+        if not visible:
             continue
         if TITLE_HEADING_RE.match(line):
             return (
@@ -313,16 +305,10 @@ def _append_page_break(lines: list[str]) -> None:
 
 def apply_introduction_page_break(lines: list[str]) -> list[str]:
     out_lines: list[str] = []
-    in_code_fence = False
     inserted = False
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_code_fence = not in_code_fence
-            out_lines.append(line)
-            continue
-        if in_code_fence:
+    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
+        if not visible:
             out_lines.append(line)
             continue
 
@@ -337,15 +323,9 @@ def apply_introduction_page_break(lines: list[str]) -> list[str]:
 
 def apply_major_section_spacing(lines: list[str]) -> list[str]:
     out_lines: list[str] = []
-    in_code_fence = False
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_code_fence = not in_code_fence
-            out_lines.append(line)
-            continue
-        if in_code_fence:
+    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
+        if not visible:
             out_lines.append(line)
             continue
 
@@ -368,8 +348,8 @@ def reference_placement(lines: list[str], references_new_page: bool = True) -> l
     out_lines: list[str] = []
     refs_injected = False
 
-    for index, line in enumerate(lines):
-        if not refs_injected and REFERENCE_SECTION_RE.match(line.strip()):
+    for index, (line, visible) in enumerate(zip(lines, visible_line_flags(lines), strict=True)):
+        if visible and not refs_injected and REFERENCE_SECTION_RE.match(line.strip()):
             refs_injected = True
             if references_new_page and not _has_trailing_page_break(out_lines):
                 _append_page_break(out_lines)
@@ -402,16 +382,9 @@ def is_figure_placeholder(line: str, placeholder_id: str) -> bool:
 def extract_figures(lines: list[str]) -> tuple[list[str], list[FigureBlock]]:
     out_lines: list[str] = []
     figures: list[FigureBlock] = []
-    in_code_fence = False
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_code_fence = not in_code_fence
-            out_lines.append(line)
-            continue
-
-        if in_code_fence:
+    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
+        if not visible:
             out_lines.append(line)
             continue
 
@@ -449,20 +422,58 @@ def is_external_resource(src: str) -> bool:
 def validate_relative_image_resources(source_path: Path) -> None:
     for line in scan_markdown_lines(source_path):
         for match in IMAGE_REFERENCE_RE.finditer(line.searchable):
-            src = (match.group("src") or "").strip()
-            if not src or is_external_resource(src):
-                continue
+            resolve_image_resource(source_path, match.group("src") or "", line.line)
 
-            candidate = Path(src).expanduser()
-            if candidate.is_absolute():
-                continue
 
-            resolved = (source_path.parent / candidate).resolve()
-            if not resolved.exists():
-                raise ValueError(
-                    f"Relative image resource not found in {source_path}:{line.line}: "
-                    f"{src} -> {resolved}"
-                )
+def resolve_image_resource(source_path: Path, raw_src: str, line_number: int) -> str:
+    src = raw_src.strip()
+    if not src or is_external_resource(src):
+        return raw_src
+
+    candidate = Path(src).expanduser()
+    if candidate.is_absolute():
+        return raw_src
+
+    resolved = (source_path.parent / candidate).resolve()
+    if not resolved.exists():
+        raise ValueError(
+            f"Relative image resource not found in {source_path}:{line_number}: "
+            f"{src} -> {resolved}"
+        )
+    return resolved.as_posix()
+
+
+def rewrite_relative_image_resources(source_path: Path, text: str) -> str:
+    rewritten_lines: list[str] = []
+    lines = text.splitlines()
+    flags = visible_line_flags(lines)
+
+    for line_number, (line, visible) in enumerate(zip(lines, flags, strict=True), start=1):
+        if not visible:
+            rewritten_lines.append(line)
+            continue
+
+        searchable = strip_inline_code_spans(line)
+        replacements: list[tuple[int, int, str]] = []
+        for match in IMAGE_REFERENCE_RE.finditer(searchable):
+            start, end = match.span("src")
+            resolved = resolve_image_resource(source_path, line[start:end], line_number)
+            replacements.append((start, end, resolved))
+
+        if not replacements:
+            rewritten_lines.append(line)
+            continue
+
+        cursor = 0
+        parts: list[str] = []
+        for start, end, replacement in replacements:
+            parts.append(line[cursor:start])
+            parts.append(replacement)
+            cursor = end
+        parts.append(line[cursor:])
+        rewritten_lines.append("".join(parts))
+
+    return "\n".join(rewritten_lines)
 
 
 def _caption_line(label: str) -> str:
@@ -490,12 +501,11 @@ def _ordered_figures(figures: list[FigureBlock]) -> list[tuple[str, FigureBlock]
         ordered.append((f"Fig. {main_index}", figure))
 
     for supplement_index, figure in enumerate(supplements, start=1):
-        label = figure.figure_id
-        if label and "-s" in label.lower():
-            suffix = label.split("-s", 1)[1]
-            if suffix:
-                ordered.append((f"Fig. S{suffix}", figure))
-                continue
+        match = SUPPLEMENTARY_ID_RE.search(figure.figure_id)
+        if match:
+            suffix = match.group(0)[2:]
+            ordered.append((f"Fig. S{suffix}", figure))
+            continue
         ordered.append((f"Fig. S{supplement_index}", figure))
 
     return ordered
@@ -622,12 +632,8 @@ def apply_figure_placement(
 
     if profile.figures.placement == "inline":
         placeholder = profile.figures.placeholder_id
-        in_code_fence = False
-        for index, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith("```"):
-                in_code_fence = not in_code_fence
-            if in_code_fence:
+        for index, (line, visible) in enumerate(zip(lines, visible_line_flags(lines), strict=True)):
+            if not visible:
                 continue
 
             if is_figure_placeholder(line, placeholder):
@@ -646,8 +652,8 @@ def load_markdown_sources(sources: list[str]) -> str:
     chunks: list[str] = []
     for raw in sources:
         path = Path(raw)
-        validate_relative_image_resources(path)
-        chunks.append(path.read_text(encoding="utf-8").rstrip())
+        text = path.read_text(encoding="utf-8")
+        chunks.append(rewrite_relative_image_resources(path, text).rstrip())
     # Keep a readable separation between merged files.
     return "\n\n".join(chunks) + "\n"
 

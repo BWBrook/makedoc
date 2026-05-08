@@ -12,6 +12,7 @@ from build_profile import load_config, resolve_profile
 from profile_schema import (
     ALLOWED_EDGECASE_KEYS,
     ALLOWED_FIGURE_KEYS,
+    ALLOWED_MARGIN_KEYS,
     ALLOWED_PROFILE_KEYS,
     ALLOWED_TOP_LEVEL_KEYS,
 )
@@ -97,6 +98,21 @@ def validate_schema(config: dict[str, Any], errors: list[str]) -> dict[str, Any]
                         (
                             f"Profile '{name}' figures has unknown keys: "
                             f"{', '.join(unknown_figure_keys)}"
+                        ),
+                    )
+
+        margins = raw_profile.get("margins")
+        if margins is not None:
+            if not isinstance(margins, dict):
+                append_error(errors, f"Profile '{name}' key 'margins' must be a mapping.")
+            else:
+                unknown_margin_keys = sorted(set(margins.keys()) - ALLOWED_MARGIN_KEYS)
+                if unknown_margin_keys:
+                    append_error(
+                        errors,
+                        (
+                            f"Profile '{name}' margins has unknown keys: "
+                            f"{', '.join(unknown_margin_keys)}"
                         ),
                     )
 

@@ -17,6 +17,7 @@ FIXTURE_CONFIG ?= settings/fixture.yaml
 FIXTURE_PROFILE ?= fixture
 
 CONFIG_SCRIPT ?= scripts/build_profile.py
+PROFILE_CACHE_KEY_SCRIPT ?= scripts/profile_cache_key.py
 VALIDATE_CONFIG ?= scripts/validate_build_config.py
 PROFILE_SCAFFOLD ?= scripts/profile_scaffold.py
 LINT_SCRIPT ?= scripts/lint_manuscript.py
@@ -71,8 +72,8 @@ PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
 FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
 
 PROFILE_CACHE_DIR := .cache
-ACTIVE_CACHE_KEY := $(shell printf '%s\n%s\n' '$(abspath $(CONFIG))' '$(PROFILE)' | cksum | cut -d' ' -f1)
-FIXTURE_CACHE_KEY := $(shell printf '%s\n%s\n' '$(abspath $(FIXTURE_CONFIG))' '$(FIXTURE_PROFILE)' | cksum | cut -d' ' -f1)
+ACTIVE_CACHE_KEY := $(shell python3 "$(PROFILE_CACHE_KEY_SCRIPT)" --config "$(CONFIG)" --profile "$(PROFILE)")
+FIXTURE_CACHE_KEY := $(shell python3 "$(PROFILE_CACHE_KEY_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)")
 ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.$(ACTIVE_CACHE_KEY).mk
 FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.$(FIXTURE_CACHE_KEY).mk
 ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.$(ACTIVE_CACHE_KEY).tex
@@ -106,12 +107,12 @@ endef
 $(PROFILE_CACHE_DIR) $(PDF_ENGINE_OUTPUT_DIR):
 	mkdir -p "$@"
 
-$(ACTIVE_VARS_FILE): $(CONFIG) $(CONFIG_SCRIPT) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+$(ACTIVE_VARS_FILE): $(CONFIG_SCRIPT) $(PROFILE_CACHE_KEY_SCRIPT) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
 	@tmp="$@.tmp.$$$$"; \
 	python3 "$(CONFIG_SCRIPT)" --config "$(CONFIG)" $(PROFILE_ARG) make-vars --prefix ACTIVE > "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
-$(FIXTURE_VARS_FILE): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+$(FIXTURE_VARS_FILE): $(CONFIG_SCRIPT) $(PROFILE_CACHE_KEY_SCRIPT) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
 	@tmp="$@.tmp.$$$$"; \
 	python3 "$(CONFIG_SCRIPT)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) make-vars --prefix FIXTURE > "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
@@ -147,34 +148,35 @@ endif
 
 SAME_ACTIVE_AND_FIXTURE := $(and $(filter $(abspath $(CONFIG)),$(abspath $(FIXTURE_CONFIG))),$(filter $(strip $(ACTIVE_PROFILE)),$(strip $(FIXTURE_PROFILE))))
 
-$(ACTIVE_LAYOUT_TEX): $(CONFIG) $(CONFIG_SCRIPT) $(LAYOUT_RENDER) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+$(ACTIVE_LAYOUT_TEX): $(ACTIVE_VARS_FILE) $(CONFIG_SCRIPT) $(LAYOUT_RENDER) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
 	@tmp="$@.tmp.$$$$"; \
 	python3 "$(LAYOUT_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
-$(FIXTURE_LAYOUT_TEX): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) $(LAYOUT_RENDER) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
+$(FIXTURE_LAYOUT_TEX): $(FIXTURE_VARS_FILE) $(CONFIG_SCRIPT) $(LAYOUT_RENDER) scripts/profile_schema.py | $(PROFILE_CACHE_DIR)
 	@tmp="$@.tmp.$$$$"; \
 	python3 "$(LAYOUT_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
-$(ACTIVE_SOURCE_MD): $(CONFIG) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(ACTIVE_MANUSCRIPT_SOURCES) $(if $(strip $(ACTIVE_AUTHOR_METADATA)),$(ACTIVE_AUTHOR_METADATA),) | $(PROFILE_CACHE_DIR)
+$(ACTIVE_SOURCE_MD): $(ACTIVE_VARS_FILE) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(ACTIVE_MANUSCRIPT_SOURCES) $(if $(strip $(ACTIVE_AUTHOR_METADATA)),$(ACTIVE_AUTHOR_METADATA),) | $(PROFILE_CACHE_DIR)
 	@tmp="$@.tmp.$$$$"; \
 	python3 "$(SOURCE_RENDER)" --config "$(CONFIG)" $(PROFILE_ARG) --output "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
-$(FIXTURE_SOURCE_MD): $(FIXTURE_CONFIG) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(FIXTURE_MANUSCRIPT_SOURCES) $(if $(strip $(FIXTURE_AUTHOR_METADATA)),$(FIXTURE_AUTHOR_METADATA),) | $(PROFILE_CACHE_DIR)
+$(FIXTURE_SOURCE_MD): $(FIXTURE_VARS_FILE) $(CONFIG_SCRIPT) $(SOURCE_RENDER) $(FIXTURE_MANUSCRIPT_SOURCES) $(if $(strip $(FIXTURE_AUTHOR_METADATA)),$(FIXTURE_AUTHOR_METADATA),) | $(PROFILE_CACHE_DIR)
 	@tmp="$@.tmp.$$$$"; \
 	python3 "$(SOURCE_RENDER)" --config "$(FIXTURE_CONFIG)" $(FIXTURE_PROFILE_ARG) --output "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
 
 ifneq ($(strip $(ACTIVE_OUTPUT_DIR)$(FIXTURE_OUTPUT_DIR)),)
-ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --resource-path="$(ACTIVE_RESOURCE_PATH)" --include-in-header="$(ACTIVE_LAYOUT_TEX)"
-ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY) --csl $(ACTIVE_CSL) --resource-path="$(ACTIVE_RESOURCE_PATH)"
-FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --resource-path="$(FIXTURE_RESOURCE_PATH)" --include-in-header="$(FIXTURE_LAYOUT_TEX)"
-FIXTURE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY) --csl $(FIXTURE_CSL) --resource-path="$(FIXTURE_RESOURCE_PATH)"
+ACTIVE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY_SH) --csl $(ACTIVE_CSL_SH) --resource-path=$(ACTIVE_RESOURCE_PATH_SH) --include-in-header="$(ACTIVE_LAYOUT_TEX)"
+ACTIVE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(ACTIVE_BIBLIOGRAPHY_SH) --csl $(ACTIVE_CSL_SH) --resource-path=$(ACTIVE_RESOURCE_PATH_SH)
+FIXTURE_PDF_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY_SH) --csl $(FIXTURE_CSL_SH) --resource-path=$(FIXTURE_RESOURCE_PATH_SH) --include-in-header="$(FIXTURE_LAYOUT_TEX)"
+FIXTURE_DOCX_COMMON = --from $(PANDOC_FROM) --citeproc --bibliography $(FIXTURE_BIBLIOGRAPHY_SH) --csl $(FIXTURE_CSL_SH) --resource-path=$(FIXTURE_RESOURCE_PATH_SH)
 ACTIVE_MANIFEST_OUT := $(ACTIVE_OUTPUT_DIR)/$(ACTIVE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manifest.json
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
+FIXTURE_CONTRACT_PATH_SH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT_SH),testbed/expected/golden_contract.yaml)
 
 .PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-external-relative-paths test-figure-modes test-author-injection check-tools check-fixture-tools python-tests validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
@@ -203,30 +205,30 @@ fixture-docx: $(FIXTURE_DOCX_OUT)
 fixture-manifest: $(FIXTURE_MANIFEST_OUT)
 endif
 
-$(ACTIVE_PDF_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_LAYOUT_TEX) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR) $(PDF_ENGINE_OUTPUT_DIR)
-	$(call render_pdf, $(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
+$(ACTIVE_PDF_OUT): $(ACTIVE_VARS_FILE) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_LAYOUT_TEX) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(ACTIVE_OUTPUT_DIR) $(PDF_ENGINE_OUTPUT_DIR)
+	$(call render_pdf, $(PANDOC) "$(ACTIVE_SOURCE_MD)" $(ACTIVE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o "$@")
 
-$(ACTIVE_DOCX_OUT): $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(ACTIVE_OUTPUT_DIR)
-	$(PANDOC) $(ACTIVE_SOURCE_MD) $(ACTIVE_DOCX_COMMON) -o $@
+$(ACTIVE_DOCX_OUT): $(ACTIVE_VARS_FILE) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_SOURCE_MD) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(ACTIVE_OUTPUT_DIR)
+	$(PANDOC) "$(ACTIVE_SOURCE_MD)" $(ACTIVE_DOCX_COMMON) -o "$@"
 	python3 "$(DOCX_STYLE_NORMALIZER)" --docx "$@" --line-spacing "$(ACTIVE_LINE_SPACING)" --line-numbering "$(ACTIVE_LINE_NUMBERING)"
 
 ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
-$(FIXTURE_PDF_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_LAYOUT_TEX) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR) $(PDF_ENGINE_OUTPUT_DIR)
-		$(call render_pdf, $(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o $@)
+$(FIXTURE_PDF_OUT): $(FIXTURE_VARS_FILE) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_LAYOUT_TEX) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) | $(FIXTURE_OUTPUT_DIR) $(PDF_ENGINE_OUTPUT_DIR)
+		$(call render_pdf, $(PANDOC) "$(FIXTURE_SOURCE_MD)" $(FIXTURE_PDF_COMMON) $(PDF_ENGINE_OPTS) --pdf-engine=$(PDF_ENGINE) -o "$@")
 
-$(FIXTURE_DOCX_OUT): $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(FIXTURE_OUTPUT_DIR)
-		$(PANDOC) $(FIXTURE_SOURCE_MD) $(FIXTURE_DOCX_COMMON) -o $@
+$(FIXTURE_DOCX_OUT): $(FIXTURE_VARS_FILE) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_SOURCE_MD) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(REFS_AUDIT) $(LINT_SCRIPT) $(DOCX_STYLE_NORMALIZER) | $(FIXTURE_OUTPUT_DIR)
+		$(PANDOC) "$(FIXTURE_SOURCE_MD)" $(FIXTURE_DOCX_COMMON) -o "$@"
 		python3 "$(DOCX_STYLE_NORMALIZER)" --docx "$@" --line-spacing "$(FIXTURE_LINE_SPACING)" --line-numbering "$(FIXTURE_LINE_NUMBERING)"
 endif
 
-$(ACTIVE_MANIFEST_OUT): $(ACTIVE_PDF_OUT) $(ACTIVE_DOCX_OUT) $(MANIFEST_SCRIPT) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(if $(strip $(ACTIVE_GOLDEN_CONTRACT)),$(ACTIVE_GOLDEN_CONTRACT),)
-	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output "$@" --pdf "$(ACTIVE_PDF_OUT)" --docx "$(ACTIVE_DOCX_OUT)"
+$(ACTIVE_MANIFEST_OUT): $(ACTIVE_VARS_FILE) $(ACTIVE_PDF_OUT) $(ACTIVE_DOCX_OUT) $(MANIFEST_SCRIPT) $(ACTIVE_MANUSCRIPT_SOURCES) $(ACTIVE_BIBLIOGRAPHY) $(ACTIVE_CSL) $(if $(strip $(ACTIVE_GOLDEN_CONTRACT)),$(ACTIVE_GOLDEN_CONTRACT),)
+	@python3 "$(MANIFEST_SCRIPT)" --config "$(CONFIG)" --profile "$(ACTIVE_PROFILE)" --output "$@" --pdf $(ACTIVE_PDF_OUT_SH) --docx $(ACTIVE_DOCX_OUT_SH)
 
 ifneq ($(strip $(SAME_ACTIVE_AND_FIXTURE)),)
 else
-$(FIXTURE_MANIFEST_OUT): $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT) $(MANIFEST_SCRIPT) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),)
-	@python3 "$(MANIFEST_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)"
+$(FIXTURE_MANIFEST_OUT): $(FIXTURE_VARS_FILE) $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT) $(MANIFEST_SCRIPT) $(FIXTURE_MANUSCRIPT_SOURCES) $(FIXTURE_BIBLIOGRAPHY) $(FIXTURE_CSL) $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),)
+	@python3 "$(MANIFEST_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)" --output "$@" --pdf $(FIXTURE_PDF_OUT_SH) --docx $(FIXTURE_DOCX_OUT_SH)
 endif
 
 validate-config:
@@ -299,7 +301,7 @@ profile-scaffold:
 lint-manuscript:
 	@echo "Running manuscript lint checks..."
 	@args=(); \
-	for src in $(ACTIVE_LINT_SOURCES); do \
+	for src in $(ACTIVE_LINT_SOURCES_SH); do \
 		args+=(--source "$$src"); \
 	done; \
 	python3 "$(LINT_SCRIPT)" "$${args[@]}"
@@ -307,15 +309,15 @@ lint-manuscript:
 refs-audit:
 	@echo "Running reference audit..."
 	@args=(); \
-	for src in $(ACTIVE_MANUSCRIPT_SOURCES); do \
+	for src in $(ACTIVE_MANUSCRIPT_SOURCES_SH); do \
 		args+=(--source "$$src"); \
 	done; \
-	python3 "$(REFS_AUDIT)" --bibliography "$(ACTIVE_BIBLIOGRAPHY)" "$${args[@]}"
+	python3 "$(REFS_AUDIT)" --bibliography $(ACTIVE_BIBLIOGRAPHY_SH) "$${args[@]}"
 
 fixture-lint:
 	@echo "Running fixture manuscript lint checks..."
 	@args=(); \
-	for src in $(FIXTURE_LINT_SOURCES); do \
+	for src in $(FIXTURE_LINT_SOURCES_SH); do \
 		args+=(--source "$$src"); \
 	done; \
 	python3 "$(LINT_SCRIPT)" "$${args[@]}"
@@ -323,14 +325,14 @@ fixture-lint:
 fixture-refs-audit:
 	@echo "Running fixture reference audit..."
 	@args=(); \
-	for src in $(FIXTURE_MANUSCRIPT_SOURCES); do \
+	for src in $(FIXTURE_MANUSCRIPT_SOURCES_SH); do \
 		args+=(--source "$$src"); \
 	done; \
-	python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" "$${args[@]}"
+	python3 "$(REFS_AUDIT)" --bibliography $(FIXTURE_BIBLIOGRAPHY_SH) "$${args[@]}"
 
 fixture-contract-check: check-fixture-tools $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
 	@echo "Running fixture contract checks..."
-	@python3 "$(GOLDEN_CHECK)" --pdf "$(FIXTURE_PDF_OUT)" --docx "$(FIXTURE_DOCX_OUT)" --contract "$(FIXTURE_CONTRACT_PATH)"
+	@python3 "$(GOLDEN_CHECK)" --pdf $(FIXTURE_PDF_OUT_SH) --docx $(FIXTURE_DOCX_OUT_SH) --contract $(FIXTURE_CONTRACT_PATH_SH)
 
 fixture-golden-check: fixture-contract-check
 	@:
@@ -352,11 +354,11 @@ check-fixture-guards:
 		fi; \
 	}; \
 	expect_fail "refs audit catches unknown citation key" \
-		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(REFS_AUDIT)" --bibliography "$(FIXTURE_BIBLIOGRAPHY)" --source "$(FIXTURE_EDGECASE_UNKNOWN_CITE)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(REFS_AUDIT)" --bibliography $(FIXTURE_BIBLIOGRAPHY_SH) --source $(FIXTURE_EDGECASE_UNKNOWN_CITE_SH); \
 	expect_fail "lint catches manual author-year citation" \
-		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(FIXTURE_EDGECASE_MANUAL_CITE)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source $(FIXTURE_EDGECASE_MANUAL_CITE_SH); \
 	expect_fail "lint catches malformed markdown table" \
-		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source "$(FIXTURE_EDGECASE_MALFORMED_TABLE)"; \
+		env DISABLE_GHA_ANNOTATIONS=1 python3 "$(LINT_SCRIPT)" --source $(FIXTURE_EDGECASE_MALFORMED_TABLE_SH); \
 	if [ "$$status" -eq 0 ]; then \
 		echo "Fixture guard regression tests passed."; \
 	fi; \
@@ -365,7 +367,7 @@ check-fixture-guards:
 csl-search:
 	@test -n "$(JOURNAL)" || { echo "Usage: make csl-search JOURNAL='Journal Name'"; exit 1; }
 	@args=(); \
-	for dir in $(ACTIVE_CSL_SEARCH_DIRS); do \
+	for dir in $(ACTIVE_CSL_SEARCH_DIRS_SH); do \
 		args+=(--search-dir "$$dir"); \
 	done; \
 	python3 "$(CSL_RESOLVER)" search --journal "$(JOURNAL)" "$${args[@]}"
@@ -373,7 +375,7 @@ csl-search:
 csl-source:
 	@test -n "$(JOURNAL)" || { echo "Usage: make csl-source JOURNAL='Journal Name'"; exit 1; }
 	@args=(); \
-	for dir in $(ACTIVE_CSL_SEARCH_DIRS); do \
+	for dir in $(ACTIVE_CSL_SEARCH_DIRS_SH); do \
 		args+=(--search-dir "$$dir"); \
 	done; \
 	python3 "$(CSL_RESOLVER)" source --journal "$(JOURNAL)" --dest-dir "$(CSL_DEST_DIR)" "$${args[@]}"
@@ -393,7 +395,7 @@ wsl-smoke:
 	@$(MAKE) --no-print-directory profiles
 	@$(MAKE) --no-print-directory profile-show
 	@args=(); \
-	for dir in $(ACTIVE_CSL_SEARCH_DIRS); do \
+	for dir in $(ACTIVE_CSL_SEARCH_DIRS_SH); do \
 		args+=(--search-dir "$$dir"); \
 	done; \
 	if [ -n "$(ACTIVE_JOURNAL)" ]; then \

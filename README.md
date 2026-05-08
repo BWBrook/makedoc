@@ -113,6 +113,7 @@ Default outputs:
 - If a source path contains a `manuscript/` directory, the containing parent folder name is used (for example `testbed`).
 - Otherwise, if sources are inside a git repository, that repository name is used.
 - If neither can be inferred, the system falls back to `manuscript-#` under `dist/`.
+- Names with spaces or punctuation are normalized to a Make-safe slug for the output folder.
 
 Fixture outputs:
 - `dist/fixture/fixture_manuscript.pdf`
