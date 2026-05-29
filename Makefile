@@ -31,6 +31,9 @@ LAYOUT_RENDER ?= scripts/render_pdf_layout.py
 SOURCE_RENDER ?= scripts/prepare_markdown_sources.py
 DOCX_STYLE_NORMALIZER ?= scripts/normalize_docx_styles.py
 
+BOOTSTRAP_GOALS := deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+BOOTSTRAP_ONLY := $(if $(MAKECMDGOALS),$(if $(filter-out $(BOOTSTRAP_GOALS),$(MAKECMDGOALS)),0,1),0)
+
 CSL_DEST_DIR ?= csl
 JOURNAL ?=
 
@@ -72,15 +75,19 @@ PROFILE_ARG := $(if $(strip $(PROFILE)),--profile $(PROFILE),)
 FIXTURE_PROFILE_ARG := $(if $(strip $(FIXTURE_PROFILE)),--profile $(FIXTURE_PROFILE),)
 
 PROFILE_CACHE_DIR := .cache
+ifeq ($(BOOTSTRAP_ONLY),1)
+ACTIVE_CACHE_KEY := bootstrap
+FIXTURE_CACHE_KEY := bootstrap
+else
 ACTIVE_CACHE_KEY := $(shell python3 "$(PROFILE_CACHE_KEY_SCRIPT)" --config "$(CONFIG)" --profile "$(PROFILE)")
 FIXTURE_CACHE_KEY := $(shell python3 "$(PROFILE_CACHE_KEY_SCRIPT)" --config "$(FIXTURE_CONFIG)" --profile "$(FIXTURE_PROFILE)")
+endif
 ACTIVE_VARS_FILE := $(PROFILE_CACHE_DIR)/active_profile.$(ACTIVE_CACHE_KEY).mk
 FIXTURE_VARS_FILE := $(PROFILE_CACHE_DIR)/fixture_profile.$(FIXTURE_CACHE_KEY).mk
 ACTIVE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/active_layout.$(ACTIVE_CACHE_KEY).tex
 FIXTURE_LAYOUT_TEX := $(PROFILE_CACHE_DIR)/fixture_layout.$(FIXTURE_CACHE_KEY).tex
 ACTIVE_SOURCE_MD := $(PROFILE_CACHE_DIR)/active_sources.$(ACTIVE_CACHE_KEY).md
 FIXTURE_SOURCE_MD := $(PROFILE_CACHE_DIR)/fixture_sources.$(FIXTURE_CACHE_KEY).md
-BOOTSTRAP_GOALS := deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 $(shell test -s "$(ACTIVE_VARS_FILE)" || rm -f "$(ACTIVE_VARS_FILE)")
 $(shell test -s "$(FIXTURE_VARS_FILE)" || rm -f "$(FIXTURE_VARS_FILE)")
@@ -132,8 +139,10 @@ check-fixture-tools:
 python-tests:
 	@python3 -m unittest discover -s tests -p 'test_*.py'
 
+ifneq ($(BOOTSTRAP_ONLY),1)
 -include $(ACTIVE_VARS_FILE)
 -include $(FIXTURE_VARS_FILE)
+endif
 
 ifeq ($(strip $(filter $(BOOTSTRAP_GOALS),$(MAKECMDGOALS))),)
 ifneq ($(MAKE_RESTARTS),)

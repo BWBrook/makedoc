@@ -205,6 +205,20 @@ print_macos_plan() {
   fi
 }
 
+install_macos_pyyaml() {
+  if python3 -c 'import yaml' >/dev/null 2>&1; then
+    echo "PyYAML is already available for python3."
+    return 0
+  fi
+
+  if python3 -m pip install --user pyyaml; then
+    return 0
+  fi
+
+  echo "Retrying PyYAML install with Homebrew Python's PEP 668 override..."
+  python3 -m pip install --user --break-system-packages pyyaml
+}
+
 run_macos() {
   if ! command -v brew >/dev/null 2>&1; then
     echo "Error: Homebrew is required on macOS." >&2
@@ -257,7 +271,7 @@ run_macos() {
   fi
 
   if command -v python3 >/dev/null 2>&1; then
-    python3 -m pip install --user pyyaml
+    install_macos_pyyaml
   else
     echo "Warning: python3 was not found after macOS dependency install; PyYAML was not installed." >&2
   fi

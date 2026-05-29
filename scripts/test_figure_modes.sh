@@ -295,6 +295,7 @@ run_inline_empty_alt_suppresses_auto_caption_check() {
 	local fig1_path="$repo_dir/manuscript/figures/fig1_dummy.png"
 
 	prepare_fixture_repo "$repo_dir"
+	fig1_path="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$fig1_path")"
 
 	cat > "$main_file" <<'EOF'
 # Figure Mode Regression: inline empty alt
@@ -360,6 +361,9 @@ run_captions_page_check() {
 	local figS1_path="$repo_dir/manuscript/figures/figS1_dummy.png"
 
 	prepare_fixture_repo "$repo_dir"
+	fig1_path="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$fig1_path")"
+	fig2_path="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$fig2_path")"
+	figS1_path="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_posix())' "$figS1_path")"
 
 	cat > "$main_file" <<'EOF'
 # Figure Mode Regression: captions page
