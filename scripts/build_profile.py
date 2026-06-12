@@ -17,6 +17,7 @@ from profile_schema import (
     DEFAULT_CONFIG,
     DEFAULT_FIGURE_SETTINGS,
     DEFAULT_MARGINS,
+    DEFAULT_REVIEW_MARKUP,
     FIGURE_CAPTION_POSITION_CHOICES,
     FIGURE_PLACEMENT_CHOICES,
     LINE_NUMBERING_CHOICES,
@@ -60,6 +61,16 @@ class Figures:
             "placement": self.placement,
             "caption_position": self.caption_position,
             "placeholder_id": self.placeholder_id,
+        }
+
+
+@dataclass(frozen=True)
+class ReviewMarkup:
+    enabled: bool
+
+    def to_dict(self) -> dict[str, bool]:
+        return {
+            "enabled": self.enabled,
         }
 
 
@@ -170,6 +181,7 @@ class Profile:
     references_new_page: bool
     margins: Margins
     figures: Figures
+    review_markup: ReviewMarkup
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -199,6 +211,7 @@ class Profile:
             "references_new_page": self.references_new_page,
             "margins": self.margins.to_dict(),
             "figures": self.figures.to_dict(),
+            "review_markup": self.review_markup.to_dict(),
         }
 
 
@@ -617,6 +630,23 @@ def resolve_profile(
         placeholder_id=figure_placeholder_id,
     )
 
+    review_markup_raw = raw_profile.get("review_markup", {})
+    if review_markup_raw is None:
+        review_markup_raw = {}
+    if isinstance(review_markup_raw, bool):
+        review_markup_enabled = review_markup_raw
+    elif isinstance(review_markup_raw, dict):
+        review_markup_enabled = expect_bool(
+            review_markup_raw,
+            "enabled",
+            required=False,
+            default=DEFAULT_REVIEW_MARKUP["enabled"],
+        )
+    else:
+        raise ValueError("Profile key 'review_markup' must be a boolean or mapping when present.")
+
+    review_markup = ReviewMarkup(enabled=review_markup_enabled)
+
     margins_raw = raw_profile.get("margins", {})
     if margins_raw is None:
         margins_raw = {}
@@ -698,6 +728,7 @@ def resolve_profile(
         references_new_page=references_new_page,
         margins=margins,
         figures=figures,
+        review_markup=review_markup,
     )
 
 
@@ -758,6 +789,7 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_FIGURE_PLACEMENT": profile.figures.placement,
         f"{base}_FIGURE_CAPTION_POSITION": profile.figures.caption_position,
         f"{base}_FIGURE_PLACEHOLDER_ID": profile.figures.placeholder_id,
+        f"{base}_REVIEW_MARKUP_ENABLED": profile.review_markup.enabled,
         f"{base}_MARGIN_UNIT": profile.margins.unit,
         f"{base}_MARGIN_PAPER_SIZE": profile.margins.paper_size,
         f"{base}_MARGIN_TOP": profile.margins.top,

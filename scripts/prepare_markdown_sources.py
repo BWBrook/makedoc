@@ -26,6 +26,12 @@ Figure policy is driven by profile settings:
 - `caption_position` controls whether a figure caption sits above or below the image.
 - figures with IDs ending in `-s<number>` are treated as supplementary and rendered
   after main figures.
+
+Experimental review markup:
+- when `review_markup.enabled` is true, CriticMarkup-like addition/deletion/
+  substitution/note tokens are converted to plain Pandoc-visible Markdown.
+- the transform is default-off, skips fenced blocks and inline code spans, and
+  runs after figure extraction so figure markdown is preserved.
 """
 
 from __future__ import annotations
@@ -56,6 +62,10 @@ AUTHORS_PLACEHOLDER_RE = re.compile(
 )
 INTRO_SECTION_RE = re.compile(r"^\s*#{1,6}\s+introduction\b", re.IGNORECASE)
 MAJOR_SECTION_RE = re.compile(r"^\s*##\s+\S+")
+REVIEW_SUBSTITUTION_RE = re.compile(r"\{~~(?P<old>.*?)~>(?P<new>.*?)~~\}")
+REVIEW_ADDITION_RE = re.compile(r"\{\+\+(?P<text>.*?)\+\+\}")
+REVIEW_DELETION_RE = re.compile(r"\{--(?P<text>.*?)--\}")
+REVIEW_NOTE_RE = re.compile(r"\{>>(?P<text>.*?)<<\}")
 
 
 @dataclass(frozen=True)
@@ -340,6 +350,81 @@ def apply_major_section_spacing(lines: list[str]) -> list[str]:
                 trailing_blanks += 1
 
         out_lines.append(line)
+
+    return out_lines
+
+
+def _inline_code_segments(text: str) -> list[tuple[str, bool]]:
+    segments: list[tuple[str, bool]] = []
+    cursor = 0
+    length = len(text)
+
+    while cursor < length:
+        if text[cursor] != "`":
+            next_tick = text.find("`", cursor)
+            if next_tick == -1:
+                segments.append((text[cursor:], False))
+                break
+            segments.append((text[cursor:next_tick], False))
+            cursor = next_tick
+            continue
+
+        fence_len = 1
+        while cursor + fence_len < length and text[cursor + fence_len] == "`":
+            fence_len += 1
+
+        closing = text.find("`" * fence_len, cursor + fence_len)
+        if closing == -1:
+            segments.append((text[cursor], False))
+            cursor += 1
+            continue
+
+        end = closing + fence_len
+        segments.append((text[cursor:end], True))
+        cursor = end
+
+    return segments
+
+
+def _review_markup_text(text: str) -> str:
+    def substitution(match: re.Match[str]) -> str:
+        old = match.group("old").strip()
+        new = match.group("new").strip()
+        return f"~~[- {old} -]~~ **[+ {new} +]**"
+
+    def addition(match: re.Match[str]) -> str:
+        return f"**[+ {match.group('text').strip()} +]**"
+
+    def deletion(match: re.Match[str]) -> str:
+        return f"~~[- {match.group('text').strip()} -]~~"
+
+    def note(match: re.Match[str]) -> str:
+        return f"**[Reviewer note: {match.group('text').strip()}]**"
+
+    text = REVIEW_SUBSTITUTION_RE.sub(substitution, text)
+    text = REVIEW_ADDITION_RE.sub(addition, text)
+    text = REVIEW_DELETION_RE.sub(deletion, text)
+    text = REVIEW_NOTE_RE.sub(note, text)
+    return text
+
+
+def apply_review_markup(lines: list[str], enabled: bool = False) -> list[str]:
+    if not enabled:
+        return lines
+
+    out_lines: list[str] = []
+    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
+        if not visible or FIGURE_LINE_RE.match(line):
+            out_lines.append(line)
+            continue
+
+        segments = _inline_code_segments(line)
+        out_lines.append(
+            "".join(
+                segment if protected else _review_markup_text(segment)
+                for segment, protected in segments
+            )
+        )
 
     return out_lines
 
@@ -668,7 +753,8 @@ def main() -> int:
     lines = raw.splitlines()
     lines = apply_author_metadata(lines, profile.author_metadata)
     lines_without_figures, figures = extract_figures(lines)
-    intro_paginated = apply_introduction_page_break(lines_without_figures)
+    review_lines = apply_review_markup(lines_without_figures, profile.review_markup.enabled)
+    intro_paginated = apply_introduction_page_break(review_lines)
     refs_lines = reference_placement(intro_paginated, profile.references_new_page)
     spaced_lines = apply_major_section_spacing(refs_lines)
     prepared_lines = apply_figure_placement(

@@ -328,6 +328,85 @@ class ResolveProfileRelativePathTests(unittest.TestCase):
                 [str(main_path.parent.resolve()), str(figures_path.parent.resolve())],
             )
 
+    def test_review_markup_defaults_to_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "settings" / "build.yaml"
+            source_path = root / "manuscript" / "text" / "main.md"
+            bibliography_path = root / "references" / "refs.yaml"
+            csl_path = root / "csl" / "journal.csl"
+
+            for path in (source_path, bibliography_path, csl_path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("# Demo\n", encoding="utf-8")
+            bibliography_path.write_text("references: []\n", encoding="utf-8")
+            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
+
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    default_profile: sample
+
+                    profiles:
+                      sample:
+                        manuscript_sources:
+                          - ../manuscript/text/main.md
+                        bibliography: ../references/refs.yaml
+                        csl: ../csl/journal.csl
+                        output_dir: dist
+                        output_stem: manuscript
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
+
+            self.assertFalse(profile.review_markup.enabled)
+            self.assertEqual(profile.to_dict()["review_markup"], {"enabled": False})
+
+    def test_review_markup_can_be_enabled_with_mapping(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "settings" / "build.yaml"
+            source_path = root / "manuscript" / "text" / "main.md"
+            bibliography_path = root / "references" / "refs.yaml"
+            csl_path = root / "csl" / "journal.csl"
+
+            for path in (source_path, bibliography_path, csl_path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("# Demo\n", encoding="utf-8")
+            bibliography_path.write_text("references: []\n", encoding="utf-8")
+            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
+
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    default_profile: sample
+
+                    profiles:
+                      sample:
+                        manuscript_sources:
+                          - ../manuscript/text/main.md
+                        bibliography: ../references/refs.yaml
+                        csl: ../csl/journal.csl
+                        output_dir: dist
+                        output_stem: manuscript
+                        review_markup:
+                          enabled: true
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
+
+            self.assertTrue(profile.review_markup.enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

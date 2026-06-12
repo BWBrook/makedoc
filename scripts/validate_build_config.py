@@ -14,6 +14,7 @@ from profile_schema import (
     ALLOWED_FIGURE_KEYS,
     ALLOWED_MARGIN_KEYS,
     ALLOWED_PROFILE_KEYS,
+    ALLOWED_REVIEW_MARKUP_KEYS,
     ALLOWED_TOP_LEVEL_KEYS,
 )
 
@@ -113,6 +114,28 @@ def validate_schema(config: dict[str, Any], errors: list[str]) -> dict[str, Any]
                         (
                             f"Profile '{name}' margins has unknown keys: "
                             f"{', '.join(unknown_margin_keys)}"
+                        ),
+                    )
+
+        review_markup = raw_profile.get("review_markup")
+        if review_markup is not None:
+            if isinstance(review_markup, bool):
+                pass
+            elif not isinstance(review_markup, dict):
+                append_error(
+                    errors,
+                    f"Profile '{name}' key 'review_markup' must be a boolean or mapping.",
+                )
+            else:
+                unknown_review_keys = sorted(
+                    set(review_markup.keys()) - ALLOWED_REVIEW_MARKUP_KEYS
+                )
+                if unknown_review_keys:
+                    append_error(
+                        errors,
+                        (
+                            f"Profile '{name}' review_markup has unknown keys: "
+                            f"{', '.join(unknown_review_keys)}"
                         ),
                     )
 

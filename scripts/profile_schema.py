@@ -30,6 +30,9 @@ DEFAULT_MARGINS = {
     "bottom": 1.5,
     "left": 1.5,
 }
+DEFAULT_REVIEW_MARKUP = {
+    "enabled": False,
+}
 
 ALLOWED_TOP_LEVEL_KEYS = {"default_profile", "profiles"}
 ALLOWED_PROFILE_KEYS = {
@@ -51,7 +54,9 @@ ALLOWED_PROFILE_KEYS = {
     "references_new_page",
     "figures",
     "margins",
+    "review_markup",
 }
 ALLOWED_FIGURE_KEYS = {"placement", "caption_position", "placeholder_id"}
 ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
 ALLOWED_MARGIN_KEYS = {"unit", "paper_size", "top", "right", "bottom", "left"}
+ALLOWED_REVIEW_MARKUP_KEYS = {"enabled"}

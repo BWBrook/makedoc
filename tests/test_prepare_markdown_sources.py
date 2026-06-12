@@ -12,6 +12,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from prepare_markdown_sources import (
     FigureBlock,
+    apply_review_markup,
     build_figure_blocks,
     extract_figures,
     load_markdown_sources,
@@ -120,6 +121,57 @@ class PrepareMarkdownSourcesTests(unittest.TestCase):
         content = build_figure_blocks([figure], "top", "pages")
 
         self.assertIn("**Fig. S1.**", content)
+
+    def test_review_markup_is_default_off(self) -> None:
+        lines = ["This keeps {++ draft markup ++} untouched."]
+
+        self.assertEqual(apply_review_markup(lines), lines)
+
+    def test_review_markup_renders_visible_markdown_when_enabled(self) -> None:
+        lines = [
+            "This {++ adds text ++}, {-- removes text --}, "
+            "{~~ replaces old ~> adds new ~~}, and {>> check this <<}."
+        ]
+
+        rendered = apply_review_markup(lines, enabled=True)
+
+        self.assertEqual(
+            rendered,
+            [
+                "This **[+ adds text +]**, ~~[- removes text -]~~, "
+                "~~[- replaces old -]~~ **[+ adds new +]**, "
+                "and **[Reviewer note: check this]**."
+            ],
+        )
+
+    def test_review_markup_skips_inline_code_and_fenced_blocks(self) -> None:
+        lines = [
+            "Visible {++ added ++} but `literal {-- deletion --}` remains.",
+            "",
+            "```markdown",
+            "{++ fenced addition ++}",
+            "```",
+        ]
+
+        rendered = apply_review_markup(lines, enabled=True)
+
+        self.assertEqual(
+            rendered,
+            [
+                "Visible **[+ added +]** but `literal {-- deletion --}` remains.",
+                "",
+                "```markdown",
+                "{++ fenced addition ++}",
+                "```",
+            ],
+        )
+
+    def test_review_markup_preserves_figure_lines(self) -> None:
+        figure_line = "![Caption {++ addition ++}.](../figures/fig1.png){#fig-1}"
+
+        rendered = apply_review_markup([figure_line], enabled=True)
+
+        self.assertEqual(rendered, [figure_line])
 
 
 if __name__ == "__main__":
