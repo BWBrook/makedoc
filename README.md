@@ -130,12 +130,15 @@ Regression checks:
 make python-tests
 make test-output-routing
 make test-external-relative-paths
+make test-review-markup
 ```
 `make python-tests` runs focused stdlib unit tests for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases.
 
 `make test-output-routing` runs a unit-style routing test that validates fixture-only and default output locations.
 
 `make test-external-relative-paths` builds a synthetic external manuscript repo using config-relative profile entries and source-relative figure image paths.
+
+`make test-review-markup` validates the experimental review-markup profile, checks the prepared Markdown transform, regenerates proof DOCX/PDF outputs, and inspects PDF text plus DOCX XML for visible review traces.
 
 Figure placement regression:
 ```bash
@@ -233,6 +236,8 @@ Each profile supports:
 - `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)
 - `line_spacing`: line spacing mode (`single`, `1.1`, `1.25`, `1.5`, `2`)
 - `line_numbering`: line-numbering mode (`continuous`, `page`, `section`, `none`)
+- `review_markup`:
+  - `enabled`: boolean, default `false`. When `true`, CriticMarkup-like review tokens are converted into visible generated review traces during source preparation.
 - `figures`:
   - `placement`: `pages` (default, one figure per page after references),
     `inline`, or `captions_page`
@@ -273,6 +278,21 @@ Each profile supports:
 - Section-flow defaults in source preparation:
   - The first `Introduction` heading is moved onto a new page by default (hard page break).
   - Level-2 headings (`## ...`) are normalized to at least two blank lines of separation in prepared markdown.
+- Review markup behavior is experimental and default-off:
+  - Enable it per profile with:
+
+    ```yaml
+    review_markup:
+      enabled: true
+    ```
+  - Supported source tokens are line-local and non-nested:
+    - `{++ added text ++}` -> bold `[+ added text +]`
+    - `{-- deleted text --}` -> stricken `[- deleted text -]`
+    - `{~~ old text ~> new text ~~}` -> stricken old text plus bold new text
+    - `{>> reviewer note <<}` -> bold `[Reviewer note: reviewer note]`
+  - Inline code spans, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
+  - The generated DOCX/PDF output is intended for visible review traces only; it does not create Microsoft Word Review-pane Track Changes data and does not support DOCX-to-Markdown import.
+  - The current production-experimental style is plain Pandoc Markdown: bold bracketed additions/notes and strikeout deletions. This avoids new dependencies and remains portable across DOCX and PDF.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
   - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
 - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.
@@ -312,6 +332,8 @@ profiles:
     page_numbers: lower_right
     line_spacing: single
     line_numbering: continuous
+    review_markup:
+      enabled: false
     figures:
       placement: captions_page
       caption_position: top

@@ -32,6 +32,8 @@ Experimental review markup:
   substitution/note tokens are converted to plain Pandoc-visible Markdown.
 - the transform is default-off, skips fenced blocks and inline code spans, and
   runs after figure extraction so figure markdown is preserved.
+- HTML comment blocks are treated as hidden Markdown content and are not
+  transformed.
 """
 
 from __future__ import annotations
@@ -66,6 +68,8 @@ REVIEW_SUBSTITUTION_RE = re.compile(r"\{~~(?P<old>.*?)~>(?P<new>.*?)~~\}")
 REVIEW_ADDITION_RE = re.compile(r"\{\+\+(?P<text>.*?)\+\+\}")
 REVIEW_DELETION_RE = re.compile(r"\{--(?P<text>.*?)--\}")
 REVIEW_NOTE_RE = re.compile(r"\{>>(?P<text>.*?)<<\}")
+HTML_COMMENT_OPEN_RE = re.compile(r"<!--")
+HTML_COMMENT_CLOSE_RE = re.compile(r"-->")
 
 
 @dataclass(frozen=True)
@@ -408,13 +412,36 @@ def _review_markup_text(text: str) -> str:
     return text
 
 
+def _hidden_comment_flags(lines: list[str]) -> list[bool]:
+    flags: list[bool] = []
+    in_comment = False
+
+    for line in lines:
+        if in_comment:
+            flags.append(True)
+            if HTML_COMMENT_CLOSE_RE.search(line):
+                in_comment = False
+            continue
+
+        if HTML_COMMENT_OPEN_RE.search(line):
+            flags.append(True)
+            if not HTML_COMMENT_CLOSE_RE.search(line):
+                in_comment = True
+            continue
+
+        flags.append(False)
+
+    return flags
+
+
 def apply_review_markup(lines: list[str], enabled: bool = False) -> list[str]:
     if not enabled:
         return lines
 
     out_lines: list[str] = []
-    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
-        if not visible or FIGURE_LINE_RE.match(line):
+    hidden_flags = _hidden_comment_flags(lines)
+    for line, visible, hidden in zip(lines, visible_line_flags(lines), hidden_flags, strict=True):
+        if not visible or hidden or FIGURE_LINE_RE.match(line):
             out_lines.append(line)
             continue
 

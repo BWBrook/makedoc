@@ -173,6 +173,38 @@ class PrepareMarkdownSourcesTests(unittest.TestCase):
 
         self.assertEqual(rendered, [figure_line])
 
+    def test_review_markup_skips_html_comment_blocks(self) -> None:
+        lines = [
+            "<!--",
+            "{++ hidden addition ++}",
+            "-->",
+            "Visible {++ addition ++}.",
+        ]
+
+        rendered = apply_review_markup(lines, enabled=True)
+
+        self.assertEqual(
+            rendered,
+            [
+                "<!--",
+                "{++ hidden addition ++}",
+                "-->",
+                "Visible **[+ addition +]**.",
+            ],
+        )
+
+    def test_review_markup_is_line_local(self) -> None:
+        lines = [
+            "{++ multiline",
+            "addition ++}",
+            "{~~ old",
+            "~> new ~~}",
+        ]
+
+        rendered = apply_review_markup(lines, enabled=True)
+
+        self.assertEqual(rendered, lines)
+
 
 if __name__ == "__main__":
     unittest.main()

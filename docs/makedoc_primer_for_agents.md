@@ -26,6 +26,7 @@ Reason: copy/sync introduces drift risk and weakens reproducibility guarantees.
 3. A CSL style file
 4. Optional author metadata YAML
 5. Optional figure-placement settings and layout settings
+6. Optional review-markup settings for visible generated review traces
 
 The build profile controls where files are, how figures are handled, citation styling, and layout defaults.
 
@@ -120,6 +121,36 @@ Use Pandoc citekeys only:
 - Narrative: `@delta2023 showed ...`
 
 Avoid manual citations like `(Smith 2020)`. `makedoc` lint flags these as errors.
+
+### 3.2.1 Optional review markup
+
+`makedoc` can optionally render human-editable Markdown review markup as
+visible traces in generated DOCX/PDF outputs.
+
+Enable it per profile:
+
+```yaml
+review_markup:
+  enabled: true
+```
+
+Supported source forms:
+
+| Source form | Rendered intent |
+| --- | --- |
+| `{++ added text ++}` | bold `[+ added text +]` |
+| `{-- deleted text --}` | stricken `[- deleted text -]` |
+| `{~~ old text ~> new text ~~}` | stricken old text plus bold new text |
+| `{>> reviewer note <<}` | bold `[Reviewer note: reviewer note]` |
+
+Authoring contract:
+
+1. Review markup is disabled by default. Leave it off for ordinary clean builds.
+2. Tokens are line-local; do not split one token across multiple source lines.
+3. Nested review markup is unsupported.
+4. Inline code, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
+5. This is visible generated review markup only. It does not create Word Review-pane Track Changes and it does not import DOCX edits back into Markdown.
+6. Use it for draft/review profiles where traceable generated output is useful; keep submission profiles clean unless the journal explicitly wants visible markup.
 
 ### 3.3 `manuscript/text/figures.md`
 
@@ -245,6 +276,9 @@ profiles:
     line_spacing: single           # single | 1.1 | 1.25 | 1.5 | 2
     line_numbering: continuous     # continuous | page | section | none
 
+    review_markup:
+      enabled: false               # true only for visible review-trace profiles
+
     figures:
       placement: pages             # pages | inline | captions_page
       caption_position: top        # top | bottom
@@ -291,6 +325,7 @@ profiles:
 5. If `output_dir` is `dist`, makedoc auto-routes output to a Make-safe subfolder (`dist/<profile-root>/`) inferred from manuscript paths/repo/fallback.
 6. If `output_dir` is any other relative path, it resolves relative to `settings/build.yaml`.
 7. Relative paths in profile entries are resolved from the config file directory, and relative image paths in markdown are resolved from the source Markdown file they appear in.
+8. Review markup is ignored unless `review_markup.enabled: true` is set in the selected profile.
 
 ## 7. Lint and audit expectations (must pass)
 
@@ -326,8 +361,9 @@ Use this sequence when onboarding a repository.
 5. Place CSL file in `csl/`.
 6. Create `manuscript/authors.yaml` (if author injection is desired).
 7. Create `settings/build.yaml` profile using either absolute paths or config-relative paths.
-8. Ensure markdown cites use `@citekey` syntax only.
-9. Run validations/build from makedoc repo:
+8. If visible review traces are needed, enable `review_markup.enabled` in a draft/review profile and keep tokens line-local.
+9. Ensure markdown cites use `@citekey` syntax only.
+10. Run validations/build from makedoc repo:
 
 ```bash
 make validate-config CONFIG=/abs/path/to/your-repo/settings/build.yaml
@@ -399,6 +435,14 @@ Fix:
 1. Pick one canonical bibliography file.
 2. Update profile key `bibliography` to point to that file.
 3. Remove duplicate copies or clearly mark one as generated and non-editable.
+
+### Problem: review markup appears literally in output
+
+Fix:
+
+1. Confirm the selected profile has `review_markup.enabled: true`.
+2. Confirm the token is on one source line and is not inside inline code, a fenced block, an HTML comment block, or a figure image line.
+3. Use `make test-review-markup` in the `makedoc` repo to compare against the supported proof profile.
 
 ## 10. FAQ: decisions for external-repo agents
 
