@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Experimental DOCX-to-Markdown review-markup import spike.
 
-This is not a production importer. It provides two narrow evidence routes:
+This is not a production importer. It provides narrow evidence routes:
 
 1. Compare original plain text with revised DOCX text and emit simple
    Makedoc review-markup tokens from a normalized word diff.
 2. Read tiny DOCX OOXML containing native Word ``w:ins``/``w:del`` elements and
    emit insertion/deletion review-markup tokens in document order.
+3. Write a separate revised-DOCX candidate Markdown file for simple prose
+   paragraphs only.
 
 The prototype intentionally ignores layout, styles, tables, figures, comments,
 citations, field codes, moves, and Markdown structure. It uses only Python
@@ -26,6 +28,21 @@ from xml.etree import ElementTree
 
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 DOCUMENT_XML = "word/document.xml"
+REVIEW_TOKEN_RE = re.compile(r"\{\+\+|\{--|\{~~|\{>>")
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+TABLE_SEPARATOR_RE = re.compile(
+    r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$"
+)
+IMAGE_RE = re.compile(r"^\s*!\[[^\]]*\]\([^)]*\)")
+HTML_BLOCK_RE = re.compile(r"^\s*</?[A-Za-z][^>]*>\s*$")
+HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
+BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>")
+BULLET_RE = re.compile(r"^\s{0,3}[-+*]\s+")
+NUMBERED_RE = re.compile(r"^\s{0,3}\d+[.)]\s+")
+
+
+class CandidateGenerationError(ValueError):
+    """Raised when candidate generation refuses unsafe input."""
 
 
 def _local_name(tag: str) -> str:
@@ -125,6 +142,93 @@ def revised_docx_to_review_markup(original_text: str, revised_docx: str | Path) 
     return diff_text_to_review_markup(original_text, revised_text)
 
 
+def _simple_paragraphs(text: str) -> list[str]:
+    normalized_newlines = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized_newlines:
+        return []
+    return [
+        _normalize_text(paragraph)
+        for paragraph in re.split(r"\n[ \t]*\n", normalized_newlines)
+        if _normalize_text(paragraph)
+    ]
+
+
+def _unsupported_markdown_reason(text: str) -> str | None:
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if FENCE_RE.match(line):
+            return f"line {line_number}: unsupported Markdown fenced code block"
+        if line.startswith("    ") or line.startswith("\t"):
+            return f"line {line_number}: unsupported Markdown indented code block"
+        if IMAGE_RE.match(line):
+            return f"line {line_number}: unsupported Markdown image or figure line"
+        if TABLE_SEPARATOR_RE.match(line) or line.count("|") >= 2:
+            return f"line {line_number}: unsupported Markdown table"
+        if "<!--" in line:
+            return f"line {line_number}: unsupported Markdown HTML comment"
+        if HTML_BLOCK_RE.match(line):
+            return f"line {line_number}: unsupported Markdown raw HTML block"
+        if HEADING_RE.match(line):
+            return f"line {line_number}: unsupported Markdown heading"
+        if BLOCKQUOTE_RE.match(line):
+            return f"line {line_number}: unsupported Markdown blockquote"
+        if BULLET_RE.match(line):
+            return f"line {line_number}: unsupported Markdown bullet list"
+        if NUMBERED_RE.match(line):
+            return f"line {line_number}: unsupported Markdown numbered list"
+        if "[@" in line or "[-@" in line:
+            return f"line {line_number}: unsupported Markdown Pandoc citation"
+        if REVIEW_TOKEN_RE.search(line):
+            return f"line {line_number}: unsupported existing review-markup token"
+    return None
+
+
+def generate_revised_candidate(
+    original_path: str | Path,
+    revised_docx: str | Path,
+    output_path: str | Path,
+    *,
+    overwrite: bool = False,
+) -> str:
+    """Write a separate review-markup candidate for simple prose paragraphs."""
+
+    original = Path(original_path).expanduser().resolve()
+    output = Path(output_path).expanduser().resolve()
+    if original == output:
+        raise CandidateGenerationError("output path resolves to the same path as original")
+    if output.exists() and not overwrite:
+        raise CandidateGenerationError(f"output already exists: {output}")
+
+    original_text = original.read_text(encoding="utf-8")
+    unsupported_reason = _unsupported_markdown_reason(original_text)
+    if unsupported_reason:
+        raise CandidateGenerationError(unsupported_reason)
+
+    original_paragraphs = _simple_paragraphs(original_text)
+    revised_text = extract_revised_text_from_docx(revised_docx)
+    revised_paragraphs = _simple_paragraphs(revised_text)
+
+    if len(original_paragraphs) != len(revised_paragraphs):
+        raise CandidateGenerationError(
+            "paragraph count mismatch: "
+            f"original has {len(original_paragraphs)}, "
+            f"revised DOCX has {len(revised_paragraphs)}"
+        )
+
+    candidate = "\n\n".join(
+        diff_text_to_review_markup(original, revised)
+        for original, revised in zip(original_paragraphs, revised_paragraphs)
+    )
+    if candidate:
+        candidate += "\n"
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(candidate, encoding="utf-8")
+    return candidate
+
+
 def _review_token(prefix: str, text: str, suffix: str) -> str:
     cleaned = _normalize_text(text)
     if not cleaned:
@@ -179,6 +283,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     revised.add_argument("--revised-docx", required=True, help="Path to revised DOCX.")
 
+    candidate = subparsers.add_parser(
+        "revised-candidate",
+        help="Write a separate candidate Markdown file for simple revised DOCX prose.",
+    )
+    candidate.add_argument(
+        "--original-path",
+        required=True,
+        help="Path to original simple Markdown or plain prose.",
+    )
+    candidate.add_argument("--revised-docx", required=True, help="Path to revised DOCX.")
+    candidate.add_argument("--output", required=True, help="Candidate Markdown output path.")
+    candidate.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow replacing an existing candidate output file.",
+    )
+
     tracked = subparsers.add_parser(
         "track-changes",
         help="Read simple native Word w:ins/w:del elements from DOCX OOXML.",
@@ -192,6 +313,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.command == "revised":
         print(revised_docx_to_review_markup(_load_original_text(args), args.revised_docx))
+        return 0
+    if args.command == "revised-candidate":
+        try:
+            generate_revised_candidate(
+                args.original_path,
+                args.revised_docx,
+                args.output,
+                overwrite=args.overwrite,
+            )
+        except CandidateGenerationError as exc:
+            print(f"revised-candidate refused: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "track-changes":
         print(track_changes_docx_to_review_markup(args.docx))

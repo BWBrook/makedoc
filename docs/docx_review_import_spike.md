@@ -7,12 +7,14 @@ Date: 2026-06-14
 Do not build a full production DOCX-to-Markdown review importer yet.
 
 The spike shows that two narrow routes are technically possible for simple
-prose, but both become fragile once real manuscript structure matters. If Barry
-wants this capability next, the safest next goal is a constrained text-only
-prototype for plain paragraphs using the revised-DOCX text-diff route. Native
-Word Track Changes import should remain a separate, narrower OOXML spike until
-there is a small corpus of real tracked-change documents and clear policy for
-comments, moves, formatting, tables, citations, and figure references.
+prose, but both become fragile once real manuscript structure matters. Goal 007
+added a constrained text-only candidate-file prototype for plain paragraphs
+using the revised-DOCX text-diff route. It is useful as a human-reviewed
+candidate generator, not as round-tripping.
+
+Native Word Track Changes import should remain a separate, narrower OOXML spike
+until there is a small corpus of real tracked-change documents and clear policy
+for comments, moves, formatting, tables, citations, and figure references.
 
 ## Routes Tested
 
@@ -122,12 +124,17 @@ Added experimental script:
 scripts/import_docx_review_markup.py
 ```
 
-The script has two CLI modes:
+The script has three CLI modes:
 
 ```sh
 python3 scripts/import_docx_review_markup.py revised \
   --original-text "alpha beta remove gamma old" \
   --revised-docx /path/to/revised.docx
+
+python3 scripts/import_docx_review_markup.py revised-candidate \
+  --original-path /path/to/original.md \
+  --revised-docx /path/to/revised.docx \
+  --output /path/to/candidate.md
 
 python3 scripts/import_docx_review_markup.py track-changes \
   --docx /path/to/tracked.docx
@@ -135,6 +142,40 @@ python3 scripts/import_docx_review_markup.py track-changes \
 
 The script is intentionally text-first and dependency-light. It does not import
 or modify manuscript repositories.
+
+### Goal 007 candidate-file mode
+
+`revised-candidate` writes a separate Markdown candidate file containing
+Makedoc review-markup tokens. It is intended for human review of simple prose
+only.
+
+The mode:
+
+- reads original Markdown/plain prose from `--original-path`;
+- extracts revised DOCX text using the same revised-DOCX route as Goal 006;
+- maps original and revised text paragraph-by-paragraph;
+- preserves blank-line paragraph separation;
+- emits `{++ inserted ++}`, `{-- deleted --}`, and
+  `{~~ old ~> new ~~}` tokens;
+- refuses to write directly over the original source;
+- refuses to overwrite an existing output file unless `--overwrite` is passed;
+- exits non-zero with an explicit refusal message for unsupported input.
+
+Conservative refusal cases include:
+
+- paragraph-count mismatches;
+- fenced or indented code blocks;
+- Markdown tables;
+- figure/image lines;
+- raw HTML or HTML comments;
+- headings, blockquotes, bullet lists, and numbered lists;
+- bracketed Pandoc citation markers;
+- existing review-markup tokens.
+
+This mode deliberately refuses ordinary manuscript structures such as figures,
+tables, headings, lists, and citations. That is the safety contract: candidate
+generation is acceptable only when the source is simple enough that a human can
+inspect the generated review tokens without hidden structural mapping claims.
 
 ## Validation
 
@@ -157,15 +198,19 @@ git diff --check
 
 Defer a production importer for now.
 
-If the capability becomes important, pursue only a constrained text-only next
-goal first:
+The constrained text-only revised-DOCX route now has an experimental
+candidate-file prototype. The next decision is whether this is enough as a
+small human-reviewed utility, or whether Barry wants a separate hardening goal
+with real approved examples.
 
-1. Use revised DOCX text extraction plus original Markdown/plain-text
-   normalization.
-2. Limit scope to simple prose paragraphs.
-3. Emit review tokens into a separate candidate Markdown file, never directly
-   over canonical manuscript source.
-4. Require human review before adopting changes.
+Before any real manuscript adoption beyond toy/simple prose:
+
+1. Keep candidate output separate from canonical manuscript source.
+2. Require human review before copying any candidate tokens into manuscript
+   history.
+3. Add approved manuscript-like fixtures for paragraph mapping behavior.
+4. Decide whether citations, headings, lists, figures, tables, and references
+   should remain hard refusals or receive explicit support one by one.
 5. Keep native Track Changes OOXML import as a separate spike until real
    tracked-change examples and policy decisions are available.
 
