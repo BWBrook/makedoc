@@ -30,6 +30,8 @@ Figure policy is driven by profile settings:
 Experimental review markup:
 - when `review_markup.enabled` is true, CriticMarkup-like addition/deletion/
   substitution/note tokens are converted to plain Pandoc-visible Markdown.
+- additions, deletions, substitution sides, and notes render as bold bracketed
+  markers so PDF output remains readable without relying on strikeout.
 - the transform is default-off, skips fenced blocks and inline code spans, and
   runs after figure extraction so figure markdown is preserved.
 - HTML comment blocks are treated as hidden Markdown content and are not
@@ -394,13 +396,13 @@ def _review_markup_text(text: str) -> str:
     def substitution(match: re.Match[str]) -> str:
         old = match.group("old").strip()
         new = match.group("new").strip()
-        return f"~~[- {old} -]~~ **[+ {new} +]**"
+        return f"**[- {old} -]** **[+ {new} +]**"
 
     def addition(match: re.Match[str]) -> str:
         return f"**[+ {match.group('text').strip()} +]**"
 
     def deletion(match: re.Match[str]) -> str:
-        return f"~~[- {match.group('text').strip()} -]~~"
+        return f"**[- {match.group('text').strip()} -]**"
 
     def note(match: re.Match[str]) -> str:
         return f"**[Reviewer note: {match.group('text').strip()}]**"

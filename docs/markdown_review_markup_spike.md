@@ -2,6 +2,10 @@
 
 Date: 2026-06-12
 
+Status note, 2026-06-14: Goal 004 replaced strikeout deletion rendering with
+bold bracketed deletion markers because rendered PDF strikeout made deleted
+words difficult to read by eye. The source token syntax remains unchanged.
+
 ## Decision
 
 Human-editable Markdown review markup is feasible as an experimental `makedoc`
@@ -28,8 +32,8 @@ CriticMarkup-like syntax into ordinary Pandoc Markdown:
 | Source syntax | Prepared Markdown output |
 | --- | --- |
 | `{++ added text ++}` | `**[+ added text +]**` |
-| `{-- deleted text --}` | `~~[- deleted text -]~~` |
-| `{~~ old text ~> new text ~~}` | `~~[- old text -]~~ **[+ new text +]**` |
+| `{-- deleted text --}` | `**[- deleted text -]**` |
+| `{~~ old text ~> new text ~~}` | `**[- old text -]** **[+ new text +]**` |
 | `{>> reviewer note <<}` | `**[Reviewer note: reviewer note]**` |
 
 The transform runs after figure extraction, skips fenced code blocks and inline
@@ -53,14 +57,14 @@ Observed prepared Markdown includes:
 
 ```markdown
 **[+ inserted review text +]**
-~~[- removed review text -]~~
-~~[- outdated wording -]~~ **[+ revised wording +]**
+**[- removed review text -]**
+**[- outdated wording -]** **[+ revised wording +]**
 **[Reviewer note: reviewer asks for a clearer transition]**
 ```
 
 PDF text extraction showed the bracketed review traces in the rendered PDF.
-DOCX XML showed bold runs for additions/reviewer notes and `w:strike` runs for
-deletions/substitution removals.
+DOCX XML showed bold runs for additions, deletions, substitution sides, and
+reviewer notes.
 
 ## Validation
 
@@ -117,7 +121,7 @@ fixture lint, reference audit, build, and contract checks.
 Proceed with a follow-up production-hardening goal:
 
 1. Formalize the `review_markup` profile schema and docs.
-2. Decide whether bold/strike/bracket markers are sufficient or whether custom
+2. Decide whether bold bracketed markers are sufficient or whether custom
    DOCX/PDF styling should be added.
 3. Add a first-class Make target for the review-markup rendering probe if the
    feature will remain in the regression suite.

@@ -287,12 +287,12 @@ Each profile supports:
     ```
   - Supported source tokens are line-local and non-nested:
     - `{++ added text ++}` -> bold `[+ added text +]`
-    - `{-- deleted text --}` -> stricken `[- deleted text -]`
-    - `{~~ old text ~> new text ~~}` -> stricken old text plus bold new text
+    - `{-- deleted text --}` -> bold `[- deleted text -]`
+    - `{~~ old text ~> new text ~~}` -> bold old-text marker plus bold new-text marker
     - `{>> reviewer note <<}` -> bold `[Reviewer note: reviewer note]`
   - Inline code spans, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
   - The generated DOCX/PDF output is intended for visible review traces only; it does not create Microsoft Word Review-pane Track Changes data and does not support DOCX-to-Markdown import.
-  - The current production-experimental style is plain Pandoc Markdown: bold bracketed additions/notes and strikeout deletions. This avoids new dependencies and remains portable across DOCX and PDF.
+  - The current production-experimental style is plain Pandoc Markdown: bold bracketed additions, deletions, substitution sides, and notes. Deletions intentionally do not rely on strikeout, because PDF strikeout made deleted words difficult to read in rendered page images. This avoids new dependencies and remains portable across DOCX and PDF.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
   - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
 - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.

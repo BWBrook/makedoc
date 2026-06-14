@@ -139,8 +139,8 @@ Supported source forms:
 | Source form | Rendered intent |
 | --- | --- |
 | `{++ added text ++}` | bold `[+ added text +]` |
-| `{-- deleted text --}` | stricken `[- deleted text -]` |
-| `{~~ old text ~> new text ~~}` | stricken old text plus bold new text |
+| `{-- deleted text --}` | bold `[- deleted text -]` |
+| `{~~ old text ~> new text ~~}` | bold old-text marker plus bold new-text marker |
 | `{>> reviewer note <<}` | bold `[Reviewer note: reviewer note]` |
 
 Authoring contract:
@@ -149,8 +149,9 @@ Authoring contract:
 2. Tokens are line-local; do not split one token across multiple source lines.
 3. Nested review markup is unsupported.
 4. Inline code, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
-5. This is visible generated review markup only. It does not create Word Review-pane Track Changes and it does not import DOCX edits back into Markdown.
-6. Use it for draft/review profiles where traceable generated output is useful; keep submission profiles clean unless the journal explicitly wants visible markup.
+5. Deletions render as readable bracketed deletion markers rather than relying on strikeout, because rendered PDFs must remain readable by eye.
+6. This is visible generated review markup only. It does not create Word Review-pane Track Changes and it does not import DOCX edits back into Markdown.
+7. Use it for draft/review profiles where traceable generated output is useful; keep submission profiles clean unless the journal explicitly wants visible markup.
 
 ### 3.3 `manuscript/text/figures.md`
 

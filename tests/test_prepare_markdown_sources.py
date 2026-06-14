@@ -138,8 +138,8 @@ class PrepareMarkdownSourcesTests(unittest.TestCase):
         self.assertEqual(
             rendered,
             [
-                "This **[+ adds text +]**, ~~[- removes text -]~~, "
-                "~~[- replaces old -]~~ **[+ adds new +]**, "
+                "This **[+ adds text +]**, **[- removes text -]**, "
+                "**[- replaces old -]** **[+ adds new +]**, "
                 "and **[Reviewer note: check this]**."
             ],
         )
