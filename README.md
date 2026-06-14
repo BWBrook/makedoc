@@ -140,6 +140,9 @@ make test-review-markup
 
 `make test-review-markup` validates the experimental review-markup profile, checks the prepared Markdown transform, regenerates proof DOCX/PDF outputs, and inspects PDF text plus DOCX XML for visible review traces.
 
+External manuscript adoption guidance lives in
+`docs/review_markup_external_adoption.md`.
+
 Figure placement regression:
 ```bash
 make test-figure-modes
@@ -293,6 +296,7 @@ Each profile supports:
   - Inline code spans, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
   - The generated DOCX/PDF output is intended for visible review traces only; it does not create Microsoft Word Review-pane Track Changes data and does not support DOCX-to-Markdown import.
   - The current production-experimental style is plain Pandoc Markdown: bold bracketed additions, deletions, substitution sides, and notes. Deletions intentionally do not rely on strikeout, because PDF strikeout made deleted words difficult to read in rendered page images. This avoids new dependencies and remains portable across DOCX and PDF.
+  - For external manuscript pilots, use `docs/review_markup_external_adoption.md`.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
   - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
 - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.

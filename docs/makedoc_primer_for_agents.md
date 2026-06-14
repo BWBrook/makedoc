@@ -153,6 +153,9 @@ Authoring contract:
 6. This is visible generated review markup only. It does not create Word Review-pane Track Changes and it does not import DOCX edits back into Markdown.
 7. Use it for draft/review profiles where traceable generated output is useful; keep submission profiles clean unless the journal explicitly wants visible markup.
 
+For a full external manuscript pilot recipe, use
+`docs/review_markup_external_adoption.md` in the `makedoc` repository.
+
 ### 3.3 `manuscript/text/figures.md`
 
 Use one image per markdown figure line, with attribute block and explicit ID:
