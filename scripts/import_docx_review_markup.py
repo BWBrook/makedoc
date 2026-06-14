@@ -39,6 +39,7 @@ HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
 BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>")
 BULLET_RE = re.compile(r"^\s{0,3}[-+*]\s+")
 NUMBERED_RE = re.compile(r"^\s{0,3}\d+[.)]\s+")
+PANDOC_CITATION_RE = re.compile(r"(?<![\w.-])@[-A-Za-z0-9_:.#/$%]+")
 
 
 class CandidateGenerationError(ValueError):
@@ -178,7 +179,7 @@ def _unsupported_markdown_reason(text: str) -> str | None:
             return f"line {line_number}: unsupported Markdown bullet list"
         if NUMBERED_RE.match(line):
             return f"line {line_number}: unsupported Markdown numbered list"
-        if "[@" in line or "[-@" in line:
+        if "[@" in line or "[-@" in line or PANDOC_CITATION_RE.search(line):
             return f"line {line_number}: unsupported Markdown Pandoc citation"
         if REVIEW_TOKEN_RE.search(line):
             return f"line {line_number}: unsupported existing review-markup token"

@@ -152,6 +152,92 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
                 "first {~~ old ~> new ~~}\n\nsecond keep {++ inserted ++}\n",
             )
 
+    def test_revised_candidate_handles_synthetic_manuscript_like_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            original_path = tmp_path / "synthetic_source.md"
+            revised_docx = tmp_path / "synthetic_revised.docx"
+            output_path = tmp_path / "synthetic_candidate.md"
+            original_path.write_text(
+                (
+                    "Survival increased during the cool season when rainfall "
+                    "remained stable.\n\n"
+                    "We measured habitat condition using field surveys and remote "
+                    "checks across sites.\n\n"
+                    "These results suggest a cautious management response for "
+                    "drought-sensitive populations.\n"
+                ),
+                encoding="utf-8",
+            )
+            _write_docx(
+                revised_docx,
+                (
+                    "<w:p><w:r><w:t>Survival increased during the cool season "
+                    "when rainfall remained unusually stable.</w:t></w:r></w:p>"
+                    "<w:p><w:r><w:t>We measured habitat condition using field "
+                    "surveys across sites.</w:t></w:r></w:p>"
+                    "<w:p><w:r><w:t>These results suggest a targeted management "
+                    "response for drought-sensitive populations.</w:t></w:r></w:p>"
+                ),
+            )
+
+            candidate = self._candidate_generator()(
+                original_path,
+                revised_docx,
+                output_path,
+            )
+
+            expected = (
+                "Survival increased during the cool season when rainfall remained "
+                "{++ unusually ++} stable.\n\n"
+                "We measured habitat condition using field surveys "
+                "{-- and remote checks --} across sites.\n\n"
+                "These results suggest a {~~ cautious ~> targeted ~~} management "
+                "response for drought-sensitive populations.\n"
+            )
+            self.assertEqual(candidate, expected)
+            self.assertEqual(output_path.read_text(encoding="utf-8"), expected)
+
+    def test_revised_candidate_cli_positive_dry_run_writes_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            original_path = tmp_path / "synthetic_source.md"
+            revised_docx = tmp_path / "synthetic_revised.docx"
+            output_path = tmp_path / "synthetic_candidate.md"
+            original_path.write_text(
+                "The baseline model retained signal.\n\nThe field check was cautious.\n",
+                encoding="utf-8",
+            )
+            _write_docx(
+                revised_docx,
+                (
+                    "<w:p><w:r><w:t>The baseline model retained stronger signal."
+                    "</w:t></w:r></w:p>"
+                    "<w:p><w:r><w:t>The field check was targeted.</w:t></w:r></w:p>"
+                ),
+            )
+
+            status = importer.main(
+                [
+                    "revised-candidate",
+                    "--original-path",
+                    str(original_path),
+                    "--revised-docx",
+                    str(revised_docx),
+                    "--output",
+                    str(output_path),
+                ]
+            )
+
+            self.assertEqual(status, 0)
+            self.assertEqual(
+                output_path.read_text(encoding="utf-8"),
+                (
+                    "The baseline model retained {++ stronger ++} signal.\n\n"
+                    "The field check was {~~ cautious. ~> targeted. ~~}\n"
+                ),
+            )
+
     def test_revised_candidate_refuses_paragraph_count_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -199,6 +285,57 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
                 self._candidate_generator()(original_path, revised_docx, output_path)
 
             self.assertFalse(output_path.exists())
+
+    def test_revised_candidate_refuses_pandoc_citations(self) -> None:
+        citation_sources = {
+            "bracketed": "Prior work reported this pattern [@smith2020].\n",
+            "suppressed": "Prior work reported this pattern [-@smith2020].\n",
+            "narrative": "Prior work by @smith2020 reported this pattern.\n",
+        }
+        for label, source in citation_sources.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_path = Path(tmp)
+                    original_path = tmp_path / "original.md"
+                    revised_docx = tmp_path / "revised.docx"
+                    output_path = tmp_path / "candidate.md"
+                    original_path.write_text(source, encoding="utf-8")
+                    _write_docx(
+                        revised_docx,
+                        "<w:p><w:r><w:t>Prior work reported this pattern.</w:t></w:r></w:p>",
+                    )
+
+                    with self.assertRaisesRegex(self._candidate_error(), "Pandoc citation"):
+                        self._candidate_generator()(original_path, revised_docx, output_path)
+
+                    self.assertFalse(output_path.exists())
+
+    def test_revised_candidate_refuses_heading_and_list_structures(self) -> None:
+        unsupported_sources = {
+            "heading": "# Abstract\n\nSimple prose follows.\n",
+            "bullet": "- first result\n- second result\n",
+            "numbered": "1. first result\n2. second result\n",
+        }
+        for label, source in unsupported_sources.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_path = Path(tmp)
+                    original_path = tmp_path / "original.md"
+                    revised_docx = tmp_path / "revised.docx"
+                    output_path = tmp_path / "candidate.md"
+                    original_path.write_text(source, encoding="utf-8")
+                    _write_docx(
+                        revised_docx,
+                        "<w:p><w:r><w:t>Simple prose follows.</w:t></w:r></w:p>",
+                    )
+
+                    with self.assertRaisesRegex(
+                        self._candidate_error(),
+                        "heading|list",
+                    ):
+                        self._candidate_generator()(original_path, revised_docx, output_path)
+
+                    self.assertFalse(output_path.exists())
 
     def test_revised_candidate_refuses_output_equal_to_original(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

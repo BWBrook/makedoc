@@ -16,6 +16,15 @@ Native Word Track Changes import should remain a separate, narrower OOXML spike
 until there is a small corpus of real tracked-change documents and clear policy
 for comments, moves, formatting, tables, citations, and figure references.
 
+Goal 008 added a synthetic manuscript-like dry run and an operator note:
+
+```text
+docs/docx_review_import_operator_note.md
+```
+
+Use that note before running `revised-candidate`. It states the simple-prose
+preconditions, safe output handling, review checklist, and refusal policy.
+
 ## Routes Tested
 
 ### Route 1: Revised DOCX Text Diff
@@ -176,6 +185,21 @@ This mode deliberately refuses ordinary manuscript structures such as figures,
 tables, headings, lists, and citations. That is the safety contract: candidate
 generation is acceptable only when the source is simple enough that a human can
 inspect the generated review tokens without hidden structural mapping claims.
+
+### Goal 008 synthetic dry run
+
+Goal 008 added a synthetic manuscript-like dry-run test with three simple prose
+paragraphs. The generated temporary DOCX fixture made edits across paragraphs,
+including insertion, deletion, substitution, and unchanged segments. The
+candidate output preserved paragraph separation and placed review tokens in the
+expected paragraphs.
+
+Goal 008 also tightened citation refusal so narrative Pandoc citations such as
+`@smith2020` are rejected, alongside bracketed citation forms such as
+`[@smith2020]` and `[-@smith2020]`.
+
+This remains a synthetic proof only. Real manuscript trials require a later
+explicit goal and approved example material.
 
 ## Validation
 
