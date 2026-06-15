@@ -33,6 +33,7 @@ FENCE_RE = re.compile(r"^\s*(```|~~~)")
 TABLE_SEPARATOR_RE = re.compile(
     r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$"
 )
+FRONT_MATTER_OR_THEMATIC_BREAK_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 IMAGE_RE = re.compile(r"^\s*!\[[^\]]*\]\([^)]*\)")
 HTML_BLOCK_RE = re.compile(r"^\s*</?[A-Za-z][^>]*>\s*$")
 HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
@@ -154,36 +155,151 @@ def _simple_paragraphs(text: str) -> list[str]:
     ]
 
 
+def _unsupported_markdown_line_reason(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+    if FENCE_RE.match(line):
+        return "unsupported Markdown fenced code block"
+    if line.startswith("    ") or line.startswith("\t"):
+        return "unsupported Markdown indented code block"
+    if FRONT_MATTER_OR_THEMATIC_BREAK_RE.match(line):
+        return "unsupported Markdown front matter or thematic break"
+    if IMAGE_RE.match(line):
+        return "unsupported Markdown image or figure line"
+    if TABLE_SEPARATOR_RE.match(line) or line.count("|") >= 2:
+        return "unsupported Markdown table"
+    if "<!--" in line:
+        return "unsupported Markdown HTML comment"
+    if HTML_BLOCK_RE.match(line):
+        return "unsupported Markdown raw HTML block"
+    if HEADING_RE.match(line):
+        return "unsupported Markdown heading"
+    if BLOCKQUOTE_RE.match(line):
+        return "unsupported Markdown blockquote"
+    if BULLET_RE.match(line):
+        return "unsupported Markdown bullet list"
+    if NUMBERED_RE.match(line):
+        return "unsupported Markdown numbered list"
+    if "[@" in line or "[-@" in line or PANDOC_CITATION_RE.search(line):
+        return "unsupported Markdown Pandoc citation"
+    if REVIEW_TOKEN_RE.search(line):
+        return "unsupported existing review-markup token"
+    return None
+
+
 def _unsupported_markdown_reason(text: str) -> str | None:
     for line_number, line in enumerate(text.splitlines(), start=1):
+        reason = _unsupported_markdown_line_reason(line)
+        if reason:
+            return f"line {line_number}: {reason}"
+    return None
+
+
+def _markdown_blocks(text: str) -> list[dict[str, object]]:
+    normalized_newlines = text.replace("\r\n", "\n").replace("\r", "\n")
+    blocks: list[dict[str, object]] = []
+    block_lines: list[tuple[int, str]] = []
+    start_line: int | None = None
+
+    def flush() -> None:
+        nonlocal block_lines, start_line
+        if not block_lines or start_line is None:
+            return
+        blocks.append(
+            {
+                "index": len(blocks) + 1,
+                "start_line": start_line,
+                "end_line": block_lines[-1][0],
+                "lines": block_lines,
+            }
+        )
+        block_lines = []
+        start_line = None
+
+    for line_number, line in enumerate(normalized_newlines.splitlines(), start=1):
         stripped = line.strip()
         if not stripped:
+            flush()
             continue
-        if FENCE_RE.match(line):
-            return f"line {line_number}: unsupported Markdown fenced code block"
-        if line.startswith("    ") or line.startswith("\t"):
-            return f"line {line_number}: unsupported Markdown indented code block"
-        if IMAGE_RE.match(line):
-            return f"line {line_number}: unsupported Markdown image or figure line"
-        if TABLE_SEPARATOR_RE.match(line) or line.count("|") >= 2:
-            return f"line {line_number}: unsupported Markdown table"
-        if "<!--" in line:
-            return f"line {line_number}: unsupported Markdown HTML comment"
-        if HTML_BLOCK_RE.match(line):
-            return f"line {line_number}: unsupported Markdown raw HTML block"
-        if HEADING_RE.match(line):
-            return f"line {line_number}: unsupported Markdown heading"
-        if BLOCKQUOTE_RE.match(line):
-            return f"line {line_number}: unsupported Markdown blockquote"
-        if BULLET_RE.match(line):
-            return f"line {line_number}: unsupported Markdown bullet list"
-        if NUMBERED_RE.match(line):
-            return f"line {line_number}: unsupported Markdown numbered list"
-        if "[@" in line or "[-@" in line or PANDOC_CITATION_RE.search(line):
-            return f"line {line_number}: unsupported Markdown Pandoc citation"
-        if REVIEW_TOKEN_RE.search(line):
-            return f"line {line_number}: unsupported existing review-markup token"
-    return None
+        if start_line is None:
+            start_line = line_number
+        block_lines.append((line_number, line))
+    flush()
+    return blocks
+
+
+def preflight_markdown_source(original_path: str | Path) -> dict[str, object]:
+    """Report candidate-import eligibility for an original Markdown source."""
+
+    original = Path(original_path).expanduser().resolve()
+    text = original.read_text(encoding="utf-8")
+    blocks = _markdown_blocks(text)
+
+    refusals: list[dict[str, object]] = []
+    for block in blocks:
+        for line_number, line in block["lines"]:  # type: ignore[index]
+            reason = _unsupported_markdown_line_reason(line)
+            if reason:
+                refusals.append(
+                    {
+                        "block": block["index"],
+                        "start_line": block["start_line"],
+                        "end_line": block["end_line"],
+                        "line": line_number,
+                        "reason": reason,
+                    }
+                )
+                break
+
+    total_blocks = len(blocks)
+    refused_blocks = len(refusals)
+    eligible_blocks = total_blocks - refused_blocks
+    safe_to_attempt = total_blocks > 0 and refused_blocks == 0
+    return {
+        "path": str(original),
+        "total_blocks": total_blocks,
+        "eligible_blocks": eligible_blocks,
+        "refused_blocks": refused_blocks,
+        "safe_to_attempt": safe_to_attempt,
+        "refusals": refusals,
+    }
+
+
+def format_preflight_report(report: dict[str, object]) -> str:
+    """Render a prose-free preflight report for operators."""
+
+    safe_to_attempt = bool(report["safe_to_attempt"])
+    total_blocks = int(report["total_blocks"])
+    if safe_to_attempt:
+        status = "SAFE_TO_ATTEMPT"
+    elif total_blocks == 0:
+        status = "NO_ELIGIBLE_BLOCKS"
+    else:
+        status = "REFUSED"
+
+    lines = [
+        "DOCX revised-candidate preflight",
+        f"Original path: {report['path']}",
+        f"Overall status: {status}",
+        f"Blocks considered: {report['total_blocks']}",
+        f"Eligible simple-prose paragraphs: {report['eligible_blocks']}",
+        f"Refused blocks: {report['refused_blocks']}",
+        f"Safe to attempt revised-candidate: {'yes' if safe_to_attempt else 'no'}",
+    ]
+
+    refusals = report["refusals"]
+    if refusals:
+        lines.extend(["", "Refusals:"])
+        for refusal in refusals:  # type: ignore[assignment]
+            lines.append(
+                "- block {block}, lines {start_line}-{end_line}, line {line}: "
+                "{reason}".format(**refusal)
+            )
+    else:
+        lines.extend(["", "Refusals: none"])
+
+    return "\n".join(lines) + "\n"
 
 
 def generate_revised_candidate(
@@ -301,6 +417,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Allow replacing an existing candidate output file.",
     )
 
+    preflight = subparsers.add_parser(
+        "preflight",
+        help="Report whether an original Markdown source is eligible for revised-candidate.",
+    )
+    preflight.add_argument(
+        "--original-path",
+        required=True,
+        help="Path to original Markdown or plain prose to preflight.",
+    )
+
     tracked = subparsers.add_parser(
         "track-changes",
         help="Read simple native Word w:ins/w:del elements from DOCX OOXML.",
@@ -326,6 +452,9 @@ def main(argv: list[str] | None = None) -> int:
         except CandidateGenerationError as exc:
             print(f"revised-candidate refused: {exc}", file=sys.stderr)
             return 2
+        return 0
+    if args.command == "preflight":
+        print(format_preflight_report(preflight_markdown_source(args.original_path)), end="")
         return 0
     if args.command == "track-changes":
         print(track_changes_docx_to_review_markup(args.docx))

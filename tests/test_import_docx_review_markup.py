@@ -42,6 +42,16 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
     def _candidate_error(self) -> type[Exception]:
         return getattr(importer, "CandidateGenerationError", ValueError)
 
+    def _preflight_source(self):
+        preflight = getattr(importer, "preflight_markdown_source", None)
+        self.assertIsNotNone(preflight, "preflight_markdown_source should exist")
+        return preflight
+
+    def _format_preflight_report(self):
+        formatter = getattr(importer, "format_preflight_report", None)
+        self.assertIsNotNone(formatter, "format_preflight_report should exist")
+        return formatter
+
     def test_revised_docx_route_marks_insert_delete_and_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             docx_path = Path(tmp) / "revised.docx"
@@ -286,6 +296,26 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
 
             self.assertFalse(output_path.exists())
 
+    def test_revised_candidate_refuses_front_matter_or_thematic_break(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            original_path = tmp_path / "original.md"
+            revised_docx = tmp_path / "revised.docx"
+            output_path = tmp_path / "candidate.md"
+            original_path.write_text(
+                "---\ntitle: Secret title\n---\n\nPlain prose.\n",
+                encoding="utf-8",
+            )
+            _write_docx(revised_docx, "<w:p><w:r><w:t>Plain revised prose.</w:t></w:r></w:p>")
+
+            with self.assertRaisesRegex(
+                self._candidate_error(),
+                "front matter or thematic break",
+            ):
+                self._candidate_generator()(original_path, revised_docx, output_path)
+
+            self.assertFalse(output_path.exists())
+
     def test_revised_candidate_refuses_pandoc_citations(self) -> None:
         citation_sources = {
             "bracketed": "Prior work reported this pattern [@smith2020].\n",
@@ -391,6 +421,114 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(status, 2)
             self.assertIn("unsupported Markdown", stderr.getvalue())
             self.assertFalse(output_path.exists())
+
+    def test_preflight_reports_all_simple_prose_as_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "The first paragraph is simple prose.\n\n"
+                "The second paragraph also stays simple.\n",
+                encoding="utf-8",
+            )
+
+            report = self._preflight_source()(original_path)
+            rendered = self._format_preflight_report()(report)
+
+            self.assertEqual(report["total_blocks"], 2)
+            self.assertEqual(report["eligible_blocks"], 2)
+            self.assertEqual(report["refused_blocks"], 0)
+            self.assertTrue(report["safe_to_attempt"])
+            self.assertEqual(report["refusals"], [])
+            self.assertIn("Overall status: SAFE_TO_ATTEMPT", rendered)
+            self.assertIn("Eligible simple-prose paragraphs: 2", rendered)
+            self.assertIn("Refused blocks: 0", rendered)
+
+    def test_preflight_reports_mixed_refusals_without_source_prose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "# Confidential heading text\n\n"
+                "UNIQUE_PROSE_SHOULD_NOT_APPEAR in a simple paragraph.\n\n"
+                "Prior work by @smith2020 reported the pattern.\n\n"
+                "- bullet item with private wording\n\n"
+                "1. numbered item with private wording\n\n"
+                "Column A | Column B\n--- | ---\nvalue | other\n\n"
+                "![Private caption](figure.png)\n\n"
+                "Existing {++ private addition ++} token.\n",
+                encoding="utf-8",
+            )
+
+            report = self._preflight_source()(original_path)
+            rendered = self._format_preflight_report()(report)
+            reasons = [refusal["reason"] for refusal in report["refusals"]]
+
+            self.assertEqual(report["total_blocks"], 8)
+            self.assertEqual(report["eligible_blocks"], 1)
+            self.assertEqual(report["refused_blocks"], 7)
+            self.assertFalse(report["safe_to_attempt"])
+            self.assertIn("unsupported Markdown heading", reasons)
+            self.assertIn("unsupported Markdown Pandoc citation", reasons)
+            self.assertIn("unsupported Markdown bullet list", reasons)
+            self.assertIn("unsupported Markdown numbered list", reasons)
+            self.assertIn("unsupported Markdown table", reasons)
+            self.assertIn("unsupported Markdown image or figure line", reasons)
+            self.assertIn("unsupported existing review-markup token", reasons)
+            self.assertIn("Overall status: REFUSED", rendered)
+            self.assertIn("block 1", rendered)
+            self.assertIn("line 1", rendered)
+            self.assertNotIn("UNIQUE_PROSE_SHOULD_NOT_APPEAR", rendered)
+            self.assertNotIn("Confidential heading text", rendered)
+            self.assertNotIn("Private caption", rendered)
+
+    def test_preflight_reports_front_matter_without_source_prose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "---\ntitle: Secret title\n---\n\nPlain prose.\n",
+                encoding="utf-8",
+            )
+
+            report = self._preflight_source()(original_path)
+            rendered = self._format_preflight_report()(report)
+            reasons = [refusal["reason"] for refusal in report["refusals"]]
+
+            self.assertEqual(report["total_blocks"], 2)
+            self.assertEqual(report["eligible_blocks"], 1)
+            self.assertEqual(report["refused_blocks"], 1)
+            self.assertFalse(report["safe_to_attempt"])
+            self.assertIn(
+                "unsupported Markdown front matter or thematic break",
+                reasons,
+            )
+            self.assertIn("Overall status: REFUSED", rendered)
+            self.assertIn("line 1", rendered)
+            self.assertNotIn("Secret title", rendered)
+            self.assertNotIn("Plain prose", rendered)
+
+    def test_preflight_cli_returns_zero_even_with_refusals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "# Heading with private words\n\nPlain prose remains.\n",
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                status = importer.main(
+                    [
+                        "preflight",
+                        "--original-path",
+                        str(original_path),
+                    ]
+                )
+
+            rendered = stdout.getvalue()
+            self.assertEqual(status, 0)
+            self.assertIn("Overall status: REFUSED", rendered)
+            self.assertIn("unsupported Markdown heading", rendered)
+            self.assertNotIn("Heading with private words", rendered)
+            self.assertNotIn("Plain prose remains", rendered)
 
 
 if __name__ == "__main__":

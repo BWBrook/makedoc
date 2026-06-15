@@ -12,15 +12,40 @@ round-tripping, and not native Track Changes import.
 Use only simple prose paragraphs separated by blank lines.
 
 Do not use this mode on canonical manuscript sources that contain headings,
-citations, lists, figures, tables, references, raw HTML, code blocks, or
-existing review markup. Those structures are deliberately refused because the
-tool cannot safely map revised DOCX text back onto real manuscript Markdown.
+front matter, thematic breaks, citations, lists, figures, tables, references,
+raw HTML, code blocks, or existing review markup. Those structures are
+deliberately refused because the tool cannot safely map revised DOCX text back
+onto real manuscript Markdown.
 
 Always write to a separate candidate path. Never point `--output` at the
 original source.
 
 Human review is required before any candidate text is copied or adapted into a
 manuscript source file.
+
+## Workflow
+
+Run preflight on the original Markdown or plain-prose source before attempting
+candidate generation:
+
+```sh
+python3 scripts/import_docx_review_markup.py preflight \
+  --original-path path/to/original_simple_prose.md
+```
+
+The preflight report lists block counts, eligible simple-prose paragraphs,
+refused blocks, line references, and refusal reasons. It does not copy
+manuscript prose into the report by default.
+
+Preflight exits 0 when the report is produced, even if the source contains
+refused blocks. Treat that as a successful safety report, not permission to
+work around the refusal.
+
+Only run `revised-candidate` when preflight reports:
+
+```text
+Overall status: SAFE_TO_ATTEMPT
+```
 
 ## Command
 
@@ -64,9 +89,9 @@ Before accepting any candidate text, check:
 A refusal is a successful safety outcome.
 
 If the tool refuses a source because it contains a citation, heading, list,
-figure, table, code block, raw HTML, existing review markup, paragraph-count
-mismatch, or existing output path, do not work around the refusal by weakening
-the source. Choose one of these instead:
+figure, table, front matter, thematic break, code block, raw HTML, existing
+review markup, paragraph-count mismatch, or existing output path, do not work
+around the refusal by weakening the source. Choose one of these instead:
 
 - simplify the source into a temporary prose-only fixture;
 - make the change manually in Markdown;

@@ -23,7 +23,13 @@ docs/docx_review_import_operator_note.md
 ```
 
 Use that note before running `revised-candidate`. It states the simple-prose
-preconditions, safe output handling, review checklist, and refusal policy.
+preconditions, preflight workflow, safe output handling, review checklist, and
+refusal policy.
+
+Goal 010 added a `preflight` mode so an operator can inspect an original source
+for simple-prose eligibility before supplying a revised DOCX. The report gives
+counts, block/line references, and refusal reasons without copying manuscript
+prose by default.
 
 ## Routes Tested
 
@@ -145,6 +151,9 @@ python3 scripts/import_docx_review_markup.py revised-candidate \
   --revised-docx /path/to/revised.docx \
   --output /path/to/candidate.md
 
+python3 scripts/import_docx_review_markup.py preflight \
+  --original-path /path/to/original.md
+
 python3 scripts/import_docx_review_markup.py track-changes \
   --docx /path/to/tracked.docx
 ```
@@ -175,6 +184,7 @@ Conservative refusal cases include:
 - paragraph-count mismatches;
 - fenced or indented code blocks;
 - Markdown tables;
+- front matter or thematic break delimiter lines;
 - figure/image lines;
 - raw HTML or HTML comments;
 - headings, blockquotes, bullet lists, and numbered lists;
@@ -212,6 +222,35 @@ and produced sensible insertion, deletion, and substitution tokens.
 This is a readiness finding, not production adoption. CPE was not mutated, and
 real manuscript use should still require a later explicit goal with approved
 examples and human review.
+
+### Goal 010 preflight report
+
+Goal 010 added:
+
+```sh
+python3 scripts/import_docx_review_markup.py preflight \
+  --original-path /path/to/original.md
+```
+
+The mode reads only the original Markdown/plain-prose source and writes no
+candidate file. It reports:
+
+- total non-empty blocks considered;
+- eligible simple-prose paragraph count;
+- refused block count;
+- block and line references for each refusal;
+- refusal reasons aligned with `revised-candidate`;
+- an overall status, including `SAFE_TO_ATTEMPT` only when the whole source is
+  eligible under current conservative rules.
+
+The report intentionally does not include manuscript prose by default.
+Preflight exits 0 when the report is produced, even if refused blocks are
+present; non-zero status is reserved for CLI, file, or runtime errors.
+
+This improves operator visibility before candidate generation but does not
+broaden importer support. Citations, headings, lists, tables, figures, front
+matter, thematic breaks, code, raw HTML, existing review markup, and other
+unsupported manuscript structures remain refusals.
 
 ## Validation
 
