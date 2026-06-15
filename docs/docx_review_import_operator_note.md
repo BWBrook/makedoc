@@ -77,3 +77,8 @@ the source. Choose one of these instead:
 CPE or any other real manuscript trial requires a later explicit goal and
 approved example material. Do not run this importer against real manuscript
 repositories during ordinary maintenance or publication closeout.
+
+Goal 009 proved that a tiny approved CPE simple-prose excerpt can pass the
+current workflow when copied into `/tmp` and reviewed as evidence. That does
+not authorize routine manuscript-repo use; it only supports a later explicitly
+scoped real-manuscript trial.

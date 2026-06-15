@@ -201,6 +201,18 @@ Goal 008 also tightened citation refusal so narrative Pandoc citations such as
 This remains a synthetic proof only. Real manuscript trials require a later
 explicit goal and approved example material.
 
+### Goal 009 controlled CPE readiness trial
+
+Goal 009 used CPE only as an approved read-only proving ground and copied a
+tiny simple-prose excerpt into `/tmp/makedoc-goal009-cpe-import/` for a
+controlled trial. The trial succeeded on an excerpt that already satisfied the
+operator-note preconditions: candidate output preserved paragraph separation
+and produced sensible insertion, deletion, and substitution tokens.
+
+This is a readiness finding, not production adoption. CPE was not mutated, and
+real manuscript use should still require a later explicit goal with approved
+examples and human review.
+
 ## Validation
 
 Focused tests use generated temporary DOCX ZIP/XML fixtures:
