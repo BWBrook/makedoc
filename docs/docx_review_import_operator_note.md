@@ -33,9 +33,18 @@ python3 scripts/import_docx_review_markup.py preflight \
   --original-path path/to/original_simple_prose.md
 ```
 
-The preflight report lists block counts, eligible simple-prose paragraphs,
-refused blocks, line references, and refusal reasons. It does not copy
-manuscript prose into the report by default.
+Text is the default human-readable format. For agents or automation, request
+structured JSON:
+
+```sh
+python3 scripts/import_docx_review_markup.py preflight \
+  --original-path path/to/original_simple_prose.md \
+  --format json
+```
+
+Both formats list block counts, eligible simple-prose paragraphs, refused
+blocks, line references, refusal reasons, and an overall status. Neither format
+copies manuscript prose into the report by default.
 
 Preflight exits 0 when the report is produced, even if the source contains
 refused blocks. Treat that as a successful safety report, not permission to

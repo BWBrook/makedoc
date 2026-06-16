@@ -31,6 +31,10 @@ for simple-prose eligibility before supplying a revised DOCX. The report gives
 counts, block/line references, and refusal reasons without copying manuscript
 prose by default.
 
+Goal 011 added structured JSON output for that same preflight policy so agents
+and automation can consume the report without scraping the human-readable text.
+The text report remains the default.
+
 ## Routes Tested
 
 ### Route 1: Revised DOCX Text Diff
@@ -139,7 +143,7 @@ Added experimental script:
 scripts/import_docx_review_markup.py
 ```
 
-The script has three CLI modes:
+The script has four CLI modes:
 
 ```sh
 python3 scripts/import_docx_review_markup.py revised \
@@ -153,6 +157,10 @@ python3 scripts/import_docx_review_markup.py revised-candidate \
 
 python3 scripts/import_docx_review_markup.py preflight \
   --original-path /path/to/original.md
+
+python3 scripts/import_docx_review_markup.py preflight \
+  --original-path /path/to/original.md \
+  --format json
 
 python3 scripts/import_docx_review_markup.py track-changes \
   --docx /path/to/tracked.docx
@@ -251,6 +259,33 @@ This improves operator visibility before candidate generation but does not
 broaden importer support. Citations, headings, lists, tables, figures, front
 matter, thematic breaks, code, raw HTML, existing review markup, and other
 unsupported manuscript structures remain refusals.
+
+### Goal 011 structured preflight output
+
+Goal 011 added:
+
+```sh
+python3 scripts/import_docx_review_markup.py preflight \
+  --original-path /path/to/original.md \
+  --format json
+```
+
+The default remains `--format text`. JSON output uses only Python standard
+library support and reports the same policy/data as the text report:
+
+- `status`: `SAFE_TO_ATTEMPT`, `REFUSED`, or `NO_ELIGIBLE_BLOCKS`;
+- `path`: absolute path to the preflighted source;
+- `total_blocks`;
+- `eligible_blocks`;
+- `refused_blocks`;
+- `safe_to_attempt`;
+- `refusals`: objects with `block`, `start_line`, `end_line`, `line`, and
+  `reason`.
+
+JSON output intentionally does not include source prose, title text, heading
+text, citation text, or paragraph text by default. Preflight still exits 0 when
+the report is produced, including reports with refused blocks; non-zero status
+is reserved for CLI, file, or runtime errors.
 
 ## Validation
 

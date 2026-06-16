@@ -9,6 +9,8 @@ This is not a production importer. It provides narrow evidence routes:
    emit insertion/deletion review-markup tokens in document order.
 3. Write a separate revised-DOCX candidate Markdown file for simple prose
    paragraphs only.
+4. Preflight original Markdown/plain-prose sources and report whether
+   candidate generation is safe to attempt.
 
 The prototype intentionally ignores layout, styles, tables, figures, comments,
 citations, field codes, moves, and Markdown structure. It uses only Python
@@ -18,6 +20,7 @@ stdlib ZIP/XML parsing so the feasibility evidence is dependency-light.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import zipfile
@@ -196,6 +199,14 @@ def _unsupported_markdown_reason(text: str) -> str | None:
     return None
 
 
+def _preflight_status(total_blocks: int, refused_blocks: int) -> str:
+    if total_blocks == 0:
+        return "NO_ELIGIBLE_BLOCKS"
+    if refused_blocks:
+        return "REFUSED"
+    return "SAFE_TO_ATTEMPT"
+
+
 def _markdown_blocks(text: str) -> list[dict[str, object]]:
     normalized_newlines = text.replace("\r\n", "\n").replace("\r", "\n")
     blocks: list[dict[str, object]] = []
@@ -255,8 +266,10 @@ def preflight_markdown_source(original_path: str | Path) -> dict[str, object]:
     total_blocks = len(blocks)
     refused_blocks = len(refusals)
     eligible_blocks = total_blocks - refused_blocks
-    safe_to_attempt = total_blocks > 0 and refused_blocks == 0
+    status = _preflight_status(total_blocks, refused_blocks)
+    safe_to_attempt = status == "SAFE_TO_ATTEMPT"
     return {
+        "status": status,
         "path": str(original),
         "total_blocks": total_blocks,
         "eligible_blocks": eligible_blocks,
@@ -269,15 +282,8 @@ def preflight_markdown_source(original_path: str | Path) -> dict[str, object]:
 def format_preflight_report(report: dict[str, object]) -> str:
     """Render a prose-free preflight report for operators."""
 
+    status = str(report["status"])
     safe_to_attempt = bool(report["safe_to_attempt"])
-    total_blocks = int(report["total_blocks"])
-    if safe_to_attempt:
-        status = "SAFE_TO_ATTEMPT"
-    elif total_blocks == 0:
-        status = "NO_ELIGIBLE_BLOCKS"
-    else:
-        status = "REFUSED"
-
     lines = [
         "DOCX revised-candidate preflight",
         f"Original path: {report['path']}",
@@ -300,6 +306,12 @@ def format_preflight_report(report: dict[str, object]) -> str:
         lines.extend(["", "Refusals: none"])
 
     return "\n".join(lines) + "\n"
+
+
+def format_preflight_json(report: dict[str, object]) -> str:
+    """Render a deterministic, prose-free preflight JSON report."""
+
+    return json.dumps(report, indent=2) + "\n"
 
 
 def generate_revised_candidate(
@@ -426,6 +438,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Path to original Markdown or plain prose to preflight.",
     )
+    preflight.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Preflight report format.",
+    )
 
     tracked = subparsers.add_parser(
         "track-changes",
@@ -454,7 +472,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return 0
     if args.command == "preflight":
-        print(format_preflight_report(preflight_markdown_source(args.original_path)), end="")
+        report = preflight_markdown_source(args.original_path)
+        if args.format == "json":
+            print(format_preflight_json(report), end="")
+        else:
+            print(format_preflight_report(report), end="")
         return 0
     if args.command == "track-changes":
         print(track_changes_docx_to_review_markup(args.docx))

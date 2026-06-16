@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -442,6 +443,7 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertIn("Overall status: SAFE_TO_ATTEMPT", rendered)
             self.assertIn("Eligible simple-prose paragraphs: 2", rendered)
             self.assertIn("Refused blocks: 0", rendered)
+            self.assertEqual(report["status"], "SAFE_TO_ATTEMPT")
 
     def test_preflight_reports_mixed_refusals_without_source_prose(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -466,6 +468,7 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(report["eligible_blocks"], 1)
             self.assertEqual(report["refused_blocks"], 7)
             self.assertFalse(report["safe_to_attempt"])
+            self.assertEqual(report["status"], "REFUSED")
             self.assertIn("unsupported Markdown heading", reasons)
             self.assertIn("unsupported Markdown Pandoc citation", reasons)
             self.assertIn("unsupported Markdown bullet list", reasons)
@@ -496,6 +499,7 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(report["eligible_blocks"], 1)
             self.assertEqual(report["refused_blocks"], 1)
             self.assertFalse(report["safe_to_attempt"])
+            self.assertEqual(report["status"], "REFUSED")
             self.assertIn(
                 "unsupported Markdown front matter or thematic break",
                 reasons,
@@ -529,6 +533,132 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertIn("unsupported Markdown heading", rendered)
             self.assertNotIn("Heading with private words", rendered)
             self.assertNotIn("Plain prose remains", rendered)
+
+    def test_preflight_cli_json_reports_safe_simple_prose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "UNIQUE_SAFE_PROSE_ONE.\n\nUNIQUE_SAFE_PROSE_TWO.\n",
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                status = importer.main(
+                    [
+                        "preflight",
+                        "--original-path",
+                        str(original_path),
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            rendered = stdout.getvalue()
+            payload = json.loads(rendered)
+            self.assertEqual(status, 0)
+            self.assertEqual(payload["status"], "SAFE_TO_ATTEMPT")
+            self.assertEqual(payload["path"], str(original_path.resolve()))
+            self.assertEqual(payload["total_blocks"], 2)
+            self.assertEqual(payload["eligible_blocks"], 2)
+            self.assertEqual(payload["refused_blocks"], 0)
+            self.assertTrue(payload["safe_to_attempt"])
+            self.assertEqual(payload["refusals"], [])
+            self.assertNotIn("UNIQUE_SAFE_PROSE_ONE", rendered)
+            self.assertNotIn("UNIQUE_SAFE_PROSE_TWO", rendered)
+
+    def test_preflight_cli_json_reports_refusals_without_source_prose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "# Secret Heading\n\n"
+                "UNIQUE_REFUSED_PROSE should stay out of JSON.\n\n"
+                "Prior work by @smith2020 reported the pattern.\n",
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                status = importer.main(
+                    [
+                        "preflight",
+                        "--original-path",
+                        str(original_path),
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            rendered = stdout.getvalue()
+            payload = json.loads(rendered)
+            reasons = [refusal["reason"] for refusal in payload["refusals"]]
+            self.assertEqual(status, 0)
+            self.assertEqual(payload["status"], "REFUSED")
+            self.assertEqual(payload["total_blocks"], 3)
+            self.assertEqual(payload["eligible_blocks"], 1)
+            self.assertEqual(payload["refused_blocks"], 2)
+            self.assertFalse(payload["safe_to_attempt"])
+            self.assertIn("unsupported Markdown heading", reasons)
+            self.assertIn("unsupported Markdown Pandoc citation", reasons)
+            self.assertEqual(payload["refusals"][0]["block"], 1)
+            self.assertEqual(payload["refusals"][0]["line"], 1)
+            self.assertNotIn("Secret Heading", rendered)
+            self.assertNotIn("UNIQUE_REFUSED_PROSE", rendered)
+            self.assertNotIn("smith2020", rendered)
+
+    def test_preflight_cli_json_reports_front_matter_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text(
+                "---\ntitle: Secret title\n---\n\nPlain prose.\n",
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                status = importer.main(
+                    [
+                        "preflight",
+                        "--original-path",
+                        str(original_path),
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            rendered = stdout.getvalue()
+            payload = json.loads(rendered)
+            self.assertEqual(status, 0)
+            self.assertEqual(payload["status"], "REFUSED")
+            self.assertEqual(payload["refused_blocks"], 1)
+            self.assertEqual(
+                payload["refusals"][0]["reason"],
+                "unsupported Markdown front matter or thematic break",
+            )
+            self.assertEqual(payload["refusals"][0]["line"], 1)
+            self.assertNotIn("Secret title", rendered)
+            self.assertNotIn("Plain prose", rendered)
+
+    def test_preflight_cli_rejects_invalid_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            original_path = Path(tmp) / "original.md"
+            original_path.write_text("Plain prose.\n", encoding="utf-8")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as raised:
+                    importer.main(
+                        [
+                            "preflight",
+                            "--original-path",
+                            str(original_path),
+                            "--format",
+                            "yaml",
+                        ]
+                    )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("invalid choice", stderr.getvalue())
 
 
 if __name__ == "__main__":
