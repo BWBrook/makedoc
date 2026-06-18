@@ -110,6 +110,65 @@ plausible path for future approved trials, but only as isolated excerpts copied
 to temporary evidence locations and reviewed by a human. The current tool
 should not be used directly on the whole canonical CPE source.
 
+## Goal 013 Eligible Block References
+
+Goal 013 reran the same structured preflight audit after adding
+`eligible_blocks_detail` to the JSON report.
+
+Raw and derived evidence was written under:
+
+```text
+/tmp/makedoc-goal013-eligible-blocks/
+```
+
+Files:
+
+```text
+/tmp/makedoc-goal013-eligible-blocks/cpe-main-preflight.json
+/tmp/makedoc-goal013-eligible-blocks/cpe-main-preflight-summary.json
+/tmp/makedoc-goal013-eligible-blocks/cpe-main-eligible-refs.json
+/tmp/makedoc-goal013-eligible-blocks/cpe-main-refusal-refs.json
+```
+
+Counts remained unchanged:
+
+| Metric | Count |
+| --- | ---: |
+| total blocks | 48 |
+| eligible blocks | 23 |
+| eligible block refs reported | 23 |
+| refused blocks | 25 |
+
+Overall status remained:
+
+```text
+REFUSED
+```
+
+First five eligible references:
+
+```text
+block 2 lines 3-3
+block 4 lines 7-7
+block 6 lines 11-11
+block 8 lines 15-15
+block 11 lines 21-21
+```
+
+Last five eligible references:
+
+```text
+block 39 lines 77-77
+block 41 lines 81-81
+block 43 lines 85-85
+block 45 lines 89-89
+block 47 lines 93-93
+```
+
+Product implication: future excerpt workflows can propose eligible block/line
+ranges for human approval without copying manuscript prose by default. Whole
+canonical CPE import remains correctly refused.
+
 ## Recommendation
 
 Keep the importer conservative.
@@ -125,6 +184,7 @@ Recommended next importer strategy:
    other manuscript structures until there is a specific approved policy and
    fixture set for each structure.
 
-CPE branch-fate recommendation: preserve the existing local CPE pilot branch
-until this audit is reviewed. Cleanup, disposal, or manuscript-side
-publication should be a separate explicit goal.
+CPE branch-fate recommendation after Goal 013: preserve the existing local CPE
+pilot branch through this audit review. Make Goal 014 a separate explicit CPE
+branch disposition or cleanup decision; do not combine that with importer
+support broadening.

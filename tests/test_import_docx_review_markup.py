@@ -440,6 +440,13 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(report["refused_blocks"], 0)
             self.assertTrue(report["safe_to_attempt"])
             self.assertEqual(report["refusals"], [])
+            self.assertEqual(
+                report["eligible_blocks_detail"],
+                [
+                    {"block": 1, "start_line": 1, "end_line": 1},
+                    {"block": 2, "start_line": 3, "end_line": 3},
+                ],
+            )
             self.assertIn("Overall status: SAFE_TO_ATTEMPT", rendered)
             self.assertIn("Eligible simple-prose paragraphs: 2", rendered)
             self.assertIn("Refused blocks: 0", rendered)
@@ -469,6 +476,10 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(report["refused_blocks"], 7)
             self.assertFalse(report["safe_to_attempt"])
             self.assertEqual(report["status"], "REFUSED")
+            self.assertEqual(
+                report["eligible_blocks_detail"],
+                [{"block": 2, "start_line": 3, "end_line": 3}],
+            )
             self.assertIn("unsupported Markdown heading", reasons)
             self.assertIn("unsupported Markdown Pandoc citation", reasons)
             self.assertIn("unsupported Markdown bullet list", reasons)
@@ -564,6 +575,13 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(payload["refused_blocks"], 0)
             self.assertTrue(payload["safe_to_attempt"])
             self.assertEqual(payload["refusals"], [])
+            self.assertEqual(
+                payload["eligible_blocks_detail"],
+                [
+                    {"block": 1, "start_line": 1, "end_line": 1},
+                    {"block": 2, "start_line": 3, "end_line": 3},
+                ],
+            )
             self.assertNotIn("UNIQUE_SAFE_PROSE_ONE", rendered)
             self.assertNotIn("UNIQUE_SAFE_PROSE_TWO", rendered)
 
@@ -598,6 +616,10 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(payload["eligible_blocks"], 1)
             self.assertEqual(payload["refused_blocks"], 2)
             self.assertFalse(payload["safe_to_attempt"])
+            self.assertEqual(
+                payload["eligible_blocks_detail"],
+                [{"block": 2, "start_line": 3, "end_line": 3}],
+            )
             self.assertIn("unsupported Markdown heading", reasons)
             self.assertIn("unsupported Markdown Pandoc citation", reasons)
             self.assertEqual(payload["refusals"][0]["block"], 1)
@@ -631,6 +653,10 @@ class ImportDocxReviewMarkupTests(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertEqual(payload["status"], "REFUSED")
             self.assertEqual(payload["refused_blocks"], 1)
+            self.assertEqual(
+                payload["eligible_blocks_detail"],
+                [{"block": 2, "start_line": 5, "end_line": 5}],
+            )
             self.assertEqual(
                 payload["refusals"][0]["reason"],
                 "unsupported Markdown front matter or thematic break",

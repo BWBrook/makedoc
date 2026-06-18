@@ -43,8 +43,10 @@ python3 scripts/import_docx_review_markup.py preflight \
 ```
 
 Both formats list block counts, eligible simple-prose paragraphs, refused
-blocks, line references, refusal reasons, and an overall status. Neither format
-copies manuscript prose into the report by default.
+blocks, line references, refusal reasons, and an overall status. JSON also
+includes `eligible_blocks_detail`, a prose-free list of eligible block and line
+ranges for future human-approved excerpt selection. Neither format copies
+manuscript prose into the report by default.
 
 Preflight exits 0 when the report is produced, even if the source contains
 refused blocks. Treat that as a successful safety report, not permission to

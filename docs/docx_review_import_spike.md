@@ -287,6 +287,25 @@ text, citation text, or paragraph text by default. Preflight still exits 0 when
 the report is produced, including reports with refused blocks; non-zero status
 is reserved for CLI, file, or runtime errors.
 
+### Goal 013 eligible block reporting
+
+Goal 013 extended structured preflight JSON with `eligible_blocks_detail`,
+a prose-free array of eligible block references:
+
+```json
+{
+  "block": 2,
+  "start_line": 3,
+  "end_line": 3
+}
+```
+
+The field is intended for action-agent and operator workflows that need to
+propose candidate simple-prose excerpt ranges for human approval without
+copying manuscript text into logs or tracked notes. It does not broaden
+importer support: headings, citations, figures, tables, lists, front matter,
+raw HTML, code, and existing review markup remain refusals.
+
 ## Validation
 
 Focused tests use generated temporary DOCX ZIP/XML fixtures:

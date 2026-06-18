@@ -248,20 +248,30 @@ def preflight_markdown_source(original_path: str | Path) -> dict[str, object]:
     blocks = _markdown_blocks(text)
 
     refusals: list[dict[str, object]] = []
+    eligible_blocks_detail: list[dict[str, object]] = []
     for block in blocks:
+        block_refusal: dict[str, object] | None = None
         for line_number, line in block["lines"]:  # type: ignore[index]
             reason = _unsupported_markdown_line_reason(line)
             if reason:
-                refusals.append(
-                    {
-                        "block": block["index"],
-                        "start_line": block["start_line"],
-                        "end_line": block["end_line"],
-                        "line": line_number,
-                        "reason": reason,
-                    }
-                )
+                block_refusal = {
+                    "block": block["index"],
+                    "start_line": block["start_line"],
+                    "end_line": block["end_line"],
+                    "line": line_number,
+                    "reason": reason,
+                }
                 break
+        if block_refusal:
+            refusals.append(block_refusal)
+        else:
+            eligible_blocks_detail.append(
+                {
+                    "block": block["index"],
+                    "start_line": block["start_line"],
+                    "end_line": block["end_line"],
+                }
+            )
 
     total_blocks = len(blocks)
     refused_blocks = len(refusals)
@@ -275,6 +285,7 @@ def preflight_markdown_source(original_path: str | Path) -> dict[str, object]:
         "eligible_blocks": eligible_blocks,
         "refused_blocks": refused_blocks,
         "safe_to_attempt": safe_to_attempt,
+        "eligible_blocks_detail": eligible_blocks_detail,
         "refusals": refusals,
     }
 
