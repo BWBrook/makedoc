@@ -306,6 +306,34 @@ copying manuscript text into logs or tracked notes. It does not broaden
 importer support: headings, citations, figures, tables, lists, front matter,
 raw HTML, code, and existing review markup remain refusals.
 
+### Goal 015 synthetic review loop proof
+
+Goal 015 added a rerunnable synthetic proof:
+
+```sh
+make test-review-import-loop
+```
+
+The target connects the text-only revised-DOCX candidate generator to the
+visible review-markup renderer:
+
+1. generate a temporary simple-prose original Markdown source;
+2. generate a temporary synthetic revised DOCX;
+3. run `revised-candidate` to write a separate candidate Markdown file;
+4. prepare the candidate with `review_markup.enabled: true`;
+5. build generated PDF/DOCX evidence;
+6. inspect candidate tokens, prepared Markdown markers, PDF text, and DOCX XML
+   for addition, deletion, and substitution traces.
+
+Evidence is written under:
+
+```text
+dist/review-import-loop/
+```
+
+This remains synthetic evidence only. It proves the controlled operator loop
+for simple prose, not general real-manuscript import or Word round-tripping.
+
 ## Validation
 
 Focused tests use generated temporary DOCX ZIP/XML fixtures:
@@ -319,6 +347,7 @@ Validation commands:
 ```text
 python3 -m py_compile scripts/import_docx_review_markup.py
 python3 -m unittest tests/test_import_docx_review_markup.py
+make test-review-import-loop
 make test-review-markup
 git diff --check
 ```

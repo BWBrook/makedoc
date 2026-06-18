@@ -6,6 +6,11 @@ Status note, 2026-06-14: Goal 004 replaced strikeout deletion rendering with
 bold bracketed deletion markers because rendered PDF strikeout made deleted
 words difficult to read by eye. The source token syntax remains unchanged.
 
+Status note, 2026-06-18: Goal 015 added `make test-review-import-loop`, a
+synthetic proof that a revised DOCX candidate import can generate Markdown
+review tokens and render them as visible bracketed markers in generated
+PDF/DOCX evidence.
+
 ## Decision
 
 Human-editable Markdown review markup is feasible as an experimental `makedoc`

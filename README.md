@@ -130,6 +130,7 @@ Regression checks:
 make python-tests
 make test-output-routing
 make test-external-relative-paths
+make test-review-import-loop
 make test-review-markup
 ```
 `make python-tests` runs focused stdlib unit tests for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases.
@@ -137,6 +138,8 @@ make test-review-markup
 `make test-output-routing` runs a unit-style routing test that validates fixture-only and default output locations.
 
 `make test-external-relative-paths` builds a synthetic external manuscript repo using config-relative profile entries and source-relative figure image paths.
+
+`make test-review-import-loop` runs a synthetic end-to-end proof from a revised DOCX candidate import through review-markup PDF/DOCX rendering evidence.
 
 `make test-review-markup` validates the experimental review-markup profile, checks the prepared Markdown transform, regenerates proof DOCX/PDF outputs, and inspects PDF text plus DOCX XML for visible review traces.
 

@@ -73,6 +73,27 @@ By default the command refuses to overwrite an existing output file. Use a new
 candidate path for each run unless there is an explicit reason to replace an
 older candidate.
 
+## Synthetic Loop Proof
+
+Run the synthetic end-to-end proof before using the workflow in a new setting:
+
+```sh
+make test-review-import-loop
+```
+
+The proof generates a temporary simple-prose original source and revised DOCX,
+writes a separate candidate Markdown file, builds the candidate through the
+review-markup rendering profile, and checks generated PDF/DOCX evidence for
+bold bracketed addition, deletion, and substitution markers.
+
+Generated evidence is written under:
+
+```text
+dist/review-import-loop/
+```
+
+Those files are evidence artifacts, not committed source.
+
 ## Safe Output Handling
 
 Treat the candidate file as evidence, not source truth.
