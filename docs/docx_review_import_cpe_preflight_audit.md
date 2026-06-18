@@ -188,3 +188,30 @@ CPE branch-fate recommendation after Goal 013: preserve the existing local CPE
 pilot branch through this audit review. Make Goal 014 a separate explicit CPE
 branch disposition or cleanup decision; do not combine that with importer
 support broadening.
+
+## Goal 014 Pilot Branch Disposition
+
+Goal 014 retired the local CPE pilot branch and worktree side effects after
+the review-markup and DOCX-import evidence had been recorded in Makedoc.
+
+Disposition summary:
+
+- confirmed CPE pilot branch `codex/makedoc-review-markup-pilot` had no unique
+  commits relative to local `main`;
+- restored only `settings/build.yaml` in CPE;
+- removed only `manuscript/text/main_review_markup_probe.md`;
+- removed ignored pilot generated outputs under `build/review-markup-pilot/`
+  when present;
+- switched CPE back to local `main`;
+- deleted local branch `codex/makedoc-review-markup-pilot` using normal
+  non-force branch deletion.
+
+Final CPE state:
+
+```text
+## main...origin/main
+e1b2433
+```
+
+No CPE manuscript prose, review probe text, headings, citations, paragraph
+text, or figure captions are copied into this note.
