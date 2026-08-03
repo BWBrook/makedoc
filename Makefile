@@ -187,7 +187,7 @@ FIXTURE_MANIFEST_OUT := $(FIXTURE_OUTPUT_DIR)/$(FIXTURE_OUTPUT_STEM)_build_manif
 FIXTURE_CONTRACT_PATH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT),testbed/expected/golden_contract.yaml)
 FIXTURE_CONTRACT_PATH_SH := $(if $(strip $(FIXTURE_GOLDEN_CONTRACT)),$(FIXTURE_GOLDEN_CONTRACT_SH),testbed/expected/golden_contract.yaml)
 
-.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-external-relative-paths test-figure-modes test-author-injection test-review-markup check-tools check-fixture-tools python-tests validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check fixture-golden-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
+.PHONY: all pdf docx manifest fixture-manifest show-manifest diagnose fixture-diagnose fixture-all fixture-pdf fixture-docx testbed testbed/ testbed-all test-output-routing test-external-relative-paths test-figure-modes test-author-injection test-review-markup check-tools check-fixture-tools python-tests validate-config lint-manuscript refs-audit fixture-lint fixture-refs-audit fixture-contract-check check-fixture-guards check check-fixture wsl-smoke clean clean-all tidy profiles profile-show profile-scaffold csl-search csl-source deps-estimate-minimal deps-estimate-full deps-dry-run-minimal deps-dry-run-full deps-install-minimal deps-install-full
 
 all: pdf docx manifest
 
@@ -345,9 +345,6 @@ fixture-refs-audit:
 fixture-contract-check: check-fixture-tools $(FIXTURE_PDF_OUT) $(FIXTURE_DOCX_OUT)
 	@echo "Running fixture contract checks..."
 	@python3 "$(GOLDEN_CHECK)" --pdf $(FIXTURE_PDF_OUT_SH) --docx $(FIXTURE_DOCX_OUT_SH) --contract $(FIXTURE_CONTRACT_PATH_SH)
-
-fixture-golden-check: fixture-contract-check
-	@:
 
 check-fixture-guards:
 	@echo "Running fixture guard regression tests..."

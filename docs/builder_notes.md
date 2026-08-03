@@ -38,14 +38,14 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Implement journal-name CSL resolver with local-first matching and Zotero style-index fallback download.
 - 2026-02-13: Add a profile scaffold helper and Make wrapper so onboarding new manuscript repositories does not require manual YAML editing.
 - 2026-02-13: Add fixture golden checks based on rendered DOCX/PDF structure rather than brittle byte-for-byte snapshots.
-- 2026-02-13: Provide an Ubuntu/WSL installer script with minimal/full package tiers and apt simulation size reporting.
+- 2026-02-13: Provide a cross-platform dependency helper with Ubuntu/WSL and macOS minimal/full package tiers.
 - 2026-02-13: Use cached apt package installs in CI to reduce repeated dependency provisioning overhead.
 - 2026-02-13: Keep cached apt setup in CI, but add explicit `apt-get install` verification in build jobs to avoid TeX font availability drift.
 - 2026-02-13: Add `wsl-smoke` aggregate Make target to validate bootstrap, profile resolution, local CSL lookup, builds, fixture golden checks, and guard tests in one command.
 - 2026-02-13: Generate profile cache include files atomically in `Makefile` to avoid parse-time race failures during concurrent make invocations.
 - 2026-02-13: Add strict config-contract validation before builds to catch schema/path regressions early.
 - 2026-02-13: Emit machine-readable build manifests for active and fixture profiles to improve reproducibility and evidence capture.
-- 2026-02-13: Keep fixture expectations in a versioned YAML contract and treat `fixture-golden-check` as a compatibility alias to `fixture-contract-check`.
+- 2026-02-13: Keep fixture expectations in a versioned YAML contract and expose the canonical `fixture-contract-check` target.
 - 2026-02-13: Collect diagnostics bundles on CI failure for faster triage without rerunning jobs locally.
 - 2026-02-13: Add profile-driven PDF layout controls through generated include files (page numbers, line spacing, line numbering), applied via `--include-in-header`.
 - 2026-02-13: Fixed line-numbering detection by checking LaTeX packages via `kpsewhich` in `scripts/render_pdf_layout.py`.
@@ -108,7 +108,7 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Added `scripts/build_profile.py` and refactored `Makefile` to resolve active/fixture variables from YAML config.
 - 2026-02-13: Added `scripts/csl_resolver.py` and Make targets `csl-search` / `csl-source`.
 - 2026-02-13: Added root `README.md` documenting quickstart, profile schema, CSL tooling, and external path wiring.
-- 2026-02-13: Added `scripts/install_ubuntu_deps.sh` and dependency helper targets (`deps-estimate-*`, `deps-install-*`, `deps-dry-run-*`).
+- 2026-02-13: Added dependency helper targets (`deps-estimate-*`, `deps-install-*`, `deps-dry-run-*`) backed by the cross-platform installer.
 - 2026-02-13: Added `scripts/profile_scaffold.py` and `make profile-scaffold` wrapper target for profile generation/appending.
 - 2026-02-13: Added `scripts/fixture_golden_check.py` and integrated it into `check-fixture`.
 - 2026-02-13: Updated GitHub Actions CI to use cached apt package setup and run fixture golden checks.
@@ -203,7 +203,7 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - `make show-manifest` -> PASS (pretty-printed active manifest JSON)
 - `make diagnose` -> PASS (created `dist/diagnostics/<timestamp>_default` bundle)
 - `make fixture-diagnose` -> PASS (created `dist/diagnostics/<timestamp>_fixture` bundle)
-- `make fixture-golden-check` -> PASS (backward-compatible alias to contract check remains valid)
+- `make fixture-contract-check` -> PASS (fixture contract checks passed)
 - `make manifest && make fixture-manifest` -> PASS (manifests present; make reports up-to-date)
 - `gh run watch 21975285208 --repo BWBrook/makedoc --exit-status` -> PASS (Phase 8 CI run green; diagnostics upload steps skipped because no failures)
 - `make testbed` -> PASS (created `dist/testbed/fixture_manuscript.pdf`, `dist/testbed/fixture_manuscript.docx`, `dist/testbed/fixture_manuscript_build_manifest.json` and no root `dist/` files)

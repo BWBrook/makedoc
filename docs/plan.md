@@ -136,10 +136,10 @@ Out of scope for this iteration:
 
 ## Phase 7 Work Package
 ### Deliverables
-- Ubuntu installer script with install tiers at `scripts/install_ubuntu_deps.sh`
+- Cross-platform dependency installer with install tiers at `scripts/install_deps.sh`
 - Make targets for dependency estimation/install workflows (`deps-*`)
 - Profile scaffolding utility at `scripts/profile_scaffold.py` and `make profile-scaffold` wrapper
-- Fixture golden-check script at `scripts/fixture_golden_check.py` and `make fixture-golden-check`
+- Fixture golden-check script at `scripts/fixture_golden_check.py`, integrated into `make check-fixture`
 - CI updates to use cached apt package installs and execute fixture golden checks
 - `README.md` updates covering WSL/Ubuntu bootstrap and scaffold workflows
 
@@ -160,7 +160,7 @@ Out of scope for this iteration:
   - `validate-config`
   - `manifest` / `fixture-manifest` / `show-manifest`
   - `diagnose` / `fixture-diagnose`
-  - `fixture-contract-check` (with backward-compatible `fixture-golden-check` alias)
+  - `fixture-contract-check`
 - CI updates to:
   - run config validation in guard stage
   - include manifest files in build artifacts
@@ -271,7 +271,7 @@ Out of scope for this iteration:
 - 2026-02-13: Added root `README.md` with quickstart and external repository wiring guidance.
 - 2026-02-13: Added journal-style resolver (`scripts/csl_resolver.py`) and Make targets `csl-search` / `csl-source`.
 - 2026-02-13: Revalidated gates after config transition (`make check`, `make check-fixture`, `make check-fixture-guards` all passed).
-- 2026-02-13: Added Ubuntu installer script (`scripts/install_ubuntu_deps.sh`) with minimal/full tiers and apt size simulation reporting.
+- 2026-02-13: Added the cross-platform dependency installer (`scripts/install_deps.sh`) with Ubuntu/macOS minimal/full tiers and apt size simulation reporting.
 - 2026-02-13: Added profile scaffold helper (`scripts/profile_scaffold.py`) and Make wrapper target (`profile-scaffold`).
 - 2026-02-13: Added fixture golden checks (`scripts/fixture_golden_check.py`) and integrated into `check-fixture`.
 - 2026-02-13: Updated CI to use cached apt package installs and run fixture golden checks in `build-fixture`.
