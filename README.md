@@ -130,7 +130,6 @@ Regression checks:
 make python-tests
 make test-output-routing
 make test-external-relative-paths
-make test-review-import-loop
 make test-review-markup
 ```
 `make python-tests` runs focused stdlib unit tests for profile resolution, DOCX style normalization, fixture-contract helper failures, and markdown scanning edge cases.
@@ -139,12 +138,13 @@ make test-review-markup
 
 `make test-external-relative-paths` builds a synthetic external manuscript repo using config-relative profile entries and source-relative figure image paths.
 
-`make test-review-import-loop` runs a synthetic end-to-end proof from a revised DOCX candidate import through review-markup PDF/DOCX rendering evidence.
-
 `make test-review-markup` validates the experimental review-markup profile, checks the prepared Markdown transform, regenerates proof DOCX/PDF outputs, and inspects PDF text plus DOCX XML for visible review traces.
 
 External manuscript adoption guidance lives in
 `docs/review_markup_external_adoption.md`.
+
+DOCX review, comments, and source reconciliation belong to Wordmark; see
+`docs/docx_review_boundary.md`.
 
 Figure placement regression:
 ```bash
@@ -297,7 +297,7 @@ Each profile supports:
     - `{~~ old text ~> new text ~~}` -> bold old-text marker plus bold new-text marker
     - `{>> reviewer note <<}` -> bold `[Reviewer note: reviewer note]`
   - Inline code spans, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
-  - The generated DOCX/PDF output is intended for visible review traces only; it does not create Microsoft Word Review-pane Track Changes data and does not support DOCX-to-Markdown import.
+  - The generated DOCX/PDF output is intended for visible review traces only; it does not create Microsoft Word Review-pane Track Changes data. DOCX review and source reconciliation belong to Wordmark; see `docs/docx_review_boundary.md`.
   - The current production-experimental style is plain Pandoc Markdown: bold bracketed additions, deletions, substitution sides, and notes. Deletions intentionally do not rely on strikeout, because PDF strikeout made deleted words difficult to read in rendered page images. This avoids new dependencies and remains portable across DOCX and PDF.
   - For external manuscript pilots, use `docs/review_markup_external_adoption.md`.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:

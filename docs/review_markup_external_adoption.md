@@ -217,6 +217,7 @@ Ask Barry or the orchestrator before:
 - changing scientific manuscript content while creating a review pilot;
 - accepting visible markup in a journal submission output.
 
-Open a separate DOCX-to-Markdown import spike only if Barry wants generated
-DOCX edits or comments reconciled back into Markdown. That is a different
-problem from visible generated review traces.
+DOCX review, comments, and source reconciliation are intentionally outside
+Makedoc. Use the Wordmark repository for that workflow; this Makedoc feature
+only renders visible review traces from Markdown source tokens. See
+`docs/docx_review_boundary.md` for the ownership decision.

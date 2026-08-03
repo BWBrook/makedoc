@@ -6,11 +6,6 @@ Status note, 2026-06-14: Goal 004 replaced strikeout deletion rendering with
 bold bracketed deletion markers because rendered PDF strikeout made deleted
 words difficult to read by eye. The source token syntax remains unchanged.
 
-Status note, 2026-06-18: Goal 015 added `make test-review-import-loop`, a
-synthetic proof that a revised DOCX candidate import can generate Markdown
-review tokens and render them as visible bracketed markers in generated
-PDF/DOCX evidence.
-
 ## Decision
 
 Human-editable Markdown review markup is feasible as an experimental `makedoc`
@@ -20,7 +15,7 @@ The recommended next step is a production-hardening goal, not a workflow
 redesign. The route works well enough to keep source of truth in Markdown and
 show visible additions, deletions, substitutions, and reviewer notes in
 generated outputs. It should remain clearly separate from true Microsoft Word
-Track Changes and DOCX-to-Markdown import.
+Track Changes and the DOCX review workflow owned by Wordmark.
 
 ## What Was Implemented
 
@@ -113,7 +108,7 @@ fixture lint, reference audit, build, and contract checks.
 
 - This is visible review markup, not true Word Track Changes.
 - It does not create entries in Word's Review pane.
-- It does not import DOCX edits back into Markdown.
+- It does not import DOCX edits back into Markdown; that workflow belongs to Wordmark.
 - The current transform is line-local and intentionally simple; markup tokens
   should stay on one source line.
 - The rendering uses robust Pandoc Markdown styling rather than red/green
@@ -132,5 +127,5 @@ Proceed with a follow-up production-hardening goal:
    feature will remain in the regression suite.
 4. Expand parser tests only as far as the agreed authoring contract requires.
 
-Do not pursue true Word Track Changes or DOCX-to-Markdown import in the next
-goal; keep those as separate future investigations.
+Do not add a DOCX-to-Markdown importer to Makedoc. Use Wordmark for DOCX
+review and source reconciliation.

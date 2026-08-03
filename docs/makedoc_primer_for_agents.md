@@ -150,7 +150,7 @@ Authoring contract:
 3. Nested review markup is unsupported.
 4. Inline code, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
 5. Deletions render as readable bracketed deletion markers rather than relying on strikeout, because rendered PDFs must remain readable by eye.
-6. This is visible generated review markup only. It does not create Word Review-pane Track Changes and it does not import DOCX edits back into Markdown.
+6. This is visible generated review markup only. It does not create Word Review-pane Track Changes or import DOCX edits back into Markdown. DOCX review and source reconciliation belong to Wordmark; see `docs/docx_review_boundary.md` in the Makedoc repository.
 7. Use it for draft/review profiles where traceable generated output is useful; keep submission profiles clean unless the journal explicitly wants visible markup.
 
 For a full external manuscript pilot recipe, use
