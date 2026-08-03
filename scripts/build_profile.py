@@ -465,17 +465,9 @@ def expect_bool(mapping: dict[str, Any], key: str, *, required: bool = True, def
     return bool(default)
 
 
-def resolve_profile(
-    config: dict[str, Any],
-    profile_name: str | None,
-    *,
-    config_path: Path | None = None,
-) -> Profile:
-    config_dir = (
-        config_path.expanduser().resolve().parent
-        if config_path is not None
-        else Path.cwd().resolve()
-    )
+def _select_profile(
+    config: dict[str, Any], profile_name: str | None
+) -> tuple[str, dict[str, Any]]:
     profiles = config.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
         raise ValueError("Config must define a non-empty 'profiles' mapping.")
@@ -489,17 +481,20 @@ def resolve_profile(
     if not isinstance(raw_profile, dict):
         available = ", ".join(sorted(profiles.keys()))
         raise ValueError(f"Unknown profile '{selected_name}'. Available profiles: {available}")
+    return selected_name, raw_profile
 
+
+def _resolve_profile_values(raw_profile: dict[str, Any], *, config_dir: Path) -> dict[str, Any]:
     manuscript_sources = resolve_relative_path_list(
         expect_list_of_str(raw_profile, "manuscript_sources"),
         config_dir=config_dir,
     )
     lint_sources = resolve_relative_path_list(
         expect_list_of_str(
-        raw_profile,
-        "lint_sources",
-        required=False,
-        default=manuscript_sources,
+            raw_profile,
+            "lint_sources",
+            required=False,
+            default=manuscript_sources,
         ),
         config_dir=config_dir,
     )
@@ -509,99 +504,117 @@ def resolve_profile(
         expect_str(raw_profile, "author_metadata", required=False),
         config_dir=config_dir,
     )
-    journal = expect_str(raw_profile, "journal", required=False)
     requested_output_dir = expect_str(raw_profile, "output_dir")
     output_dir = _infer_output_dir(requested_output_dir, manuscript_sources, config_dir=config_dir)
     output_stem = expect_str(raw_profile, "output_stem")
-    description = expect_str(raw_profile, "description", required=False)
-    golden_contract = resolve_optional_relative_path(
-        expect_str(raw_profile, "golden_contract", required=False),
-        config_dir=config_dir,
-    )
 
+    resource_paths = dedupe_keep_order([str(Path(source).parent) for source in manuscript_sources])
+    return {
+        "manuscript_sources": manuscript_sources,
+        "lint_sources": lint_sources,
+        "author_metadata": author_metadata,
+        "bibliography": bibliography,
+        "csl": csl,
+        "journal": expect_str(raw_profile, "journal", required=False),
+        "description": expect_str(raw_profile, "description", required=False),
+        "output_dir": output_dir,
+        "output_stem": output_stem,
+        "pdf_out": str(Path(output_dir) / f"{output_stem}.pdf"),
+        "docx_out": str(Path(output_dir) / f"{output_stem}.docx"),
+        "golden_contract": resolve_optional_relative_path(
+            expect_str(raw_profile, "golden_contract", required=False),
+            config_dir=config_dir,
+        ),
+        "resource_paths": resource_paths,
+        "csl_search_dirs": _resolve_csl_search_dirs(raw_profile, csl, config_dir=config_dir),
+    }
+
+
+def _resolve_csl_search_dirs(
+    raw_profile: dict[str, Any], csl: str, *, config_dir: Path
+) -> list[str]:
     csl_search_dirs = expect_list_of_str(raw_profile, "csl_search_dirs", required=False, default=[])
     csl_search_dirs = resolve_relative_path_list(csl_search_dirs, config_dir=config_dir)
-    if not csl_search_dirs:
-        derived_dirs: list[str] = []
-        csl_parent = str(Path(csl).parent)
-        if csl_parent not in ("", "."):
-            derived_dirs.append(csl_parent)
-        config_csl_dir = (config_dir / "csl").resolve()
-        if config_csl_dir.exists():
-            derived_dirs.append(str(config_csl_dir))
-        csl_search_dirs = dedupe_keep_order(derived_dirs)
+    if csl_search_dirs:
+        return csl_search_dirs
 
+    derived_dirs: list[str] = []
+    csl_parent = str(Path(csl).parent)
+    if csl_parent not in ("", "."):
+        derived_dirs.append(csl_parent)
+    config_csl_dir = (config_dir / "csl").resolve()
+    if config_csl_dir.exists():
+        derived_dirs.append(str(config_csl_dir))
+    return dedupe_keep_order(derived_dirs)
+
+
+def _resolve_edgecase_paths(
+    raw_profile: dict[str, Any], *, config_dir: Path
+) -> tuple[str, str, str]:
     edgecases = raw_profile.get("edgecases") or {}
     if not isinstance(edgecases, dict):
         raise ValueError("Profile key 'edgecases' must be a mapping when present.")
 
-    edge_unknown = edgecases.get("unknown_cite", "")
-    edge_manual = edgecases.get("manual_cite", "")
-    edge_table = edgecases.get("malformed_table", "")
-    for key, value in {
-        "edgecases.unknown_cite": edge_unknown,
-        "edgecases.manual_cite": edge_manual,
-        "edgecases.malformed_table": edge_table,
-    }.items():
+    values = {
+        "edgecases.unknown_cite": edgecases.get("unknown_cite", ""),
+        "edgecases.manual_cite": edgecases.get("manual_cite", ""),
+        "edgecases.malformed_table": edgecases.get("malformed_table", ""),
+    }
+    for key, value in values.items():
         if value and not isinstance(value, str):
             raise ValueError(f"Profile key '{key}' must be a string path.")
 
-    page_numbers = expect_str(
-        raw_profile,
-        "page_numbers",
-        required=False,
-        default=PAGE_NUMBERING_DEFAULT,
+    return tuple(
+        resolve_optional_relative_path(str(value).strip(), config_dir=config_dir)
+        for value in values.values()
     )
-    page_numbers = normalize_page_numbers(page_numbers)
+
+
+def _resolve_layout_settings(raw_profile: dict[str, Any]) -> tuple[str, str, str, bool]:
+    page_numbers = normalize_page_numbers(
+        expect_str(raw_profile, "page_numbers", required=False, default=PAGE_NUMBERING_DEFAULT)
+    )
     if page_numbers not in PAGE_NUMBERING_CHOICES:
         raise ValueError(f"Profile key 'page_numbers' resolved to unsupported value: {page_numbers}")
 
     line_spacing = expect_str_or_number(
-        raw_profile,
-        "line_spacing",
-        required=False,
-        default="single",
+        raw_profile, "line_spacing", required=False, default="single"
     ).lower()
     if line_spacing not in LINE_SPACING_CHOICES:
         allowed = ", ".join(LINE_SPACING_CHOICES)
         raise ValueError(f"Profile key 'line_spacing' must be one of: {allowed}.")
 
-    line_numbering_raw = expect_str(
-        raw_profile,
-        "line_numbering",
-        required=False,
-        default="continuous",
+    line_numbering = normalize_line_numbering(
+        expect_str(raw_profile, "line_numbering", required=False, default="continuous")
     )
-    line_numbering = normalize_line_numbering(line_numbering_raw)
     if line_numbering not in LINE_NUMBERING_CHOICES:
-        raise ValueError(f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}")
+        raise ValueError(
+            f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}"
+        )
 
     references_new_page = expect_bool(
-        raw_profile,
-        "references_new_page",
-        required=False,
-        default=True,
+        raw_profile, "references_new_page", required=False, default=True
     )
+    return page_numbers, line_spacing, line_numbering, references_new_page
 
+
+def _resolve_figures(raw_profile: dict[str, Any]) -> Figures:
     figures_raw = raw_profile.get("figures", {})
     if figures_raw is None:
         figures_raw = {}
     if not isinstance(figures_raw, dict):
         raise ValueError("Profile key 'figures' must be a mapping when present.")
 
-    figure_placement = normalize_figure_placement(
+    placement = normalize_figure_placement(
         expect_str(
-            figures_raw,
-            "placement",
-            required=False,
-            default=DEFAULT_FIGURE_SETTINGS["placement"],
+            figures_raw, "placement", required=False, default=DEFAULT_FIGURE_SETTINGS["placement"]
         )
     )
-    if figure_placement not in FIGURE_PLACEMENT_CHOICES:
+    if placement not in FIGURE_PLACEMENT_CHOICES:
         allowed = ", ".join(FIGURE_PLACEMENT_CHOICES)
         raise ValueError(f"Profile key 'figures.placement' must be one of: {allowed}.")
 
-    figure_caption_position = normalize_caption_position(
+    caption_position = normalize_caption_position(
         expect_str(
             figures_raw,
             "caption_position",
@@ -609,34 +622,29 @@ def resolve_profile(
             default=DEFAULT_FIGURE_SETTINGS["caption_position"],
         )
     )
-    if figure_caption_position not in FIGURE_CAPTION_POSITION_CHOICES:
+    if caption_position not in FIGURE_CAPTION_POSITION_CHOICES:
         allowed = ", ".join(FIGURE_CAPTION_POSITION_CHOICES)
-        raise ValueError(
-            f"Profile key 'figures.caption_position' must be one of: {allowed}."
-        )
+        raise ValueError(f"Profile key 'figures.caption_position' must be one of: {allowed}.")
 
-    figure_placeholder_id = expect_str(
+    placeholder_id = expect_str(
         figures_raw,
         "placeholder_id",
         required=False,
         default=DEFAULT_FIGURE_SETTINGS["placeholder_id"],
     )
-    if not figure_placeholder_id:
+    if not placeholder_id:
         raise ValueError("Profile key 'figures.placeholder_id' must be a non-empty string.")
+    return Figures(placement=placement, caption_position=caption_position, placeholder_id=placeholder_id)
 
-    figures = Figures(
-        placement=figure_placement,
-        caption_position=figure_caption_position,
-        placeholder_id=figure_placeholder_id,
-    )
 
+def _resolve_review_markup(raw_profile: dict[str, Any]) -> ReviewMarkup:
     review_markup_raw = raw_profile.get("review_markup", {})
     if review_markup_raw is None:
         review_markup_raw = {}
     if isinstance(review_markup_raw, bool):
-        review_markup_enabled = review_markup_raw
+        enabled = review_markup_raw
     elif isinstance(review_markup_raw, dict):
-        review_markup_enabled = expect_bool(
+        enabled = expect_bool(
             review_markup_raw,
             "enabled",
             required=False,
@@ -644,64 +652,92 @@ def resolve_profile(
         )
     else:
         raise ValueError("Profile key 'review_markup' must be a boolean or mapping when present.")
+    return ReviewMarkup(enabled=enabled)
 
-    review_markup = ReviewMarkup(enabled=review_markup_enabled)
 
+def _resolve_margins(raw_profile: dict[str, Any]) -> Margins:
     margins_raw = raw_profile.get("margins", {})
     if margins_raw is None:
         margins_raw = {}
     if not isinstance(margins_raw, dict):
         raise ValueError("Profile key 'margins' must be a mapping when present.")
 
-    margins_values = {
-        "unit": normalize_margin_unit(expect_str(margins_raw, "unit", required=False, default=DEFAULT_MARGINS["unit"])),
-        "paper_size": normalize_paper_size(
-            expect_str(margins_raw, "paper_size", required=False, default=DEFAULT_MARGINS["paper_size"]),
-        ),
+    unit = normalize_margin_unit(
+        expect_str(margins_raw, "unit", required=False, default=DEFAULT_MARGINS["unit"])
+    )
+    paper_size = normalize_paper_size(
+        expect_str(margins_raw, "paper_size", required=False, default=DEFAULT_MARGINS["paper_size"])
+    )
+    values = {
         "top": expect_positive_number(
-            margins_raw, "top", default=DEFAULT_MARGINS["top"], required=False,
+            margins_raw, "top", default=DEFAULT_MARGINS["top"], required=False
         ),
         "right": expect_positive_number(
-            margins_raw, "right", default=DEFAULT_MARGINS["right"], required=False,
+            margins_raw, "right", default=DEFAULT_MARGINS["right"], required=False
         ),
         "bottom": expect_positive_number(
-            margins_raw, "bottom", default=DEFAULT_MARGINS["bottom"], required=False,
+            margins_raw, "bottom", default=DEFAULT_MARGINS["bottom"], required=False
         ),
         "left": expect_positive_number(
-            margins_raw, "left", default=DEFAULT_MARGINS["left"], required=False,
+            margins_raw, "left", default=DEFAULT_MARGINS["left"], required=False
         ),
     }
-    if margins_values["unit"] not in MARGIN_UNIT_CHOICES:
+    if unit not in MARGIN_UNIT_CHOICES:
         allowed = ", ".join(MARGIN_UNIT_CHOICES)
         raise ValueError(f"Profile key 'margins.unit' must be one of: {allowed}.")
-    if margins_values["paper_size"] not in MARGIN_PAPER_SIZE_CHOICES:
+    if paper_size not in MARGIN_PAPER_SIZE_CHOICES:
         allowed = ", ".join(MARGIN_PAPER_SIZE_CHOICES)
         raise ValueError(f"Profile key 'margins.paper_size' must be one of: {allowed}.")
-    margins = Margins(
-        unit=margins_values["unit"],
-        paper_size=margins_values["paper_size"],
-        top=margins_values["top"],
-        right=margins_values["right"],
-        bottom=margins_values["bottom"],
-        left=margins_values["left"],
-    )
+    return Margins(unit=unit, paper_size=paper_size, **values)
 
-    edge_unknown_path = resolve_optional_relative_path(
-        str(edge_unknown).strip(),
-        config_dir=config_dir,
-    )
-    edge_manual_path = resolve_optional_relative_path(
-        str(edge_manual).strip(),
-        config_dir=config_dir,
-    )
-    edge_table_path = resolve_optional_relative_path(
-        str(edge_table).strip(),
-        config_dir=config_dir,
-    )
 
-    resource_paths = dedupe_keep_order([str(Path(source).parent) for source in manuscript_sources])
-    pdf_out = str(Path(output_dir) / f"{output_stem}.pdf")
-    docx_out = str(Path(output_dir) / f"{output_stem}.docx")
+def resolve_profile(
+    config: dict[str, Any],
+    profile_name: str | None,
+    *,
+    config_path: Path | None = None,
+) -> Profile:
+    config_dir = (
+        config_path.expanduser().resolve().parent
+        if config_path is not None
+        else Path.cwd().resolve()
+    )
+    selected_name, raw_profile = _select_profile(config, profile_name)
+
+    values = _resolve_profile_values(raw_profile, config_dir=config_dir)
+    manuscript_sources = values["manuscript_sources"]
+    lint_sources = values["lint_sources"]
+    author_metadata = values["author_metadata"]
+    bibliography = values["bibliography"]
+    csl = values["csl"]
+    journal = values["journal"]
+    description = values["description"]
+    csl_search_dirs = values["csl_search_dirs"]
+    resource_paths = values["resource_paths"]
+    output_dir = values["output_dir"]
+    output_stem = values["output_stem"]
+    pdf_out = values["pdf_out"]
+    docx_out = values["docx_out"]
+    golden_contract = values["golden_contract"]
+
+    (
+        edge_unknown_path,
+        edge_manual_path,
+        edge_table_path,
+    ) = _resolve_edgecase_paths(raw_profile, config_dir=config_dir)
+
+    (
+        page_numbers,
+        line_spacing,
+        line_numbering,
+        references_new_page,
+    ) = _resolve_layout_settings(raw_profile)
+
+    figures = _resolve_figures(raw_profile)
+
+    review_markup = _resolve_review_markup(raw_profile)
+
+    margins = _resolve_margins(raw_profile)
 
     return Profile(
         name=selected_name,
@@ -761,9 +797,8 @@ def escape_make_assignment(value: str) -> str:
     return out
 
 
-def emit_make_vars(profile: Profile, prefix: str) -> str:
-    base = prefix.strip().upper() if prefix.strip() else "ACTIVE"
-    values: dict[str, Any] = {
+def _make_variable_values(profile: Profile, base: str) -> dict[str, Any]:
+    return {
         f"{base}_PROFILE": profile.name,
         f"{base}_DESCRIPTION": profile.description,
         f"{base}_MANUSCRIPT_SOURCES": profile.manuscript_sources,
@@ -798,7 +833,9 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_MARGIN_LEFT": profile.margins.left,
     }
 
-    shell_values: dict[str, Any] = {
+
+def _shell_variable_values(profile: Profile, base: str) -> dict[str, Any]:
+    return {
         f"{base}_MANUSCRIPT_SOURCES_SH": profile.manuscript_sources,
         f"{base}_LINT_SOURCES_SH": profile.lint_sources,
         f"{base}_AUTHOR_METADATA_SH": profile.author_metadata,
@@ -815,6 +852,11 @@ def emit_make_vars(profile: Profile, prefix: str) -> str:
         f"{base}_EDGECASE_MALFORMED_TABLE_SH": profile.edgecase_malformed_table,
     }
 
+
+def emit_make_vars(profile: Profile, prefix: str) -> str:
+    base = prefix.strip().upper() if prefix.strip() else "ACTIVE"
+    values = _make_variable_values(profile, base)
+    shell_values = _shell_variable_values(profile, base)
     lines = [f"{name} := {format_make_value(value)}" for name, value in values.items()]
     lines.extend(
         f"{name} := {escape_make_assignment(format_shell_value(value))}"
