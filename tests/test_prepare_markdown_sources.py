@@ -122,6 +122,29 @@ class PrepareMarkdownSourcesTests(unittest.TestCase):
 
         self.assertIn("**Fig. S1.**", content)
 
+    def test_supplementary_divider_only_separates_mixed_figure_sets(self) -> None:
+        supplementary = FigureBlock(
+            raw="![Supplement](fig-s1.png){#fig-main-s1}",
+            figure_id="fig-main-s1",
+            title="Supplement",
+            src="fig-s1.png",
+            attrs="#fig-main-s1",
+        )
+        main = FigureBlock(
+            raw="![Main](fig-1.png){#fig-main-1}",
+            figure_id="fig-main-1",
+            title="Main",
+            src="fig-1.png",
+            attrs="#fig-main-1",
+        )
+
+        for placement in ("pages", "captions_page"):
+            standalone = build_figure_blocks([supplementary], "top", placement)
+            mixed = build_figure_blocks([main, supplementary], "top", placement)
+
+            self.assertNotIn("## Supplementary Information", standalone)
+            self.assertIn("## Supplementary Information", mixed)
+
     def test_review_markup_is_default_off(self) -> None:
         lines = ["This keeps {++ draft markup ++} untouched."]
 

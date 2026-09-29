@@ -305,7 +305,7 @@ profiles:
 - Figures are appended after references.
 - One page break per figure.
 - Captions render as `**Fig. X.**` + image.
-- Supplementary figures are grouped after `## Supplementary Information`.
+- Supplementary figures are grouped after `## Supplementary Information` when main figures are present; standalone supplementary-only output omits that separator.
 
 ### 5.2 `placement: inline`
 
@@ -318,7 +318,7 @@ profiles:
 - Adds a `## Figure Captions` page after references.
 - Lists caption lines there (one per figure).
 - Then adds figure pages with label only (`Fig. 1.`), image only.
-- Supplementary section appears after main figures.
+- Supplementary section appears after main figures; standalone supplementary-only output omits the separator heading.
 
 ## 6. Behavior that surprises new users
 
