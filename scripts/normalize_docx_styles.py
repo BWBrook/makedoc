@@ -245,6 +245,53 @@ def _set_child(parent: ET.Element, local_name: str, **attrs: str) -> ET.Element:
     return child
 
 
+def _is_list_paragraph(paragraph: ET.Element) -> bool:
+    numbering = paragraph.find("w:pPr/w:numPr", NS)
+    if numbering is None:
+        return False
+    number_id = numbering.find("w:numId", NS)
+    # numId=0 explicitly cancels numbering inherited from a paragraph style.
+    return number_id is None or number_id.get(f"{{{W_NS}}}val") != "0"
+
+
+def _is_standalone_bold(paragraph: ET.Element) -> bool:
+    text_runs = [run for run in paragraph.findall(".//w:r", NS)
+                 if "".join(node.text or "" for node in run.findall("w:t", NS)).strip()]
+    return bool(text_runs) and all(
+        (bold := run.find("w:rPr/w:b", NS)) is not None
+        and bold.get(f"{{{W_NS}}}val", "1").lower() not in {"0", "false", "off"}
+        for run in text_runs
+    )
+
+
+def _keep_body_lead_ins(root: ET.Element) -> None:
+    """Attach headings and lead-ins without chaining list items or table cells."""
+    body = root.find("w:body", NS)
+    if body is None:
+        return
+    children = list(body)
+    for index, paragraph in enumerate(children):
+        if paragraph.tag != f"{{{W_NS}}}p":
+            continue
+        has_text = any((node.text or "").strip() for node in paragraph.findall(".//w:t", NS))
+        has_math = any(node.tag.endswith("}oMath") for node in paragraph.iter())
+        if not has_text and not has_math:
+            continue  # Do not turn explicit page breaks or spacers into lead-ins.
+        following = children[index + 1] if index + 1 < len(children) else None
+        style = paragraph.find("w:pPr/w:pStyle", NS)
+        is_heading = style is not None and style.get(f"{{{W_NS}}}val") in HEADING_STYLE_IDS
+        is_list = _is_list_paragraph(paragraph)
+        before_table = following is not None and following.tag == f"{{{W_NS}}}tbl"
+        before_list = (following is not None and following.tag == f"{{{W_NS}}}p"
+                       and not is_list and _is_list_paragraph(following))
+        if is_heading or before_table or before_list or (not is_list and _is_standalone_bold(paragraph)):
+            props = paragraph.find("w:pPr", NS)
+            if props is None:
+                props = ET.Element(PPR_TAG)
+                paragraph.insert(0, props)
+            _set_child(props, "keepNext", val="1")
+
+
 def normalize_document_layout(document_xml: bytes, *, paper_size: str,
                               margins: dict[str, float], margin_unit: str) -> bytes:
     root = ET.fromstring(document_xml)
@@ -269,9 +316,7 @@ def normalize_document_layout(document_xml: bytes, *, paper_size: str,
                 ppr = ET.Element(PPR_TAG)
                 paragraph.insert(0, ppr)
             _set_child(ppr, "suppressLineNumbers")
-        style = paragraph.find("w:pPr/w:pStyle", NS)
-        if style is not None and style.get(f"{{{W_NS}}}val") in HEADING_STYLE_IDS:
-            _set_child(paragraph.find("w:pPr", NS), "keepNext")
+    _keep_body_lead_ins(root)
     for row in root.findall(".//w:tr", NS):
         props = row.find("w:trPr", NS)
         if props is None:

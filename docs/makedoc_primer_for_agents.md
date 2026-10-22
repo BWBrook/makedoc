@@ -299,8 +299,11 @@ profiles:
 
 Page size, margins, page numbers, line spacing and line numbering are applied to
 both PDF and DOCX. DOCX page numbers use a right-aligned footer. Empty/image-only
-paragraphs do not receive manuscript line numbers, headings stay with the next
-paragraph, and table rows are kept together where they fit on a page. Columns
+paragraphs do not receive manuscript line numbers. Body headings and standalone
+bold subcaptions stay with the next paragraph; a body paragraph immediately before
+a table or the start of a list stays with its first row/item. These rules do not
+chain table cells or list items together. Table rows are kept together where they
+fit on a page. Columns
 can autofit their content while retaining authored widths as preferences; review
 long identifiers and wide tables in the rendered DOCX. Known build-input custom
 properties are stripped, but unrelated user metadata is retained.

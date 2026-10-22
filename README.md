@@ -313,7 +313,8 @@ Each profile supports:
     - apply profile-driven line numbering (`continuous`, `page`, `section`, `none`)
     - apply the profile's paper size and margins, with a right-aligned page-number footer when `page_numbers: lower_right`
     - preserve standard Word XML prefixes and markup-compatibility namespace declarations so Pandoc can read the generated DOCX
-    - keep headings with following paragraphs and table rows together, and allow table columns to autofit while retaining authored widths as preferences
+    - keep body headings and standalone bold subcaptions with the next paragraph; keep a table/list lead-in with its first row/item without chaining table cells or list items
+    - keep table rows together and allow table columns to autofit while retaining authored widths as preferences
     - suppress line numbering on empty, page-break and image-only paragraphs
     - remove known build-input custom properties (`bibliography`, `csl`, and related file options), preserving other user metadata
   - `captions_page` retains each image's source description as accessible alt text while suppressing its duplicate visible caption. Supply meaningful text in `![description]`; path-like fallback alt text is removed with a warning.

@@ -4,6 +4,10 @@ Last updated: 2026-04-24
 Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover hardening and stage-5 external path semantics
 
 ## Decision Log
+- 2026-10-22: Extend DOCX keep-with-next handling to direct body table/list
+  lead-ins and standalone bold subcaptions. Restrict the flow rule to body
+  paragraphs and exclude list items from bold/list-lead-in detection, so neither
+  complete tables nor complete lists acquire an accidental keep chain.
 - 2026-10-22: Extend the existing profile geometry/page-number contract to DOCX.
   Preserve standard XML prefixes and namespace declarations referenced by
   markup-compatibility attributes; retain accessible image descriptions when

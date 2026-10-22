@@ -151,6 +151,85 @@ class NormalizeDocxStylesTests(unittest.TestCase):
         self.assertEqual(root.find(".//w:tblLayout", NS).get(f"{{{W_NS}}}type"), "autofit")
         self.assertEqual(list(ET.fromstring(source).itertext()), list(root.itertext()))
 
+    def test_table_lead_in_chain_does_not_keep_table_cells_or_rows_together(self) -> None:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:pPr><w:pStyle w:val="Heading2"/><w:keepNext w:val="0"/></w:pPr>
+            <w:r><w:t>Table heading</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Subcaption.</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Introduction immediately before the table.</w:t></w:r></w:p>
+          <w:tbl>
+            <w:tr><w:tc>
+              <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Bold cell</w:t></w:r></w:p>
+              <w:p><w:r><w:t>Cell lead-in.</w:t></w:r></w:p>
+              <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Nested cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+              <w:p/>
+            </w:tc></w:tr>
+            <w:tr><w:tc><w:p><w:r><w:t>Second row</w:t></w:r></w:p></w:tc></w:tr>
+          </w:tbl>
+          <w:p><w:r><w:t>Following body.</w:t></w:r></w:p><w:sectPr/>
+        </w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        body_paragraphs = root.findall("w:body/w:p", NS)
+        for paragraph in body_paragraphs[:3]:
+            self.assertEqual(paragraph.find("w:pPr/w:keepNext", NS).get(f"{{{W_NS}}}val"), "1")
+        self.assertIsNone(body_paragraphs[3].find("w:pPr/w:keepNext", NS))
+        for paragraph in root.findall(".//w:tc/w:p", NS):
+            self.assertIsNone(paragraph.find("w:pPr/w:keepNext", NS))
+        self.assertEqual(len(root.findall(".//w:trPr/w:cantSplit", NS)), 3)
+        self.assertEqual(list(ET.fromstring(source).itertext()), list(root.itertext()))
+
+    def test_list_lead_in_stops_at_first_item_even_when_items_are_bold(self) -> None:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>Heading</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Covariates.</w:t></w:r>
+            <w:r><w:t> The terms were:</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:rPr><w:b/></w:rPr><w:t>First item</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:rPr><w:b/></w:rPr><w:t>Nested item</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:t>Second item</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Following body.</w:t></w:r></w:p><w:sectPr/>
+        </w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        paragraphs = root.findall("w:body/w:p", NS)
+        for paragraph in paragraphs[:2]:
+            self.assertIsNotNone(paragraph.find("w:pPr/w:keepNext", NS))
+        for paragraph in paragraphs[2:]:
+            self.assertIsNone(paragraph.find("w:pPr/w:keepNext", NS))
+
+    def test_standalone_bold_rule_ignores_partial_bold_and_explicit_page_breaks(self) -> None:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>S8a(i).</w:t></w:r>
+            <w:r><w:t> </w:t></w:r>
+            <w:r><w:rPr><w:b w:val="true"/></w:rPr><w:t>Support.</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Partial.</w:t></w:r>
+            <w:r><w:t> Plain body.</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b w:val="false"/></w:rPr><w:t>Not bold.</w:t></w:r></w:p>
+          <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:t>Item after explicit page break.</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:numId w:val="0"/></w:numPr></w:pPr>
+            <w:r><w:t>Unnumbered lead-in.</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:numId w:val="2"/></w:numPr></w:pPr>
+            <w:r><w:t>New list.</w:t></w:r></w:p><w:sectPr/>
+        </w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        paragraphs = root.findall("w:body/w:p", NS)
+        for index, paragraph in enumerate(paragraphs):
+            with self.subTest(paragraph=index):
+                self.assertEqual(paragraph.find("w:pPr/w:keepNext", NS) is not None,
+                                 index in {0, 5})
+        second = normalize_document_layout(output, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        self.assertEqual(output, second)
+
     @unittest.skipUnless(shutil.which("pandoc"), "Pandoc required for DOCX round-trip fixture")
     def test_docx_round_trip_preserves_math_links_alt_and_custom_user_metadata(self) -> None:
         from prepare_markdown_sources import FigureBlock, build_figure_blocks
