@@ -24,6 +24,7 @@ class RenderPdfLayoutTests(unittest.TestCase):
         lines = build_block(profile)
         content = "\n".join(lines)
 
+        self.assertIn("\\usepackage{needspace}", lines)
         self.assertIn("\\renewcommand\\paragraph{\\@startsection{paragraph}{4}{\\z@}", content)
         self.assertIn("\\renewcommand\\subparagraph{\\@startsection{subparagraph}{5}{\\z@}", content)
 

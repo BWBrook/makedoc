@@ -297,6 +297,9 @@ profiles:
       left: 2.5
 ```
 
+The generated PDF preamble loads `needspace` for explicit source
+`\Needspace{...}` pagination commands.
+
 Page size, margins, page numbers, line spacing and line numbering are applied to
 both PDF and DOCX. DOCX page numbers use a right-aligned footer. Empty/image-only
 paragraphs do not receive manuscript line numbers. Body headings and standalone

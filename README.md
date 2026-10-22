@@ -255,6 +255,7 @@ Each profile supports:
   - `top`, `right`, `bottom`, `left`: numeric margin values in selected unit
   - defaults in this repo are `1.5` for every side (metric A4)
 - Page size, margins, page numbers, line spacing and line numbering apply to both PDF and DOCX outputs.
+- The generated PDF preamble loads `needspace` so explicit source `\Needspace{...}` pagination commands are available.
 - Defaults are metric:
   - paper size: `a4`
   - units: `cm`

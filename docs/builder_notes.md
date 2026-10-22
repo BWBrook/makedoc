@@ -4,6 +4,8 @@ Last updated: 2026-04-24
 Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover hardening and stage-5 external path semantics
 
 ## Decision Log
+- 2026-10-22: Load `needspace` in the generated PDF preamble so explicit source
+  `\Needspace` commands work when the layout include supplies the header.
 - 2026-10-22: Fill blank DOCX core title/creator metadata using the leading
   rendered title block and selected-profile author names. Preserve existing
   authored properties and document payloads; omit author contact details and
