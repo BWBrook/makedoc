@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import sys
+import shutil
+import subprocess
+import tempfile
+import zipfile
 import unittest
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -24,6 +28,9 @@ from normalize_docx_styles import (
     normalize_heading_styles,
     normalize_line_numbering,
     normalize_line_spacing,
+    normalize_document_layout,
+    rewrite_docx,
+    serialize_xml,
 )
 
 
@@ -118,6 +125,89 @@ class NormalizeDocxStylesTests(unittest.TestCase):
         sect_pr = root.find(f".//{SECTPR_TAG}")
         self.assertIsNotNone(sect_pr)
         self.assertIsNone(sect_pr.find(LNNUMTYPE_TAG))
+
+
+    def test_namespace_prefixes_and_ignorable_declarations_survive(self) -> None:
+        source = b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" mc:Ignorable="w14"><w:body><w:sectPr/></w:body></w:document>'
+        output = normalize_line_numbering(source, "continuous")
+        self.assertIn(b"<w:document", output)
+        self.assertIn(b'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"', output)
+        self.assertIn(b'mc:Ignorable="w14"', output)
+        self.assertNotIn(b"ns0:", output)
+        ET.fromstring(output)
+
+    def test_spacing_rows_and_heading_layout_preserve_content(self) -> None:
+        source = b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body><w:p/><w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Heading</w:t></w:r></w:p><w:p><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>main_70</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr/></w:body></w:document>'
+        output = normalize_document_layout(source, paper_size="letter", margin_unit="in",
+            margins={side: 1.0 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        self.assertEqual(root.find(".//w:pgSz", NS).get(f"{{{W_NS}}}w"), "12240")
+        self.assertEqual(root.find(".//w:pgMar", NS).get(f"{{{W_NS}}}left"), "1440")
+        paras = root.findall("w:body/w:p", NS)
+        self.assertIsNotNone(paras[0].find("w:pPr/w:suppressLineNumbers", NS))
+        self.assertIsNotNone(paras[1].find("w:pPr/w:keepNext", NS))
+        self.assertIsNone(paras[2].find("w:pPr/w:suppressLineNumbers", NS))
+        self.assertIsNotNone(root.find(".//w:trPr/w:cantSplit", NS))
+        self.assertEqual(root.find(".//w:tblLayout", NS).get(f"{{{W_NS}}}type"), "autofit")
+        self.assertEqual(list(ET.fromstring(source).itertext()), list(root.itertext()))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "Pandoc required for DOCX round-trip fixture")
+    def test_docx_round_trip_preserves_math_links_alt_and_custom_user_metadata(self) -> None:
+        from prepare_markdown_sources import FigureBlock, build_figure_blocks
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "fixture.docx"
+            image = SCRIPTS_DIR.parent / "testbed/manuscript/figures/fig1_dummy.png"
+            description = "A synthetic curve used to test accessible image descriptions."
+            figure = FigureBlock(raw=f"![{description}]({image}){{#fig-one width=60%}}",
+                figure_id="fig-one", title=description, src=str(image), attrs="#fig-one width=60%")
+            markdown = "# Heading\n\nEquation $x^2 + y^2$ and [a link](https://example.org).\n\n| Identifier | Value |\n|---|---|\n| main_70 | -0.1 |\n\n"
+            markdown += build_figure_blocks([figure], "top", "captions_page")
+            subprocess.run(["pandoc", "-f", "markdown", "-o", str(path)], input=markdown,
+                           text=True, check=True, capture_output=True)
+            with zipfile.ZipFile(path) as z:
+                payloads = {name: z.read(name) for name in z.namelist()}
+            before = ET.fromstring(payloads["word/document.xml"])
+            payloads["docProps/custom.xml"] = b'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="bibliography"><vt:lpwstr>/private/server/refs.yaml</vt:lpwstr></property><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="3" name="Project"><vt:lpwstr>Retain this user metadata</vt:lpwstr></property></Properties>'
+            with zipfile.ZipFile(path, "w") as z:
+                for name, payload in payloads.items():
+                    z.writestr(name, payload)
+            for _ in range(2):
+                rewrite_docx(path, "000000", "1.5", "continuous",
+                    margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+            with zipfile.ZipFile(path) as z:
+                document_xml = z.read("word/document.xml")
+                document = ET.fromstring(document_xml)
+                self.assertNotIn(b"ns0:", document_xml)
+                self.assertEqual(list(before.itertext()), list(document.itertext()))
+                props = ET.fromstring(z.read("docProps/custom.xml"))
+                self.assertEqual([prop.get("name") for prop in props], ["Project"])
+                self.assertNotIn(b"/private/server", z.read("docProps/custom.xml"))
+                self.assertEqual(document.find(".//w:pgSz", NS).get(f"{{{W_NS}}}w"), "11906")
+                self.assertEqual(document.find(".//w:pgMar", NS).get(f"{{{W_NS}}}left"), "1417")
+                section_names = [node.tag.rsplit("}", 1)[-1] for node in document.find(".//w:sectPr", NS)]
+                self.assertLess(section_names.index("pgSz"), section_names.index("pgMar"))
+                self.assertLess(section_names.index("pgMar"), section_names.index("lnNumType"))
+                descriptions = [item.get("descr") for item in document.iter() if item.tag.endswith("}docPr")]
+                self.assertEqual(descriptions, [description])
+                text = "".join(node.text or "" for node in document.findall(".//w:t", NS))
+                self.assertEqual(text.count(description), 1)  # Only the caption-list entry is visible.
+                footer = ET.fromstring(z.read("word/makedoc-page-footer.xml"))
+                self.assertEqual(footer.find(".//w:fldSimple", NS).get(f"{{{W_NS}}}instr"), " PAGE ")
+                rels = ET.fromstring(z.read("word/_rels/document.xml.rels"))
+                footer_rels = [rel for rel in rels if rel.get("Target") == "makedoc-page-footer.xml"]
+                self.assertEqual(len(footer_rels), 1)
+                self.assertTrue(any(rel.get("Target") == "https://example.org" for rel in rels))
+            result = subprocess.run(["pandoc", str(path), "-t", "markdown"], check=True,
+                                    capture_output=True, text=True)
+            self.assertIn("x", result.stdout)
+            self.assertIn("https://example.org", result.stdout)
+            self.assertIn("main_70", result.stdout)
+            rewrite_docx(path, "000000", "single", "none", page_numbers="none")
+            with zipfile.ZipFile(path) as z:
+                document = ET.fromstring(z.read("word/document.xml"))
+                self.assertIsNone(document.find(".//w:footerReference", NS))
+                self.assertIsNone(document.find(".//w:lnNumType", NS))
 
 
 if __name__ == "__main__":

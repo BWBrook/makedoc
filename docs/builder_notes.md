@@ -4,6 +4,13 @@ Last updated: 2026-04-24
 Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover hardening and stage-5 external path semantics
 
 ## Decision Log
+- 2026-10-22: Extend the existing profile geometry/page-number contract to DOCX.
+  Preserve standard XML prefixes and namespace declarations referenced by
+  markup-compatibility attributes; retain accessible image descriptions when
+  captions are moved; remove only known build-input custom properties.
+  Protect table rows/headings and suppress layout-only line numbering. Column
+  autofit retains authored preferred widths; final manuscript layout still
+  requires rendered review.
 - 2026-04-24: Keep manual author-year citation lint strict, but strip valid
   Pandoc citation tokens before deciding whether a parenthetical contains a
   manual citation. This allows prose such as acronym definitions with inline
@@ -132,6 +139,16 @@ Context: Phase 1-10 implementation (through profile-driven figure placement), pl
 - 2026-02-13: Extended `make profile-scaffold` to include margin-related arguments for `paper_size` and per-side values.
 
 ## Command Evidence
+- 2026-10-22: `make python-tests` passes 41 tests, including a real Pandoc 3.1.3
+  DOCX round-trip retaining math, links, descriptions and unrelated custom
+  metadata. Namespace declarations, property ordering, geometry, footer
+  relationships, repeated normalization and disabled numbering are checked.
+- 2026-10-22: `make test-author-injection`, `make test-figure-modes`, `make check`
+  and `make check-fixture` pass sequentially. The fixture has one table, three
+  images and eight PDF pages. A LibreOffice 24.2 DOCX render was inspected on
+  all eight pages: A4, page numbers 1–8, readable equations/figures and no image
+  height line numbering. The fixture's narrow `Presence` column still wraps
+  its header; authored column proportions remain a manuscript layout concern.
 - `PATH="/Users/bwbrook/work/makedoc/.venv/bin:$PATH" make python-tests` -> PASS
   (23 tests, including the manual-citation lint false-positive regression).
 - `PATH="/Users/bwbrook/work/makedoc/.venv/bin:$PATH" make check CONFIG=/Users/bwbrook/papers/rc-dates/settings/build.yaml` -> PASS

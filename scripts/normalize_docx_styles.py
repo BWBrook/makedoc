@@ -4,16 +4,42 @@
 from __future__ import annotations
 
 import argparse
+import io
+import re
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from profile_schema import LINE_NUMBERING_CHOICES, LINE_SPACING_CHOICES
+from profile_schema import (
+    DEFAULT_MARGINS, LINE_NUMBERING_CHOICES, LINE_SPACING_CHOICES,
+    MARGIN_PAPER_SIZE_CHOICES, MARGIN_UNIT_CHOICES,
+    PAGE_NUMBERING_CHOICES, PAGE_NUMBERING_DEFAULT,
+)
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-NS = {"w": W_NS}
+R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
+WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+PIC_NS = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+NS = {"w": W_NS, "r": R_NS}
+STANDARD_NAMESPACES = {
+    "w": W_NS, "r": R_NS, "wp": WP_NS, "pic": PIC_NS,
+    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
+    "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
+    "v": "urn:schemas-microsoft-com:vml",
+    "o": "urn:schemas-microsoft-com:office:office",
+}
+PAPER_TWIPS = {"a4": (11906, 16838), "letter": (12240, 15840)}
+INTERNAL_CUSTOM_PROPERTIES = {
+    "bibliography", "csl", "citation-abbreviations", "resource-path",
+    "reference-doc", "template", "include-in-header", "include-before-body",
+    "include-after-body", "css",
+}
 HEADING_STYLE_IDS = {f"Heading{index}" for index in range(1, 10)}
 COLOR_TAG = f"{{{W_NS}}}color"
 RPR_TAG = f"{{{W_NS}}}rPr"
@@ -64,6 +90,14 @@ def parse_args() -> argparse.Namespace:
         default="none",
         help="Line numbering mode for DOCX output.",
     )
+    parser.add_argument("--page-numbers", choices=PAGE_NUMBERING_CHOICES,
+                        default=PAGE_NUMBERING_DEFAULT)
+    parser.add_argument("--paper-size", choices=MARGIN_PAPER_SIZE_CHOICES,
+                        default=DEFAULT_MARGINS["paper_size"])
+    parser.add_argument("--margin-unit", choices=MARGIN_UNIT_CHOICES,
+                        default=DEFAULT_MARGINS["unit"])
+    for side in ("top", "right", "bottom", "left"):
+        parser.add_argument(f"--margin-{side}", type=float, default=DEFAULT_MARGINS[side])
     return parser.parse_args()
 
 
@@ -96,7 +130,7 @@ def normalize_heading_styles(styles_xml: bytes, heading_color: str) -> bytes:
 
     if not changed:
         return styles_xml
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return serialize_xml(root, styles_xml)
 
 
 def _ensure_child(parent: ET.Element, tag: str) -> ET.Element:
@@ -128,7 +162,7 @@ def normalize_line_spacing(styles_xml: bytes, line_spacing_mode: str) -> bytes:
 
     if not changed:
         return styles_xml
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return serialize_xml(root, styles_xml)
 
 
 def normalize_line_numbering(document_xml: bytes, line_numbering_mode: str) -> bytes:
@@ -144,7 +178,7 @@ def normalize_line_numbering(document_xml: bytes, line_numbering_mode: str) -> b
             continue
 
         if line_numbering is None:
-            line_numbering = ET.SubElement(sect_pr, LNNUMTYPE_TAG)
+            line_numbering = _set_child(sect_pr, "lnNumType")
             changed = True
 
         restart_value = LINE_NUMBERING_RESTART_VALUES[line_numbering_mode]
@@ -161,7 +195,172 @@ def normalize_line_numbering(document_xml: bytes, line_numbering_mode: str) -> b
 
     if not changed:
         return document_xml
+    return serialize_xml(root, document_xml)
+
+
+def serialize_xml(root: ET.Element, original: bytes = b"") -> bytes:
+    """Keep Word's prefixes and declarations used by mc:Ignorable values.
+
+    ElementTree otherwise invents ns0 prefixes and drops declarations that are
+    referenced only in attribute values, which breaks some DOCX consumers.
+    """
+    namespaces = dict(event for _, event in ET.iterparse(io.BytesIO(original),
+                      events=("start-ns",))) if original else {}
+    for prefix, uri in namespaces.items():
+        if not re.fullmatch(r"ns\d+", prefix):
+            ET.register_namespace(prefix, uri)
+    for prefix, uri in STANDARD_NAMESPACES.items():
+        ET.register_namespace(prefix, uri)
+    serialized = ET.tostring(root, encoding="unicode")
+    for prefix, uri in namespaces.items():
+        if not prefix or re.fullmatch(r"ns\d+", prefix):
+            continue
+        if f'xmlns:{prefix}=' not in serialized:
+            root.set(f"xmlns:{prefix}", uri)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+# WordprocessingML property elements are ordered sequences (ECMA-376).
+PROPERTY_ORDER = {
+    "sectPr": "headerReference footerReference footnotePr endnotePr type pgSz pgMar paperSrc pgBorders lnNumType pgNumType cols formProt vAlign noEndnote titlePg textDirection bidi rtlGutter docGrid printerSettings sectPrChange".split(),
+    "pPr": "pStyle keepNext keepLines pageBreakBefore framePr widowControl numPr suppressLineNumbers pBdr shd tabs suppressAutoHyphens kinsoku wordWrap overflowPunct topLinePunct autoSpaceDE autoSpaceDN bidi adjustRightInd snapToGrid spacing ind contextualSpacing mirrorIndents suppressOverlap jc textDirection textAlignment textboxTightWrap outlineLvl divId cnfStyle rPr sectPr pPrChange".split(),
+    "tblPr": "tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize tblW jc tblCellSpacing tblInd tblBorders shd tblLayout tblCellMar tblLook tblCaption tblDescription tblPrChange".split(),
+    "trPr": "cnfStyle divId gridBefore gridAfter wBefore wAfter cantSplit trHeight tblHeader tblCellSpacing jc hidden ins del trPrChange".split(),
+}
+
+
+def _set_child(parent: ET.Element, local_name: str, **attrs: str) -> ET.Element:
+    tag = f"{{{W_NS}}}{local_name}"
+    child = parent.find(tag)
+    if child is None:
+        child = ET.Element(tag)
+    else:
+        parent.remove(child)
+    order = PROPERTY_ORDER.get(parent.tag.rsplit("}", 1)[-1], [])
+    successors = order[order.index(local_name) + 1:] if local_name in order else []
+    index = next((index for index, item in enumerate(parent)
+                  if item.tag.rsplit("}", 1)[-1] in successors), len(parent))
+    parent.insert(index, child)
+    child.attrib.update({f"{{{W_NS}}}{key}": str(value) for key, value in attrs.items()})
+    return child
+
+
+def normalize_document_layout(document_xml: bytes, *, paper_size: str,
+                              margins: dict[str, float], margin_unit: str) -> bytes:
+    root = ET.fromstring(document_xml)
+    width, height = PAPER_TWIPS[paper_size]
+    factor = 1440 / 2.54 if margin_unit == "cm" else 1440
+    for sect_pr in root.findall(f".//{SECTPR_TAG}"):
+        page = _set_child(sect_pr, "pgSz", w=width, h=height)
+        page.attrib.pop(f"{{{W_NS}}}orient", None)
+        page_margins = _set_child(sect_pr, "pgMar", **{
+            side: str(round(value * factor)) for side, value in margins.items()
+        })
+        for name, value in (("header", "720"), ("footer", "720"), ("gutter", "0")):
+            page_margins.attrib.setdefault(f"{{{W_NS}}}{name}", value)
+    for paragraph in root.findall(".//w:p", NS):
+        # Empty source/page-break paragraphs and image-only paragraphs are
+        # layout, not prose. Keep their lines out of manuscript line numbering.
+        has_text = bool("".join(node.text or "" for node in paragraph.findall(".//w:t", NS)).strip())
+        has_math = any(node.tag.endswith("}oMath") for node in paragraph.iter())
+        if not has_text and not has_math:
+            ppr = paragraph.find("w:pPr", NS)
+            if ppr is None:
+                ppr = ET.Element(PPR_TAG)
+                paragraph.insert(0, ppr)
+            _set_child(ppr, "suppressLineNumbers")
+        style = paragraph.find("w:pPr/w:pStyle", NS)
+        if style is not None and style.get(f"{{{W_NS}}}val") in HEADING_STYLE_IDS:
+            _set_child(paragraph.find("w:pPr", NS), "keepNext")
+    for row in root.findall(".//w:tr", NS):
+        props = row.find("w:trPr", NS)
+        if props is None:
+            props = ET.Element(f"{{{W_NS}}}trPr")
+            row.insert(0, props)
+        _set_child(props, "cantSplit")
+    for table in root.findall(".//w:tbl", NS):
+        props = table.find("w:tblPr", NS)
+        if props is None:
+            props = ET.Element(f"{{{W_NS}}}tblPr")
+            table.insert(0, props)
+        # Let Word fit content within the text area rather than enforce narrow
+        # fixed columns. Retain author/Pandoc grid widths as preferred widths.
+        _set_child(props, "tblLayout", type="autofit")
+    for local, namespace in (("docPr", WP_NS), ("cNvPr", PIC_NS)):
+        for image in root.iter(f"{{{namespace}}}{local}"):
+            for attr in ("descr", "title", "name"):
+                value = image.get(attr, "")
+                if re.match(r"^(?:/|[A-Za-z]:[\\/]|\.{1,2}/)", value):
+                    if attr == "name":
+                        image.set(attr, f"Image {image.get('id', '')}".strip())
+                    else:
+                        del image.attrib[attr]
+                    print(f"Warning: removed source-path image {attr}; supply descriptive image alt text.", file=sys.stderr)
+    return serialize_xml(root, document_xml)
+
+
+def normalize_page_numbers(payloads: dict[str, bytes], mode: str) -> None:
+    document = ET.fromstring(payloads["word/document.xml"])
+    rel_key = "word/_rels/document.xml.rels"
+    original_rels = payloads.get(rel_key, b"")
+    rels = ET.fromstring(original_rels) if original_rels else ET.Element(f"{{{REL_NS}}}Relationships")
+    footer_type = f"{R_NS}/footer"
+    # These are generated submission files: the profile owns the page-number
+    # footer references. Existing unrelated package parts remain untouched.
+    for section in document.findall(f".//{SECTPR_TAG}"):
+        for ref in list(section.findall("w:footerReference", NS)):
+            section.remove(ref)
+    if mode == "lower_right":
+        footer_key = "word/makedoc-page-footer.xml"
+        footer_target = "makedoc-page-footer.xml"
+        existing = next((rel for rel in rels if rel.get("Target") == footer_target
+                         and rel.get("Type") == footer_type), None)
+        if existing is None:
+            used_ids = {rel.get("Id") for rel in rels}
+            number = 1
+            while f"rIdMakedocFooter{number}" in used_ids:
+                number += 1
+            existing = ET.SubElement(rels, f"{{{REL_NS}}}Relationship", {
+                "Id": f"rIdMakedocFooter{number}", "Type": footer_type, "Target": footer_target,
+            })
+        footer = ET.Element(f"{{{W_NS}}}ftr")
+        p = ET.SubElement(footer, f"{{{W_NS}}}p")
+        ppr = ET.SubElement(p, PPR_TAG)
+        _set_child(ppr, "jc", val="right")
+        _set_child(ppr, "suppressLineNumbers")
+        field = ET.SubElement(p, f"{{{W_NS}}}fldSimple", {f"{{{W_NS}}}instr": " PAGE "})
+        run = ET.SubElement(field, f"{{{W_NS}}}r")
+        ET.SubElement(run, f"{{{W_NS}}}t").text = "1"
+        payloads[footer_key] = serialize_xml(footer)
+        for section in document.findall(f".//{SECTPR_TAG}"):
+            # Use the same number on first/even pages if that section enables
+            # those variants in an upstream reference document.
+            for kind in ("default", "first", "even"):
+                ref = ET.Element(f"{{{W_NS}}}footerReference", {
+                    f"{{{W_NS}}}type": kind, f"{{{R_NS}}}id": existing.get("Id"),
+                })
+                section.insert(0, ref)
+        types_xml = payloads["[Content_Types].xml"]
+        types = ET.fromstring(types_xml)
+        if not any(part.get("PartName") == "/" + footer_key for part in types):
+            ET.SubElement(types, f"{{{CT_NS}}}Override", {
+                "PartName": "/" + footer_key,
+                "ContentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml",
+            })
+        payloads["[Content_Types].xml"] = serialize_xml(types, types_xml)
+    payloads[rel_key] = serialize_xml(rels, original_rels)
+    payloads["word/document.xml"] = serialize_xml(document, payloads["word/document.xml"])
+
+
+def strip_build_custom_properties(payloads: dict[str, bytes]) -> None:
+    key = "docProps/custom.xml"
+    if key not in payloads:
+        return
+    root = ET.fromstring(payloads[key])
+    for prop in list(root):
+        if prop.get("name", "").lower() in INTERNAL_CUSTOM_PROPERTIES:
+            root.remove(prop)
+    payloads[key] = serialize_xml(root, payloads[key])
 
 
 def rewrite_docx(
@@ -169,32 +368,37 @@ def rewrite_docx(
     heading_color: str,
     line_spacing_mode: str,
     line_numbering_mode: str,
+    *,
+    page_numbers: str = PAGE_NUMBERING_DEFAULT,
+    paper_size: str = "a4",
+    margin_unit: str = "cm",
+    margins: dict[str, float] | None = None,
 ) -> None:
     if not path.exists():
         raise FileNotFoundError(f"DOCX file not found: {path}")
-
+    if margins is None:
+        margins = {side: DEFAULT_MARGINS[side] for side in ("top", "right", "bottom", "left")}
+    if any(value <= 0 for value in margins.values()):
+        raise ValueError("DOCX margins must be positive.")
     with zipfile.ZipFile(path, "r") as src_zip:
-        members = src_zip.namelist()
-        payloads = {member: src_zip.read(member) for member in members}
-
+        payloads = {member: src_zip.read(member) for member in src_zip.namelist()}
     styles_key = "word/styles.xml"
-    if styles_key not in payloads:
-        return
-
-    payloads[styles_key] = normalize_heading_styles(payloads[styles_key], heading_color)
-    payloads[styles_key] = normalize_line_spacing(payloads[styles_key], line_spacing_mode)
-
+    if styles_key in payloads:
+        payloads[styles_key] = normalize_heading_styles(payloads[styles_key], heading_color)
+        payloads[styles_key] = normalize_line_spacing(payloads[styles_key], line_spacing_mode)
     document_key = "word/document.xml"
     if document_key in payloads:
         payloads[document_key] = normalize_line_numbering(payloads[document_key], line_numbering_mode)
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+        payloads[document_key] = normalize_document_layout(payloads[document_key],
+            paper_size=paper_size, margins=margins, margin_unit=margin_unit)
+        normalize_page_numbers(payloads, page_numbers)
+    strip_build_custom_properties(payloads)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx", dir=path.parent) as temp_file:
         temp_path = Path(temp_file.name)
-
     try:
         with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED) as out_zip:
-            for member in members:
-                out_zip.writestr(member, payloads[member])
+            for member, payload in payloads.items():
+                out_zip.writestr(member, payload)
         temp_path.replace(path)
     finally:
         if temp_path.exists():
@@ -203,12 +407,12 @@ def rewrite_docx(
 
 def main() -> int:
     args = parse_args()
-    rewrite_docx(
-        Path(args.docx),
-        heading_color=args.heading_color.strip().upper(),
-        line_spacing_mode=args.line_spacing.strip(),
-        line_numbering_mode=args.line_numbering.strip(),
-    )
+    rewrite_docx(Path(args.docx), heading_color=args.heading_color.strip().upper(),
+                 line_spacing_mode=args.line_spacing, line_numbering_mode=args.line_numbering,
+                 page_numbers=args.page_numbers, paper_size=args.paper_size,
+                 margin_unit=args.margin_unit,
+                 margins={side: getattr(args, f"margin_{side}")
+                          for side in ("top", "right", "bottom", "left")})
     return 0
 
 

@@ -422,12 +422,9 @@ EOF
 	assert_ordered_lines "$prepared" "## Figure Captions" "**Fig. 2.** Fixture richness figure used for CI cross-reference and image embedding checks." "## Supplementary Information"
 	assert_line_count_at_least "$prepared" "\\clearpage" 5
 	assert_line_count_at_least "$prepared" "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>" 5
-	assert_contains "$prepared" "![]($fig1_path){#fig-fixture-main width=95%}"
-	assert_contains "$prepared" "![]($fig2_path){#fig-fixture-richness width=85%}"
-	assert_contains "$prepared" "![]($figS1_path){#fig-fixture-s1 width=85%}"
-	assert_not_contains "$prepared" "![Fixture main figure used for CI layout and rendering checks.]"
-	assert_not_contains "$prepared" "![Fixture richness figure used for CI cross-reference and image embedding checks.]"
-	assert_not_contains "$prepared" "![Fixture supplementary figure used for supplementary material rendering checks.]"
+	assert_contains "$prepared" "![Fixture main figure used for CI layout and rendering checks.]($fig1_path){#fig-fixture-main width=95%}"
+	assert_contains "$prepared" "![Fixture richness figure used for CI cross-reference and image embedding checks.]($fig2_path){#fig-fixture-richness width=85%}"
+	assert_contains "$prepared" "![Fixture supplementary figure used for supplementary material rendering checks.]($figS1_path){#fig-fixture-s1 width=85%}"
 	assert_exact_line "$prepared" "**Fig. 1.**"
 	assert_exact_line "$prepared" "**Fig. 2.**"
 	assert_exact_line "$prepared" "**Fig. S1.**"

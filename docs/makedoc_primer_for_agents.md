@@ -173,7 +173,7 @@ Rules:
 1. Include `{...}` attribute block; this is how makedoc parses IDs and width.
 2. Include `#fig-...` in attributes for stable linking.
 3. Supplementary detection is ID-based: IDs ending in `-s<number>` (for example `#fig-main-s1`) are treated as supplementary.
-4. Alt text (the text inside `![ ... ]`) is used as caption/title text in figure workflows.
+4. Alt text (the text inside `![ ... ]`) is used as caption/title text in figure workflows and retained as the accessible DOCX image description, including `captions_page`. Supply a meaningful description; build paths are not valid alt text.
 5. Relative image paths are resolved from the Markdown file they appear in. Absolute image paths still work.
 
 ### 3.4 `manuscript/authors.yaml`
@@ -296,6 +296,14 @@ profiles:
       bottom: 2.0
       left: 2.5
 ```
+
+Page size, margins, page numbers, line spacing and line numbering are applied to
+both PDF and DOCX. DOCX page numbers use a right-aligned footer. Empty/image-only
+paragraphs do not receive manuscript line numbers, headings stay with the next
+paragraph, and table rows are kept together where they fit on a page. Columns
+can autofit their content while retaining authored widths as preferences; review
+long identifiers and wide tables in the rendered DOCX. Known build-input custom
+properties are stripped, but unrelated user metadata is retained.
 
 ## 5. Figure placement modes and what they do
 
