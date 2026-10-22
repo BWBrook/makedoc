@@ -4,6 +4,11 @@ Last updated: 2026-04-24
 Context: Phase 1-10 implementation (through profile-driven figure placement), plus post-handover hardening and stage-5 external path semantics
 
 ## Decision Log
+- 2026-10-22: Fill blank DOCX core title/creator metadata using the leading
+  rendered title block and selected-profile author names. Preserve existing
+  authored properties and document payloads; omit author contact details and
+  build paths from the new core values. Cover missing/present fields, package
+  registration, privacy, idempotence and the real Pandoc round trip.
 - 2026-10-22: Extend DOCX keep-with-next handling to direct body table/list
   lead-ins and standalone bold subcaptions. Restrict the flow rule to body
   paragraphs and exclude list items from bold/list-lead-in detection, so neither

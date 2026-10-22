@@ -317,6 +317,7 @@ Each profile supports:
     - keep table rows together and allow table columns to autofit while retaining authored widths as preferences
     - suppress line numbering on empty, page-break and image-only paragraphs
     - remove known build-input custom properties (`bibliography`, `csl`, and related file options), preserving other user metadata
+    - fill blank core title/creator properties from the leading rendered title block and configured author names; preserve existing authored values and other properties. A directly following subtitle (or Heading 2 after Heading 1) joins the title with an em dash. Author emails, affiliations, ORCIDs and YAML paths are not copied into core metadata.
   - `captions_page` retains each image's source description as accessible alt text while suppressing its duplicate visible caption. Supply meaningful text in `![description]`; path-like fallback alt text is removed with a warning.
   - Table widths still need manuscript-specific inspection, especially for long identifiers or wide numerical tables. Row protection cannot fit a row taller than a page.
 - `edgecases` (optional):

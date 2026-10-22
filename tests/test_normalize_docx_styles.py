@@ -15,6 +15,9 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from normalize_docx_styles import (
+    CP_NS,
+    CT_NS,
+    DC_NS,
     LINE_ATTR,
     LINE_NUMBERING_COUNTBY_ATTR,
     LINE_NUMBERING_DISTANCE_ATTR,
@@ -23,12 +26,14 @@ from normalize_docx_styles import (
     LINE_RULE_ATTR,
     LNNUMTYPE_TAG,
     NS,
+    REL_NS,
     SECTPR_TAG,
     W_NS,
     normalize_heading_styles,
     normalize_line_numbering,
     normalize_line_spacing,
     normalize_document_layout,
+    normalize_core_properties,
     rewrite_docx,
     serialize_xml,
 )
@@ -38,6 +43,80 @@ STYLE_ID_ATTR = f"{{{W_NS}}}styleId"
 
 
 class NormalizeDocxStylesTests(unittest.TestCase):
+    def test_core_metadata_fills_blank_fields_without_changing_other_payloads(self) -> None:
+        document = f'''<w:document xmlns:w="{W_NS}"><w:body><w:p/>
+          <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Supplementary information</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Actual </w:t></w:r><w:r><w:t>paper title</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Body text remains exact.</w:t></w:r></w:p>
+        </w:body></w:document>'''.encode()
+        for empty_fields in ('', '<dc:title> </dc:title><dc:creator/>'):
+            with self.subTest(empty_fields=empty_fields):
+                core = f'''<cp:coreProperties xmlns:cp="{CP_NS}" xmlns:dc="{DC_NS}"
+                  xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                  {empty_fields}<dc:subject>Retain subject</dc:subject><cp:keywords>retain keywords</cp:keywords>
+                  <cp:lastModifiedBy>Existing editor</cp:lastModifiedBy>
+                  <dcterms:created xsi:type="dcterms:W3CDTF">2026-10-22T00:00:00Z</dcterms:created>
+                </cp:coreProperties>'''.encode()
+                payloads = {'word/document.xml': document, 'docProps/core.xml': core,
+                            'word/styles.xml': b'unchanged styles', 'word/media/image.png': b'unchanged image'}
+                before = dict(payloads)
+                normalize_core_properties(payloads, ['First Author', 'Second Author'])
+                root = ET.fromstring(payloads['docProps/core.xml'])
+                self.assertEqual(root.find(f'{{{DC_NS}}}title').text,
+                                 'Supplementary information — Actual paper title')
+                self.assertEqual(root.find(f'{{{DC_NS}}}creator').text, 'First Author; Second Author')
+                for node in ET.fromstring(core):
+                    if node.tag not in {f'{{{DC_NS}}}title', f'{{{DC_NS}}}creator'}:
+                        preserved = root.find(node.tag)
+                        self.assertEqual((preserved.text, preserved.attrib), (node.text, node.attrib))
+                self.assertEqual({key: value for key, value in payloads.items() if key != 'docProps/core.xml'},
+                                 {key: value for key, value in before.items() if key != 'docProps/core.xml'})
+                once = dict(payloads)
+                normalize_core_properties(payloads, ['First Author', 'Second Author'])
+                self.assertEqual(payloads, once)
+
+    def test_existing_title_and_creator_take_precedence_independently(self) -> None:
+        document = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Fallback title</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr><w:r><w:t>Subtitle</w:t></w:r></w:p>
+        </w:body></w:document>'''.encode()
+        for title, creator in [('Authored title', 'Authored creator'), ('Authored title', ''), ('', 'Authored creator')]:
+            with self.subTest(title=title, creator=creator):
+                core = f'<cp:coreProperties xmlns:cp="{CP_NS}" xmlns:dc="{DC_NS}"><dc:title>{title}</dc:title><dc:creator>{creator}</dc:creator></cp:coreProperties>'.encode()
+                payloads = {'word/document.xml': document, 'docProps/core.xml': core}
+                normalize_core_properties(payloads, ['Fallback author'])
+                root = ET.fromstring(payloads['docProps/core.xml'])
+                self.assertEqual(root.find(f'{{{DC_NS}}}title').text, title or 'Fallback title — Subtitle')
+                self.assertEqual(root.find(f'{{{DC_NS}}}creator').text, creator or 'Fallback author')
+                if title and creator:
+                    self.assertEqual(payloads['docProps/core.xml'], core)
+
+    def test_missing_core_part_is_registered_without_duplicate_or_colliding_ids(self) -> None:
+        payloads = {'_rels/.rels': f'<Relationships xmlns="{REL_NS}"><Relationship Id="rIdMakedocCore" Type="other" Target="other.xml"/></Relationships>'.encode(),
+                    '[Content_Types].xml': f'<Types xmlns="{CT_NS}"><Default Extension="xml" ContentType="application/xml"/></Types>'.encode()}
+        normalize_core_properties(payloads, ['Configured author'])
+        root = ET.fromstring(payloads['docProps/core.xml'])
+        self.assertEqual(root.find(f'{{{DC_NS}}}creator').text, 'Configured author')
+        rels = ET.fromstring(payloads['_rels/.rels'])
+        self.assertEqual(len({rel.get('Id') for rel in rels}), 2)
+        self.assertEqual(sum(rel.get('Target') == 'docProps/core.xml' for rel in rels), 1)
+        types = ET.fromstring(payloads['[Content_Types].xml'])
+        self.assertEqual(sum(node.get('PartName') == '/docProps/core.xml' for node in types), 1)
+        once = dict(payloads)
+        normalize_core_properties(payloads, ['Configured author'])
+        self.assertEqual(payloads, once)
+
+    def test_metadata_does_not_infer_creator_from_body_or_title_from_later_heading(self) -> None:
+        core = f'<cp:coreProperties xmlns:cp="{CP_NS}" xmlns:dc="{DC_NS}"><dc:title/><dc:creator/></cp:coreProperties>'.encode()
+        document = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:r><w:t>Private Person, person@example.org</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Later section</w:t></w:r></w:p>
+        </w:body></w:document>'''.encode()
+        payloads = {'word/document.xml': document, 'docProps/core.xml': core}
+        before = dict(payloads)
+        normalize_core_properties(payloads, [])
+        self.assertEqual(payloads, before)
+
     def test_normalize_heading_styles_updates_heading_only(self) -> None:
         styles_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -236,6 +315,17 @@ class NormalizeDocxStylesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "fixture.docx"
+            authors = root / "authors.yaml"
+            authors.write_text('''affiliations:
+  a: Private institution
+authors:
+  - name: First Author
+    affiliations: [a]
+    email: private@example.org
+    orcid: private-orcid
+  - name: Second Author
+    affiliations: [a]
+''')
             image = SCRIPTS_DIR.parent / "testbed/manuscript/figures/fig1_dummy.png"
             description = "A synthetic curve used to test accessible image descriptions."
             figure = FigureBlock(raw=f"![{description}]({image}){{#fig-one width=60%}}",
@@ -253,6 +343,7 @@ class NormalizeDocxStylesTests(unittest.TestCase):
                     z.writestr(name, payload)
             for _ in range(2):
                 rewrite_docx(path, "000000", "1.5", "continuous",
+                    author_metadata=str(authors),
                     margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
             with zipfile.ZipFile(path) as z:
                 document_xml = z.read("word/document.xml")
@@ -262,6 +353,12 @@ class NormalizeDocxStylesTests(unittest.TestCase):
                 props = ET.fromstring(z.read("docProps/custom.xml"))
                 self.assertEqual([prop.get("name") for prop in props], ["Project"])
                 self.assertNotIn(b"/private/server", z.read("docProps/custom.xml"))
+                core = z.read('docProps/core.xml')
+                core_root = ET.fromstring(core)
+                self.assertEqual(core_root.find(f'{{{DC_NS}}}title').text, 'Heading')
+                self.assertEqual(core_root.find(f'{{{DC_NS}}}creator').text, 'First Author; Second Author')
+                for private in (b'private@example.org', b'private-orcid', b'Private institution', str(authors).encode()):
+                    self.assertNotIn(private, core)
                 self.assertEqual(document.find(".//w:pgSz", NS).get(f"{{{W_NS}}}w"), "11906")
                 self.assertEqual(document.find(".//w:pgMar", NS).get(f"{{{W_NS}}}left"), "1417")
                 section_names = [node.tag.rsplit("}", 1)[-1] for node in document.find(".//w:sectPr", NS)]

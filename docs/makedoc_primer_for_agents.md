@@ -306,7 +306,12 @@ chain table cells or list items together. Table rows are kept together where the
 fit on a page. Columns
 can autofit their content while retaining authored widths as preferences; review
 long identifiers and wide tables in the rendered DOCX. Known build-input custom
-properties are stripped, but unrelated user metadata is retained.
+properties are stripped, but unrelated user metadata is retained. Blank core
+title and creator properties are filled from the leading rendered title block
+and the selected profile's author names. A directly following subtitle (or
+Heading 2 after Heading 1) is joined to the title with an em dash, including
+supplement title blocks. Existing authored core values take precedence. Author
+emails, affiliations, ORCIDs and YAML paths are not copied into core metadata.
 
 ## 5. Figure placement modes and what they do
 

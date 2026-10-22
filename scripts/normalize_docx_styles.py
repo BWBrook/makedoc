@@ -12,6 +12,7 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from prepare_markdown_sources import _load_author_metadata
 from profile_schema import (
     DEFAULT_MARGINS, LINE_NUMBERING_CHOICES, LINE_SPACING_CHOICES,
     MARGIN_PAPER_SIZE_CHOICES, MARGIN_UNIT_CHOICES,
@@ -23,6 +24,8 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
+CP_NS = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+DC_NS = "http://purl.org/dc/elements/1.1/"
 WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 PIC_NS = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 NS = {"w": W_NS, "r": R_NS}
@@ -33,6 +36,7 @@ STANDARD_NAMESPACES = {
     "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
     "v": "urn:schemas-microsoft-com:vml",
     "o": "urn:schemas-microsoft-com:office:office",
+    "cp": CP_NS, "dc": DC_NS,
 }
 PAPER_TWIPS = {"a4": (11906, 16838), "letter": (12240, 15840)}
 INTERNAL_CUSTOM_PROPERTIES = {
@@ -73,6 +77,8 @@ LINE_NUMBERING_RESTART_VALUES = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--docx", required=True, help="Path to DOCX file to normalize.")
+    parser.add_argument("--author-metadata", default="",
+                        help="Selected profile's author YAML; only names enter core metadata.")
     parser.add_argument(
         "--heading-color",
         default="000000",
@@ -408,6 +414,74 @@ def strip_build_custom_properties(payloads: dict[str, bytes]) -> None:
     payloads[key] = serialize_xml(root, payloads[key])
 
 
+def document_title(document_xml: bytes) -> str:
+    """Read the leading title block without changing rendered document content."""
+    body = ET.fromstring(document_xml).find("w:body", NS)
+    if body is None:
+        return ""
+    paragraphs = []
+    for child in body:
+        if child.tag in {f"{{{W_NS}}}bookmarkStart", f"{{{W_NS}}}bookmarkEnd", f"{{{W_NS}}}proofErr"}:
+            continue
+        if child.tag != f"{{{W_NS}}}p":
+            break
+        text = "".join(node.text or "" for node in child.iter()
+                       if node.tag in {f"{{{W_NS}}}t", f"{{{STANDARD_NAMESPACES['m']}}}t"}).strip()
+        if not text:
+            continue
+        style = child.find("w:pPr/w:pStyle", NS)
+        paragraphs.append((style.get(f"{{{W_NS}}}val", "") if style is not None else "", text))
+        if len(paragraphs) == 2:
+            break
+    if not paragraphs or paragraphs[0][0] not in {"Title", "Heading1"}:
+        return ""
+    style, title = paragraphs[0]
+    subtitle_style = "Subtitle" if style == "Title" else "Heading2"
+    if len(paragraphs) > 1 and paragraphs[1][0] == subtitle_style:
+        title += " — " + paragraphs[1][1]
+    return title
+
+
+def normalize_core_properties(payloads: dict[str, bytes], author_names: list[str]) -> None:
+    """Fill absent/blank title and creator, retaining authored core properties."""
+    key = "docProps/core.xml"
+    original = payloads.get(key, b"")
+    root = ET.fromstring(original) if original else ET.Element(f"{{{CP_NS}}}coreProperties")
+    title = document_title(payloads["word/document.xml"]) if "word/document.xml" in payloads else ""
+    changed = False
+    for name, value in (("title", title), ("creator", "; ".join(author_names))):
+        node = root.find(f"{{{DC_NS}}}{name}")
+        if value and (node is None or not (node.text or "").strip()):
+            if node is None:
+                node = ET.SubElement(root, f"{{{DC_NS}}}{name}")
+            node.text = value
+            changed = True
+    if not changed:
+        return
+    payloads[key] = serialize_xml(root, original)
+    if original:
+        return
+    # A package without a core part also needs the standard OPC registration.
+    types_key = "[Content_Types].xml"
+    original_types = payloads.get(types_key, b"")
+    types = ET.fromstring(original_types) if original_types else ET.Element(f"{{{CT_NS}}}Types")
+    if not any(node.get("PartName") == "/" + key for node in types):
+        ET.SubElement(types, f"{{{CT_NS}}}Override", PartName="/" + key,
+                      ContentType="application/vnd.openxmlformats-package.core-properties+xml")
+    payloads[types_key] = serialize_xml(types, original_types)
+    rels_key = "_rels/.rels"
+    original_rels = payloads.get(rels_key, b"")
+    rels = ET.fromstring(original_rels) if original_rels else ET.Element(f"{{{REL_NS}}}Relationships")
+    rel_type = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
+    if not any(node.get("Type") == rel_type for node in rels):
+        used_ids = {node.get("Id") for node in rels}
+        rel_id = "rIdMakedocCore"
+        while rel_id in used_ids:
+            rel_id += "_"
+        ET.SubElement(rels, f"{{{REL_NS}}}Relationship", Id=rel_id, Type=rel_type, Target=key)
+    payloads[rels_key] = serialize_xml(rels, original_rels)
+
+
 def rewrite_docx(
     path: Path,
     heading_color: str,
@@ -418,6 +492,7 @@ def rewrite_docx(
     paper_size: str = "a4",
     margin_unit: str = "cm",
     margins: dict[str, float] | None = None,
+    author_metadata: str = "",
 ) -> None:
     if not path.exists():
         raise FileNotFoundError(f"DOCX file not found: {path}")
@@ -425,6 +500,10 @@ def rewrite_docx(
         margins = {side: DEFAULT_MARGINS[side] for side in ("top", "right", "bottom", "left")}
     if any(value <= 0 for value in margins.values()):
         raise ValueError("DOCX margins must be positive.")
+    author_names = []
+    if author_metadata.strip():
+        _, authors, _ = _load_author_metadata(Path(author_metadata))
+        author_names = [author.name for author in authors]
     with zipfile.ZipFile(path, "r") as src_zip:
         payloads = {member: src_zip.read(member) for member in src_zip.namelist()}
     styles_key = "word/styles.xml"
@@ -438,6 +517,7 @@ def rewrite_docx(
             paper_size=paper_size, margins=margins, margin_unit=margin_unit)
         normalize_page_numbers(payloads, page_numbers)
     strip_build_custom_properties(payloads)
+    normalize_core_properties(payloads, author_names)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".docx", dir=path.parent) as temp_file:
         temp_path = Path(temp_file.name)
     try:
@@ -456,6 +536,7 @@ def main() -> int:
                  line_spacing_mode=args.line_spacing, line_numbering_mode=args.line_numbering,
                  page_numbers=args.page_numbers, paper_size=args.paper_size,
                  margin_unit=args.margin_unit,
+                 author_metadata=args.author_metadata,
                  margins={side: getattr(args, f"margin_{side}")
                           for side in ("top", "right", "bottom", "left")})
     return 0
