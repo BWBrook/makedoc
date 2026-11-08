@@ -188,7 +188,8 @@ def rewrite_docx(
     if document_key in payloads:
         payloads[document_key] = normalize_line_numbering(payloads[document_key], line_numbering_mode)
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+    # Same directory as the target, so the final replace is atomic and never crosses filesystems (tmpfs /tmp).
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx", dir=path.parent) as temp_file:
         temp_path = Path(temp_file.name)
 
     try:
