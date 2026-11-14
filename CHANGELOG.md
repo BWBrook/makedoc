@@ -31,6 +31,13 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 - In-text figure links were dead in the PDF in `captions_page` mode.
 - The fixture figures were 16-bit RGBA PNGs and invisible in every fixture PDF; they are now 8-bit.
 - An empty bibliography is accepted when nothing is cited.
+- `line_numbering: section` never restarted the numbers.
+- A document with a YAML title block ignored `page_numbers` on its first page.
+- Without a `References` heading, end-of-document figures came before the bibliography.
+- The citation audit truncated keys containing `/`, `&` or `?`.
+- Captions containing a bracketed citation, and image paths with a title or angle brackets, escaped image checks.
+- A mistyped optional profile value was silently replaced by the default.
+- DOCX images could overflow the text area set by the profile margins.
 - Figure lines and citations inside HTML comment blocks were extracted and linted.
 - A standalone supplement received a "Supplementary Information" divider page.
 
@@ -39,6 +46,12 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 - Profile keys `golden_contract` and `edgecases` (they served makedoc's own tests).
 - `make-vars`, the profile cache, `profile-scaffold`, `diagnose`, the dependency installer and the `wsl-smoke` target.
 - GitHub Actions annotations from lint output.
+
+### Known limitations
+
+- Characters given a LaTeX fallback are omitted from PDF bookmarks and the PDF title field.
+- Review markup is not applied inside figure captions.
+- A figure line inside a code span that runs over several lines is still treated as a figure.
 
 ## 1.0.0
 

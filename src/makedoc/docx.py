@@ -38,6 +38,8 @@ STANDARD_NAMESPACES = {
     "o": "urn:schemas-microsoft-com:office:office",
     "cp": CP_NS, "dc": DC_NS,
 }
+A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+EMU_PER_TWIP = 635
 PAPER_TWIPS = {"a4": (11906, 16838), "letter": (12240, 15840)}
 INTERNAL_CUSTOM_PROPERTIES = {
     "bibliography", "csl", "citation-abbreviations", "resource-path",
@@ -265,6 +267,20 @@ def _keep_body_lead_ins(root: ET.Element) -> None:
             _set_child(props, "keepNext", val="1")
 
 
+def _fit_drawings(root: ET.Element, max_width: int) -> None:
+    # Pandoc sizes images for its default page. Shrink any that the profile's margins
+    # leave too wide, keeping the aspect ratio.
+    for drawing in root.iter(f"{{{W_NS}}}drawing"):
+        extent = next(drawing.iter(f"{{{WP_NS}}}extent"), None)
+        if extent is None or int(extent.get("cx", "0")) <= max_width:
+            continue
+        scale = max_width / int(extent.get("cx"))
+        for node in [extent, *drawing.iter(f"{{{A_NS}}}ext")]:
+            if node.get("cx") and node.get("cy"):
+                node.set("cx", str(round(int(node.get("cx")) * scale)))
+                node.set("cy", str(round(int(node.get("cy")) * scale)))
+
+
 def normalize_document_layout(document_xml: bytes, *, paper_size: str,
                               margins: dict[str, float], margin_unit: str) -> bytes:
     root = ET.fromstring(document_xml)
@@ -278,6 +294,8 @@ def normalize_document_layout(document_xml: bytes, *, paper_size: str,
         })
         for name, value in (("header", "720"), ("footer", "720"), ("gutter", "0")):
             page_margins.attrib.setdefault(f"{{{W_NS}}}{name}", value)
+    text_width_twips = width - round(margins["left"] * factor) - round(margins["right"] * factor)
+    _fit_drawings(root, text_width_twips * EMU_PER_TWIP)
     for paragraph in root.findall(".//w:p", NS):
         # Empty source/page-break paragraphs and image-only paragraphs are
         # layout, not prose. Keep their lines out of manuscript line numbering.

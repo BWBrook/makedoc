@@ -21,12 +21,14 @@ def page_numbers_block(mode: str) -> list[str]:
             "  \\def\\@mkboth##1##2{}%",
             "}",
             "\\pagestyle{makedoclowerright}",
+            "\\let\\ps@plain\\ps@makedoclowerright",
             "\\makeatother",
         ]
     if mode == "none":
         return [
             "% Page numbering disabled.",
             "\\pagestyle{empty}",
+            "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother",
         ]
     raise ValueError(f"Unsupported page number mode: {mode}")
 
@@ -111,7 +113,7 @@ def line_numbering_block(mode: str) -> list[str]:
         _require_tex_package("etoolbox", "per-section line numbering")
         lines.extend([
             "\\usepackage{etoolbox}",
-            "\\AtBeginEnvironment{section}{\\resetlinenumber}",
+            "\\pretocmd{\\section}{\\resetlinenumber}{}{}",
         ])
     elif mode == "continuous":
         pass

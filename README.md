@@ -113,7 +113,7 @@ A top-level `common:` key is ignored by makedoc, so it can hold a YAML anchor sh
 ## What the build does to the sources
 
 - **Authors.** With `author_metadata` set, an author block with superscript affiliations replaces `<div id="authors"></div>`, or follows the first `# Title` heading if that placeholder is absent. A page break follows it.
-- **Sections.** The first `Introduction` heading starts a new page. A `References` heading receives the bibliography, on a new page unless `references_new_page: false`. Without that heading the bibliography goes at the end.
+- **Sections.** The first `Introduction` heading starts a new page. A `References` heading receives the bibliography, on a new page unless `references_new_page: false`. Without that heading the bibliography follows the text, before any figures placed at the end.
 - **Figures.** A figure is a line holding one image with an attribute block: `![Caption.](../figures/fig1.png){#fig-one width=90%}`. Image paths are relative to the Markdown file. An id ending in `-s1`, `-s2`, … marks a supplementary figure. Link to a figure with `Fig. [1](#fig-one)`.
   - `pages`: figures move after the references, one per page, labelled Fig. 1, Fig. 2, … then Fig. S1, …
   - `captions_page`: a Figure Captions page lists every caption, then each figure follows on its own page with its label only.
@@ -122,7 +122,7 @@ A top-level `common:` key is ignored by makedoc, so it can hold a YAML anchor sh
 - **Images.** A 16-bit PNG with an alpha channel fails the PDF build, because xelatex would embed it fully transparent. Re-save it as 8-bit.
 - **Comments.** Lines inside fenced code blocks and HTML comment blocks are left alone by every step and by lint.
 - **DOCX.** After Pandoc writes the DOCX, makedoc applies the profile's page size, margins, line spacing, line numbering and page numbers, sets headings to black, and fills in title and author metadata.
-- **Review markup** (off by default). `{++added++}`, `{--deleted--}`, `{~~old~>new~~}` and `{>>note<<}` on a single line render as bold bracketed traces. This is outbound only; Word comments and tracked changes belong to Wordmark ([docs/docx_review_boundary.md](docs/docx_review_boundary.md)).
+- **Review markup** (off by default). `{++added++}`, `{--deleted--}`, `{~~old~>new~~}` and `{>>note<<}` on a single line render as bold bracketed traces. Figure captions are not transformed. This is outbound only; Word comments and tracked changes belong to Wordmark ([docs/docx_review_boundary.md](docs/docx_review_boundary.md)).
 
 ## Checks
 

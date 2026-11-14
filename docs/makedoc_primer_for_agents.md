@@ -226,7 +226,7 @@ Run it from the directory that holds `settings/`, or pass `-c path/to/build.yaml
 | `Possible manual author-year citation` on a line that is not a citation | The lint matches `(Capitalised … 2020)`. Reword, or keep that file out of `lint_sources`. |
 | `The PDF font has no glyph for these characters` | The character is in a code span, or is outside the fallback set. Use TeX math, or set `fonts.main` / `fonts.mono` to a font that has it. |
 | `PNG files are 16-bit with an alpha channel` | xelatex would render them invisible. Re-save as 8-bit: `magick in.png -depth 8 out.png`. |
-| `Relative image resource not found` | The image path is resolved from the Markdown file's directory. Fix the path. |
+| `Image file not found` | A relative image path is resolved from the Markdown file's directory. Fix the path. |
 | `Hyper reference 'fig-x' ... undefined` | The text links to a figure id that no figure line defines. |
 | Author block missing | `author_metadata` is not set in the selected profile, or there is neither the placeholder nor a `# Title` heading. |
 | Inline figures appear at the end | The `<div id="figures"></div>` placeholder is missing or its id differs from `figures.placeholder_id`. |

@@ -45,7 +45,7 @@ from pathlib import Path
 
 import yaml
 
-from .markdown_scan import scan_markdown_lines, strip_inline_code_spans, visible_line_flags
+from .markdown_scan import scan_lines, scan_markdown_lines, visible_line_flags
 from .profile import Profile
 from .report import warn
 
@@ -55,7 +55,8 @@ FIGURE_LINE_RE = re.compile(
     r"""^(?P<prefix>\s*)!\[(?P<alt>.*?)\]\((?P<src>[^)\n]+)\)\{(?P<attrs>[^\}]*)\}\s*$"""
 )
 FIGURE_ID_RE = re.compile(r"#(?P<id>[\w.-]+)")
-IMAGE_REFERENCE_RE = re.compile(r"!\[[^\]]*\]\((?P<src>[^)\n]+)\)")
+IMAGE_REFERENCE_RE = re.compile(r"!\[(?:[^\[\]]|\[[^\]]*\])*\]\((?P<src>[^)\n]+)\)")
+IMAGE_DESTINATION_RE = re.compile(r"""^(?P<lead>\s*<?)(?P<path>.*?)(?P<tail>>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*)$""")
 SUPPLEMENTARY_ID_RE = re.compile(r"-s\d+$", re.IGNORECASE)
 DOCX_PAGEBREAK_OPENXML = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
 TITLE_HEADING_RE = re.compile(r"^\s*#\s+\S+")
@@ -69,8 +70,6 @@ REVIEW_SUBSTITUTION_RE = re.compile(r"\{~~(?P<old>.*?)~>(?P<new>.*?)~~\}")
 REVIEW_ADDITION_RE = re.compile(r"\{\+\+(?P<text>.*?)\+\+\}")
 REVIEW_DELETION_RE = re.compile(r"\{--(?P<text>.*?)--\}")
 REVIEW_NOTE_RE = re.compile(r"\{>>(?P<text>.*?)<<\}")
-HTML_COMMENT_OPEN_RE = re.compile(r"<!--")
-HTML_COMMENT_CLOSE_RE = re.compile(r"-->")
 
 
 @dataclass(frozen=True)
@@ -251,14 +250,11 @@ def apply_author_metadata(lines: list[str], author_metadata_path: str) -> list[s
     )
 
 
-def has_refs_anchor(lines: list[str], index: int) -> bool:
-    for offset in range(0, 8):
-        if index + offset >= len(lines):
-            break
-        line = lines[index + offset].strip().lower()
-        if "id=\"refs\"" in line or "id='refs'" in line:
-            return True
-    return False
+REFS_ANCHOR_RE = re.compile(r"""<div\s+[^>]*\bid\s*=\s*['"]refs['"]""", re.IGNORECASE)
+
+
+def has_refs_anchor(lines: list[str]) -> bool:
+    return any(visible and REFS_ANCHOR_RE.search(searchable) for visible, searchable in scan_lines(lines))
 
 
 def _is_page_break_line(line: str) -> bool:
@@ -393,36 +389,13 @@ def _review_markup_text(text: str) -> str:
     return text
 
 
-def _hidden_comment_flags(lines: list[str]) -> list[bool]:
-    flags: list[bool] = []
-    in_comment = False
-
-    for line in lines:
-        if in_comment:
-            flags.append(True)
-            if HTML_COMMENT_CLOSE_RE.search(line):
-                in_comment = False
-            continue
-
-        if HTML_COMMENT_OPEN_RE.search(line):
-            flags.append(True)
-            if not HTML_COMMENT_CLOSE_RE.search(line):
-                in_comment = True
-            continue
-
-        flags.append(False)
-
-    return flags
-
-
 def apply_review_markup(lines: list[str], enabled: bool = False) -> list[str]:
     if not enabled:
         return lines
 
     out_lines: list[str] = []
-    hidden_flags = _hidden_comment_flags(lines)
-    for line, visible, hidden in zip(lines, visible_line_flags(lines), hidden_flags, strict=True):
-        if not visible or hidden or FIGURE_LINE_RE.match(line):
+    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
+        if not visible or FIGURE_LINE_RE.match(line):
             out_lines.append(line)
             continue
 
@@ -438,21 +411,28 @@ def apply_review_markup(lines: list[str], enabled: bool = False) -> list[str]:
 
 
 def reference_placement(lines: list[str], references_new_page: bool = True) -> list[str]:
-    out_lines: list[str] = []
-    refs_injected = False
+    """Anchor the bibliography under the References heading, or at the end without one.
 
-    for index, (line, visible) in enumerate(zip(lines, visible_line_flags(lines), strict=True)):
-        if visible and not refs_injected and REFERENCE_SECTION_RE.match(line.strip()):
-            refs_injected = True
+    The explicit end anchor keeps the bibliography ahead of figures that are appended later.
+    """
+    anchored = has_refs_anchor(lines)
+    out_lines: list[str] = []
+    heading_seen = False
+
+    for line, visible in zip(lines, visible_line_flags(lines), strict=True):
+        if visible and not heading_seen and REFERENCE_SECTION_RE.match(line.strip()):
+            heading_seen = True
             if references_new_page and not _has_trailing_page_break(out_lines):
                 _append_page_break(out_lines)
             out_lines.append(line)
-            if not has_refs_anchor(lines, index):
-                out_lines.append("")
-                out_lines.append('<div id="refs"></div>')
+            if not anchored:
+                out_lines.extend(["", '<div id="refs"></div>'])
+                anchored = True
             continue
         out_lines.append(line)
 
+    if not anchored:
+        out_lines.extend(["", '<div id="refs"></div>'])
     return out_lines
 
 
@@ -509,10 +489,17 @@ def is_external_resource(src: str) -> bool:
     return bool(re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", src))
 
 
-def validate_relative_image_resources(source_path: Path) -> None:
-    for line in scan_markdown_lines(source_path):
-        for match in IMAGE_REFERENCE_RE.finditer(line.searchable):
-            resolve_image_resource(source_path, match.group("src") or "", line.line)
+def split_image_destination(raw: str) -> tuple[str, str, str]:
+    """Split `(<path> "title")` contents into the text before, the path, and the text after."""
+    match = IMAGE_DESTINATION_RE.match(raw)
+    return match.group("lead"), match.group("path").strip(), match.group("tail")
+
+
+def _local_image_path(source_path: Path, src: str) -> Path | None:
+    if not src or is_external_resource(src):
+        return None
+    path = Path(src).expanduser()
+    return path if path.is_absolute() else (source_path.parent / path).resolve()
 
 
 def image_resources(sources: list[Path]) -> list[Path]:
@@ -521,66 +508,39 @@ def image_resources(sources: list[Path]) -> list[Path]:
     for source in sources:
         for line in scan_markdown_lines(source):
             for match in IMAGE_REFERENCE_RE.finditer(line.searchable):
-                src = (match.group("src") or "").strip()
-                if not src or is_external_resource(src):
-                    continue
-                path = Path(src).expanduser()
-                if not path.is_absolute():
-                    path = (source.parent / path).resolve()
-                if path not in found:
+                path = _local_image_path(source, split_image_destination(match.group("src"))[1])
+                if path is not None and path not in found:
                     found.append(path)
     return found
 
 
-def resolve_image_resource(source_path: Path, raw_src: str, line_number: int) -> str:
-    src = raw_src.strip()
-    if not src or is_external_resource(src):
-        return raw_src
-
-    candidate = Path(src).expanduser()
-    if candidate.is_absolute():
-        return raw_src
-
-    resolved = (source_path.parent / candidate).resolve()
-    if not resolved.exists():
-        raise ValueError(
-            f"Relative image resource not found in {source_path}:{line_number}: "
-            f"{src} -> {resolved}"
-        )
-    return resolved.as_posix()
-
-
 def rewrite_relative_image_resources(source_path: Path, text: str) -> str:
-    rewritten_lines: list[str] = []
+    """Make local image paths absolute, failing on any image file that does not exist."""
     lines = text.splitlines()
-    flags = visible_line_flags(lines)
+    rewritten: list[str] = []
 
-    for line_number, (line, visible) in enumerate(zip(lines, flags, strict=True), start=1):
+    for line_number, (line, (visible, searchable)) in enumerate(
+        zip(lines, scan_lines(lines), strict=True), start=1
+    ):
         if not visible:
-            rewritten_lines.append(line)
-            continue
-
-        searchable = strip_inline_code_spans(line)
-        replacements: list[tuple[int, int, str]] = []
-        for match in IMAGE_REFERENCE_RE.finditer(searchable):
-            start, end = match.span("src")
-            resolved = resolve_image_resource(source_path, line[start:end], line_number)
-            replacements.append((start, end, resolved))
-
-        if not replacements:
-            rewritten_lines.append(line)
+            rewritten.append(line)
             continue
 
         cursor = 0
         parts: list[str] = []
-        for start, end, replacement in replacements:
-            parts.append(line[cursor:start])
-            parts.append(replacement)
+        for match in IMAGE_REFERENCE_RE.finditer(searchable):
+            start, end = match.span("src")
+            lead, src, tail = split_image_destination(line[start:end])
+            path = _local_image_path(source_path, src)
+            if path is None:
+                continue
+            if not path.exists():
+                raise ValueError(f"Image file not found in {source_path}:{line_number}: {src} -> {path}")
+            parts.append(line[cursor:start] + lead + path.as_posix() + tail)
             cursor = end
-        parts.append(line[cursor:])
-        rewritten_lines.append("".join(parts))
+        rewritten.append("".join(parts) + line[cursor:])
 
-    return "\n".join(rewritten_lines)
+    return "\n".join(rewritten)
 
 
 def _caption_line(label: str) -> str:

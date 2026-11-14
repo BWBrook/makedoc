@@ -91,6 +91,10 @@ def parser() -> argparse.ArgumentParser:
         action = csl_sub.add_parser(name, help=text)
         action.add_argument("journal", help="journal name, for example 'Ecology Letters'")
         action.add_argument(
+            "-c", "--config", default=DEFAULT_CONFIG,
+            help="if this config exists, also search its default profile's csl_search_dirs",
+        )
+        action.add_argument(
             "--dir", action="append", default=[], dest="search_dir",
             help="directory to search for local *.csl files; repeatable (default: ./csl)",
         )
@@ -247,9 +251,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def _csl_args(args: argparse.Namespace, **extra: object) -> SimpleNamespace:
     cache = Path.home() / ".cache" / "makedoc" / "zotero_styles.json"
+    search_dirs = list(args.search_dir) or ["csl"]
+    if Path(args.config).is_file():
+        search_dirs += load_profile(Path(args.config)).csl_search_dirs
     return SimpleNamespace(
         journal=args.journal,
-        search_dir=args.search_dir or ["csl"],
+        search_dir=list(dict.fromkeys(search_dirs)),
         max_results=8,
         cache_file=str(cache),
         cache_ttl_hours=24.0,

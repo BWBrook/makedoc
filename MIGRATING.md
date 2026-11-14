@@ -46,6 +46,7 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 | `... profile-scaffold PROFILE_NAME=...` | `$(MAKEDOC) init DIR`, then edit `settings/build.yaml` |
 | `... diagnose` | `$(MAKEDOC) build ... --workdir DIR` keeps `prepared.md`, `layout.tex` and the LaTeX log |
 | `... deps-install-minimal`, `wsl-smoke` | `$(MAKEDOC) doctor` prints what is missing and an install command |
+| `PDF_ENGINE=...`, `PANDOC_FROM=...`, `PANDOC=...` overrides | Removed. v2 always uses `xelatex` and the reader `markdown+yaml_metadata_block+tex_math_dollars+tex_math_single_backslash`. If a repository relied on another engine or reader extension, open an issue before migrating. |
 | `-B` or `--always-make` | nothing; every build starts from the sources |
 
 `-c` defaults to `settings/build.yaml` relative to the current directory, so from the directory that holds `settings/` the flag can be omitted.
@@ -72,6 +73,7 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 | `edgecases:` | Removed. Delete the key. |
 | `csl:` required | Optional. Without it Pandoc's default author–date style is used. |
 | top-level keys other than `default_profile`, `profiles` rejected | `common:` is also accepted, for YAML anchors. |
+| `csl_search_dirs:` searched by `make csl-search` | Still searched: `makedoc csl search` and `csl fetch` read the default profile of `-c CONFIG` (default `settings/build.yaml`) when that file exists. Add other directories with `--dir`. |
 | — | New optional `fonts:` mapping (`main`, `sans`, `mono`, `math`) for the PDF. |
 
 ## Behaviour changes
@@ -81,6 +83,12 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 - **16-bit PNGs with alpha fail the PDF build.** xelatex renders them invisible; v1 gave a blank figure. Re-save as 8-bit (`magick in.png -depth 8 out.png`).
 - **Missing LaTeX packages fail the build.** v1 printed a warning and built without line numbers or margins.
 - **Figure links work in `captions_page` mode.** v1 produced dead links in the PDF there.
+- **Invalid optional values are errors.** v1 ignored a mistyped value such as `references_new_page: fales` or a list given for `author_metadata` and used the default; v2 reports the key.
+- **An image whose file is missing fails the build**, for absolute paths as well as relative ones.
+- **Without a `References` heading, the bibliography precedes end-of-document figures.** v1 put it after them.
+- **Per-section line numbering now restarts at each section.** In v1 `line_numbering: section` never reset.
+- **DOCX images wider than the text area are scaled down** to fit the profile's margins.
+- **Citation keys containing `/`, `&`, `?` and similar** are read in full by the citation audit (for example DOI-style keys).
 - **HTML comment blocks are inert.** A figure line or citation inside `<!-- ... -->` is no longer extracted or linted.
 - **DOCX layout follows the profile**: paper size, margins and page numbers, as well as line spacing and numbering. Title and author metadata are filled in.
 - **A standalone supplement** (a profile whose figures are all supplementary) no longer gets a "Supplementary Information" divider page.

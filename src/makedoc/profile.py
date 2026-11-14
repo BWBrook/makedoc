@@ -130,15 +130,13 @@ def load_config(path: Path) -> dict[str, Any]:
 
 
 def expect_str(mapping: dict[str, Any], key: str, *, required: bool = True, default: str = "") -> str:
-    value = mapping.get(key, default)
-    if value is None:
-        value = default
-    if value == "" and not required:
-        return ""
-    if not isinstance(value, str) or not value.strip():
+    value = mapping.get(key)
+    if value is None or value == "":
         if required:
             raise ValueError(f"Profile key '{key}' must be a non-empty string.")
-        return ""
+        return default
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Profile key '{key}' must be a string, not {value!r}.")
     return value.strip()
 
 
@@ -308,21 +306,13 @@ def expect_positive_number(mapping: dict[str, Any], key: str, default: float, *,
     return number
 
 
-def expect_bool(mapping: dict[str, Any], key: str, *, required: bool = True, default: bool = False) -> bool:
-    value = mapping.get(key, default)
+def expect_bool(mapping: dict[str, Any], key: str, *, default: bool = False) -> bool:
+    value = mapping.get(key)
     if value is None:
-        value = default
+        return default
     if isinstance(value, bool):
         return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "yes", "1", "on"}:
-            return True
-        if normalized in {"false", "no", "0", "off"}:
-            return False
-    if required:
-        raise ValueError(f"Profile key '{key}' must be a boolean.")
-    return bool(default)
+    raise ValueError(f"Profile key '{key}' must be true or false, not {value!r}.")
 
 
 def _select_profile(
@@ -427,8 +417,7 @@ def _resolve_layout_settings(raw_profile: dict[str, Any]) -> tuple[str, str, str
             f"Profile key 'line_numbering' resolved to unsupported value: {line_numbering}"
         )
 
-    references_new_page = expect_bool(
-        raw_profile, "references_new_page", required=False, default=True
+    references_new_page = expect_bool(raw_profile, "references_new_page", default=True
     )
     return page_numbers, line_spacing, line_numbering, references_new_page
 
@@ -479,11 +468,8 @@ def _resolve_review_markup(raw_profile: dict[str, Any]) -> ReviewMarkup:
     if isinstance(review_markup_raw, bool):
         enabled = review_markup_raw
     elif isinstance(review_markup_raw, dict):
-        enabled = expect_bool(
-            review_markup_raw,
-            "enabled",
-            required=False,
-            default=DEFAULT_REVIEW_MARKUP["enabled"],
+        enabled = expect_bool(review_markup_raw,
+            "enabled", default=DEFAULT_REVIEW_MARKUP["enabled"],
         )
     else:
         raise ValueError("Profile key 'review_markup' must be a boolean or mapping when present.")

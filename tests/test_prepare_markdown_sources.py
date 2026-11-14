@@ -12,7 +12,6 @@ from makedoc.prepare import (
     build_figure_blocks,
     extract_figures,
     load_markdown_sources,
-    validate_relative_image_resources,
 )
 
 
@@ -75,7 +74,7 @@ class PrepareMarkdownSourcesTests(unittest.TestCase):
 
             expected_resolved = (source_path.parent / "../figures/missing.png").resolve()
             with self.assertRaisesRegex(ValueError, str(expected_resolved)):
-                validate_relative_image_resources(source_path)
+                load_markdown_sources([str(source_path)])
 
     def test_inline_code_image_example_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -87,7 +86,7 @@ class PrepareMarkdownSourcesTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            validate_relative_image_resources(source_path)
+            load_markdown_sources([str(source_path)])
 
     def test_tilde_fenced_figure_example_is_not_extracted(self) -> None:
         lines = [

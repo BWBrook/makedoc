@@ -11,7 +11,11 @@ import yaml
 from .markdown_scan import scan_markdown_lines
 
 
-CITE_PATTERN = re.compile(r"(?<![\w/])@([A-Za-z0-9][A-Za-z0-9._:+-]*)")
+# Pandoc's key grammar: a letter, digit or underscore, then alphanumerics with single
+# internal punctuation marks; or any key wrapped in braces, as in @{key}.
+CITE_PATTERN = re.compile(
+    r"(?<![\w/])@(?:\{(?P<braced>[^}\s]+)\}|(?P<bare>[A-Za-z0-9_]+(?:[:.#$%&\-+?<>~/][A-Za-z0-9_]+)*))"
+)
 
 
 @dataclass(frozen=True)
@@ -39,7 +43,7 @@ def scan_citations(source: Path) -> list[CitationHit]:
     hits: list[CitationHit] = []
     for line in scan_markdown_lines(source):
         for match in CITE_PATTERN.finditer(line.searchable):
-            key = match.group(1).rstrip(".")
+            key = match.group("braced") or match.group("bare")
             hits.append(CitationHit(key=key, source=source, line=line.line))
     return hits
 
