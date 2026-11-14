@@ -24,7 +24,7 @@ class CitationHit:
 def load_bibliography_keys(path: Path) -> set[str]:
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
-    refs = data.get("references", [])
+    refs = data.get("references") or []
     keys: set[str] = set()
     for ref in refs:
         if not isinstance(ref, dict):
@@ -64,8 +64,6 @@ class RefsAudit:
 
 def audit_references(bibliography: Path, sources: list[Path]) -> RefsAudit:
     keys = load_bibliography_keys(bibliography)
-    if not keys:
-        raise ValueError(f"No citation keys found in bibliography: {bibliography}")
     hits: list[CitationHit] = []
     for source in sources:
         hits.extend(scan_citations(source))

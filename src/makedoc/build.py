@@ -14,7 +14,7 @@ from pathlib import Path
 from .docx import normalize_docx
 from .layout import render_layout
 from .manifest import write_manifest
-from .prepare import prepare_markdown
+from .prepare import image_resources, prepare_markdown
 from .profile import Profile
 
 log = logging.getLogger("makedoc")
@@ -77,7 +77,26 @@ def _common_args(profile: Profile, prepared: Path) -> list[str]:
     return args
 
 
+def invisible_pngs(paths: list[Path]) -> list[Path]:
+    """PNG files that xelatex embeds fully transparent: 16 bits per channel with alpha."""
+    found = []
+    for path in paths:
+        if path.suffix.lower() != ".png" or not path.is_file():
+            continue
+        header = path.read_bytes()[:26]
+        if header[:8] == b"\x89PNG\r\n\x1a\n" and header[24] == 16 and header[25] in (4, 6):
+            found.append(path)
+    return found
+
+
 def _build_pdf(profile: Profile, prepared: Path, work: Path) -> tuple[Path, list[str]]:
+    bad = invisible_pngs(image_resources([Path(item) for item in profile.manuscript_sources]))
+    if bad:
+        raise BuildError(
+            "These PNG files are 16-bit with an alpha channel, which xelatex renders invisible "
+            "in the PDF: " + ", ".join(str(path) for path in bad)
+            + ". Re-save them as 8-bit, for example `magick in.png -depth 8 out.png`."
+        )
     layout = work / "layout.tex"
     layout.write_text(render_layout(profile), encoding="utf-8")
     latex_dir = work / "latex"

@@ -113,7 +113,19 @@ def _selected_profiles(args: argparse.Namespace) -> tuple[Path, list[Profile]]:
     return config_path, [load_profile(config_path, name) for name in names]
 
 
+def _config_problems(args: argparse.Namespace) -> list[str]:
+    config_path = Path(args.config)
+    config = load_config(config_path)
+    names = profile_names(config) if args.all else list(dict.fromkeys(args.profile))
+    return validate_config(config_path, names)
+
+
 def cmd_build(args: argparse.Namespace) -> int:
+    problems = _config_problems(args)
+    if problems:
+        for problem in problems:
+            print(f"config: {problem}", file=sys.stderr)
+        return 1
     config_path, profiles = _selected_profiles(args)
     formats = tuple(fmt for fmt in FORMATS if getattr(args, fmt)) or FORMATS
     status = 0
@@ -138,10 +150,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    config_path = Path(args.config)
-    config = load_config(config_path)
-    names = profile_names(config) if args.all else list(dict.fromkeys(args.profile))
-    problems = validate_config(config_path, names)
+    problems = _config_problems(args)
     if problems:
         for problem in problems:
             print(f"config: {problem}", file=sys.stderr)

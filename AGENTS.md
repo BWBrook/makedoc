@@ -1,203 +1,49 @@
 # AGENTS.md
 
-## Purpose
+makedoc builds journal-ready PDF and DOCX manuscripts from Markdown, figures, a CSL-YAML bibliography and a YAML build profile, through Pandoc and xelatex. Manuscripts live in their own repositories and call makedoc as a pinned command-line tool.
 
-`makedoc` is a config-driven manuscript build system. It generates journal-submission PDF and DOCX outputs from Markdown manuscript sources, figure assets, bibliography YAML, and CSL styles.
+Read `README.md` first: it is the user-facing reference for commands, profile keys and build behaviour. `docs/makedoc_primer_for_agents.md` is the guide given to agents working in manuscript repositories. `MIGRATING.md` is the v1 to v2 contract with existing users.
 
-This repository has two jobs:
+## Layout
 
-1. Maintain the build system itself (`Makefile`, `scripts/`, `settings/`, docs).
-2. Act as the build engine for external manuscript repositories via profile configs.
+- `src/makedoc/cli.py`: argument parsing and the commands.
+- `src/makedoc/profile.py`, `schema.py`, `validate.py`: profile resolution, allowed keys and config validation.
+- `src/makedoc/prepare.py`, `markdown_scan.py`: turn the Markdown sources into the single document handed to Pandoc (authors, figures, references, page breaks, review markup).
+- `src/makedoc/layout.py`: the LaTeX header for a profile. `filters/unicode_fallback.lua`: fallbacks for characters the PDF font lacks.
+- `src/makedoc/build.py`: runs Pandoc, collects warnings, moves outputs into place, writes the manifest (`manifest.py`).
+- `src/makedoc/docx.py`: post-processes the DOCX to match the profile.
+- `src/makedoc/lint.py`, `refs.py`: source lint and citation audit used by `makedoc check`.
+- `src/makedoc/csl.py`: citation style search and download.
+- `src/makedoc/template/`: the files `makedoc init` writes.
+- `testbed/`: a synthetic manuscript, the regression fixture. Its profiles are in `testbed/settings/build.yaml`.
+- `tests/`: pytest unit and end-to-end tests.
 
-The default in-repo input is the synthetic regression fixture under `testbed/`.
-
-## First Reads
-
-Before changing anything substantial, read these in order:
-
-1. `README.md`
-2. `docs/plan.md`
-3. `docs/builder_notes.md`
-4. `docs/makedoc_primer_for_agents.md`
-
-If the task is about external manuscript onboarding or road-testing another repo, `docs/makedoc_primer_for_agents.md` is mandatory reading.
-
-## Repo Layout
-
-- `Makefile`: canonical entrypoint for builds, checks, scaffolding, dependency helpers, and diagnostics.
-- `scripts/`: profile resolution, source preparation, lint/audit checks, layout normalization, diagnostics, fixture checks.
-- `settings/build.yaml`: active/default profile config.
-- `settings/fixture.yaml`: dedicated fixture/regression profile config.
-- `testbed/`: synthetic fixture manuscript, figures, references, expected contract data.
-- `docs/`: plan, builder notes, onboarding docs, primer for external-repo agents.
-
-## Core Rules
-
-### 1. External-path mode only
-
-For real manuscripts, this project standardizes on external-path mode.
-
-- Manuscript content stays in its own repository.
-- `makedoc` consumes it via `CONFIG=/abs/path/to/other-repo/settings/build.yaml`.
-- Do not introduce copy/sync workflows that mirror manuscript files into `makedoc`.
-
-### 2. External relative paths are now safe
-
-For external configs:
-
-- relative profile paths resolve from the external config file directory
-- relative figure image `src` paths inside manuscript Markdown resolve from the Markdown file they appear in
-- absolute paths remain preferred when teams want maximum explicitness across tools and scripts
-
-### 3. Do not parallelize top-level Make runs
-
-Do not run `make check` and `make check-fixture` in parallel. The current build still uses shared scratch/output locations such as `.cache/latex` and `dist/`, so concurrent top-level invocations can interfere with one another.
-
-Run them sequentially:
+## Commands
 
 ```bash
-make check
-make check-fixture
+uv run pytest -q                                            # all tests
+uv run makedoc build -c testbed/settings/build.yaml --all   # build the fixture into testbed/build/
+uv run makedoc check -c testbed/settings/build.yaml --all
+uv run makedoc doctor
 ```
 
-### 4. Keep fixture protections healthy
+The system Python may lack PyYAML; always go through `uv run`.
 
-The fixture is not disposable demo content. It is the regression contract for the build system.
+## Rules
 
-If you change build behavior, update:
+1. **Users pin releases, so compatibility is explicit.** Any change to a command, flag, profile key, default, output name or build behaviour that could alter or break an existing manuscript build must be recorded in `CHANGELOG.md` and, if it needs action from users, in `MIGRATING.md` with the exact before and after. Breaking changes wait for a major version.
+2. **Never drop content silently.** If makedoc cannot render or place something the author wrote, it fails or warns by name. A green build must mean the outputs contain the manuscript.
+3. **Manuscripts stay in their own repositories.** Do not copy manuscript content into this repository, and do not edit a manuscript repository while road-testing unless asked. Keep "the manuscript has a problem" separate from "makedoc has a problem".
+4. **The fixture is the regression contract.** When build behaviour changes, update the fixture or its tests in the same commit.
+5. **A passing build is not a checked document.** After a change to preparation, layout or DOCX handling, render the fixture and look at the pages.
+6. **Scope.** makedoc owns source preparation and building. Word comments, tracked changes and DOCX-to-Markdown reconciliation belong to Wordmark (`docs/docx_review_boundary.md`).
 
-- relevant scripts
-- the fixture config or fixture content if needed
-- tests and docs
+## After a change
 
-and rerun the appropriate checks.
+- Run `uv run pytest -q`.
+- For anything touching `prepare.py`, `layout.py`, `docx.py`, `build.py` or the Lua filter, also build the fixture with `--strict` and inspect the PDF and DOCX.
+- Update `README.md` and `docs/makedoc_primer_for_agents.md` when behaviour or a profile key changes, and `CHANGELOG.md` always.
 
-## Canonical Commands
+## Releasing
 
-### Main checks
-
-```bash
-make validate-config
-make check
-make all
-```
-
-### Fixture checks
-
-```bash
-make check-fixture
-make check-fixture-guards
-make fixture-contract-check
-```
-
-### Targeted regressions
-
-```bash
-make test-output-routing
-make test-figure-modes
-make test-author-injection
-```
-
-### Diagnostics and manifests
-
-```bash
-make manifest
-make fixture-manifest
-make show-manifest
-make diagnose
-make fixture-diagnose
-```
-
-### External manuscript build
-
-```bash
-CONFIG=/abs/path/to/other-repo/settings/build.yaml make validate-config
-CONFIG=/abs/path/to/other-repo/settings/build.yaml make check
-CONFIG=/abs/path/to/other-repo/settings/build.yaml make all
-```
-
-If the external config has multiple profiles, select one with `PROFILE=<name>`.
-
-## When You Change Something
-
-### If you modify source-prep, figure placement, references, authors, or layout behavior
-
-Run, at minimum:
-
-```bash
-make test-author-injection
-make test-figure-modes
-make check
-make check-fixture
-```
-
-### If you modify output routing or profile resolution
-
-Run, at minimum:
-
-```bash
-make test-output-routing
-make validate-config
-make check
-make check-fixture
-```
-
-### If you modify docs only
-
-Read for consistency:
-
-- `README.md`
-- `docs/makedoc_primer_for_agents.md`
-
-Update both when behavior or policy changes.
-
-## External Manuscript Policy
-
-When road-testing an external manuscript repo:
-
-1. Validate config first.
-2. Run draft profile before strict/submission profile if both exist.
-3. Treat manuscript-repo content problems and `makedoc` pipeline problems separately.
-
-Examples of manuscript-repo issues:
-
-- malformed markdown tables
-- unresolved or manual citations
-- missing or broken figure paths
-- malformed bibliography YAML
-
-Examples of `makedoc` issues:
-
-- incorrect path resolution behavior
-- bad figure ordering or placement
-- broken profile resolution
-- DOCX or PDF normalization regressions
-
-Do not silently edit an external manuscript repository unless the user asked you to edit it too.
-
-## Bibliography Contract
-
-`makedoc` expects a Pandoc-style YAML bibliography with a top-level `references:` list.
-
-Best practice:
-
-- each entry has both `id` and `citation-key`
-- those values match the in-text `@citekey`
-
-The filename is not important; the YAML structure is.
-
-## Notes for Future Agents
-
-- Default profile uses `testbed/` and should remain runnable in isolation.
-- `docs/makedoc_primer_for_agents.md` is the canonical onboarding document for agents working in manuscript repos.
-- If you harden the external workflow, update the primer at the same time.
-- If a user asks for a road test against another repo, preserve a clear distinction between fixing `makedoc` and fixing the target manuscript repository.
-
-## Done Criteria
-
-For most code changes, "done" means:
-
-1. relevant files updated
-2. relevant checks run successfully
-3. docs updated if behavior or policy changed
-4. final response includes what changed, what was verified, and any remaining risks
+Bump `version` in `pyproject.toml`, date the `CHANGELOG.md` section, tag `vX.Y.Z` and push the tag. Manuscript repositories move to the new tag when they choose.

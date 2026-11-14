@@ -1,0 +1,15 @@
+---
+references:
+  - id: example2020
+    citation-key: example2020
+    type: article-journal
+    title: An example article title
+    author:
+      - family: Example
+        given: Erin
+    issued:
+      - year: 2020
+    container-title: Journal of Examples
+    volume: '12'
+    page: 101-118
+...

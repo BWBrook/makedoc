@@ -1,187 +1,97 @@
-# makedoc Primer for Agents in Other Repos
+# makedoc primer for agents working in a manuscript repository
 
-This primer is for coding agents (or humans) working in a manuscript repository that wants to build journal-ready PDF and DOCX outputs via `makedoc`.
+You are in a repository that holds a scientific manuscript and want PDF and DOCX outputs from it. makedoc does that. This primer assumes no prior context and covers makedoc 2. For a repository still wired to the v1 Makefile, follow `MIGRATING.md` first.
 
-It assumes zero prior context.
+## 1. The arrangement
 
-## 0. Integration policy (important)
+- The manuscript, figures, bibliography and build profile live in the manuscript repository.
+- makedoc is a command-line tool that the repository calls at a pinned version. Do not copy manuscript files into the makedoc repository, and do not vendor makedoc into the manuscript repository.
+- Requirements on the machine: [uv](https://docs.astral.sh/uv/), Pandoc 3 and a TeX distribution with `xelatex`. `makedoc doctor` reports what is missing and how to install it.
 
-This workflow uses **external-path mode only**.
+Invoke makedoc pinned to a release:
 
-What that means:
-
-1. The manuscript stays in its own repository.
-2. `makedoc` reads manuscript/references/CSL files via paths configured in `settings/build.yaml`.
-3. Builds are run from `makedoc` against that external config.
-
-Do **not** implement or rely on copy/sync workflows (for example copying `manuscript/` into `makedoc` before builds).  
-Reason: copy/sync introduces drift risk and weakens reproducibility guarantees.
-
-## 1. What makedoc expects
-
-`makedoc` builds manuscript outputs from a profile (YAML config) that points to:
-
-1. Markdown manuscript source files
-2. A bibliography YAML file
-3. A CSL style file
-4. Optional author metadata YAML
-5. Optional figure-placement settings and layout settings
-6. Optional review-markup settings for visible generated review traces
-
-The build profile controls where files are, how figures are handled, citation styling, and layout defaults.
-
-## 2. Recommended folder layout in your manuscript repo
-
-Use this layout unless you have a strong reason not to.
-
-```text
-<your-repo>/
-  manuscript/
-    text/
-      main.md
-      figures.md
-    figures/
-      fig1.png
-      fig2.png
-      figS1.png
-    authors.yaml
-  references/
-    refs.yaml
-  csl/
-    journal-style.csl
-  settings/
-    build.yaml
+```bash
+uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc <command>
 ```
 
-Notes:
+The rest of this primer writes `makedoc` for that. Put the prefix in one place, such as a `MAKEDOC` variable in the repository's Makefile, so the pin is changed in one line.
 
-- `main.md` is a recommended name for the primary body file, but it is not required.
-- `figures.md` should contain figure markdown blocks only (recommended), though figure lines can exist in any manuscript source.
-- `authors.yaml` is optional but recommended when you want structured author block generation.
-- `refs.yaml` is a recommended bibliography filename, but it is not required.
-- `journal-style.csl` is your journal citation style.
-- In external-path mode, profile entries may be absolute or relative to `settings/build.yaml`. Absolute paths remain fine when you want maximum explicitness.
+## 2. Starting a new manuscript
 
-## 3. Authoritative file contracts
+```bash
+makedoc init manuscript
+```
 
-### 3.1 `manuscript/text/main.md` (or any primary source filename)
+writes this layout, which is the recommended one:
 
-Recommended skeleton:
+```text
+manuscript/
+  settings/build.yaml     build profiles; paths in it are relative to this file
+  text/main.md            the manuscript
+  text/figures.md         one figure per line
+  authors.yaml            authors and affiliations
+  references/refs.yaml    bibliography
+```
+
+Add `figures/` for images and `csl/` for a citation style. Then, from `manuscript/`:
+
+```bash
+makedoc check      # config, lint and citation audit; no build
+makedoc build      # writes build/manuscript.pdf, .docx and a build manifest
+```
+
+File names are conventions. makedoc reads whatever the profile lists.
+
+## 3. File contracts
+
+### 3.1 Manuscript Markdown
 
 ```markdown
-# Your Manuscript Title
+# Title
 
 <div id="authors"></div>
 
 ## Abstract
 
-Your abstract text with citations [@keyOne].
-
-## Keywords
-
-keyword one; keyword two
+Text with a citation [@alpha2020].
 
 ## Introduction
 
-Narrative citation: @keyTwo demonstrated...
-Parenthetical citation: [@keyOne; @keyThree].
-
-## Methods
-
-...
+@beta2021 showed something. Several sources at once [@alpha2020; @gamma2022].
 
 ## Results
 
-Reference figures as links to figure IDs, for example Fig. [1](#fig-main-1).
-
-## Discussion
-
-...
+The pattern is in Fig. [1](#fig-main-1).
 
 ## References
 ```
 
-Important behavior:
+- **Citations** use Pandoc keys only. `(Smith 2020)` typed by hand fails `makedoc check`.
+- **`<div id="authors"></div>`** is replaced by the author block when the profile sets `author_metadata`. Without the placeholder the block follows the first `# Title`.
+- **`## References`** receives the bibliography. Without it, the bibliography goes at the end.
+- **Page breaks** are inserted after the author block, before the first `Introduction` heading and before `References` (`references_new_page: false` turns the last one off).
+- **Symbols.** Type Greek letters, `≤ ≥ ≈ ≠ → ±`, and sub- or superscripts such as `CO₂` and `m⁻²` directly in body text, or write TeX math (`$\alpha \le 0.05$`). Inside code spans only characters the monospace font has will render; anything else fails the build by name.
+- **Fenced code blocks and HTML comment blocks** are ignored by every build step and by lint.
 
-1. If `<div id="authors"></div>` exists and `author_metadata` is configured, makedoc injects the generated author block there.
-2. If that placeholder is missing, author block injection falls back to right after the first H1 (`# Title`).
-3. By default, makedoc inserts page breaks:
-   - after the generated author block
-   - before first `Introduction`
-   - before `References`
-4. If `## References` exists, makedoc anchors bibliography there.
-5. If no references heading exists, Pandoc appends bibliography at the end.
+### 3.2 Figures
 
-### 3.2 Citation syntax requirements in markdown
-
-Use Pandoc citekeys only:
-
-- Single: `[@alpha2020]`
-- Multiple: `[@alpha2020; @beta2021]`
-- Narrative: `@delta2023 showed ...`
-
-Avoid manual citations like `(Smith 2020)`. `makedoc` lint flags these as errors.
-
-### 3.2.1 Optional review markup
-
-`makedoc` can optionally render human-editable Markdown review markup as
-visible traces in generated DOCX/PDF outputs.
-
-Enable it per profile:
-
-```yaml
-review_markup:
-  enabled: true
-```
-
-Supported source forms:
-
-| Source form | Rendered intent |
-| --- | --- |
-| `{++ added text ++}` | bold `[+ added text +]` |
-| `{-- deleted text --}` | bold `[- deleted text -]` |
-| `{~~ old text ~> new text ~~}` | bold old-text marker plus bold new-text marker |
-| `{>> reviewer note <<}` | bold `[Reviewer note: reviewer note]` |
-
-Authoring contract:
-
-1. Review markup is disabled by default. Leave it off for ordinary clean builds.
-2. Tokens are line-local; do not split one token across multiple source lines.
-3. Nested review markup is unsupported.
-4. Inline code, fenced code blocks, HTML comment blocks, and figure image lines are not transformed.
-5. Deletions render as readable bracketed deletion markers rather than relying on strikeout, because rendered PDFs must remain readable by eye.
-6. This is visible generated review markup only. It does not create Word Review-pane Track Changes or import DOCX edits back into Markdown. DOCX review and source reconciliation belong to Wordmark; see `docs/docx_review_boundary.md` in the Makedoc repository.
-7. Use it for draft/review profiles where traceable generated output is useful; keep submission profiles clean unless the journal explicitly wants visible markup.
-
-For a full external manuscript pilot recipe, use
-`docs/review_markup_external_adoption.md` in the `makedoc` repository.
-
-### 3.3 `manuscript/text/figures.md`
-
-Use one image per markdown figure line, with attribute block and explicit ID:
+One image per line, with an attribute block:
 
 ```markdown
-![Caption for main figure.](../figures/fig1.png){#fig-main-1 width=90%}
+![Caption of the first figure.](../figures/fig1.png){#fig-main-1 width=90%}
 
-![Caption for second figure.](../figures/fig2.png){#fig-main-2 width=85%}
-
-![Caption for supplementary figure.](../figures/figS1.png){#fig-main-s1 width=85%}
+![Caption of a supplementary figure.](../figures/figS1.png){#fig-main-s1 width=85%}
 ```
 
-Rules:
+- The image path is relative to the Markdown file it is written in.
+- `#fig-...` is the link target. Refer to the figure as `Fig. [1](#fig-main-1)`. You write the number; makedoc numbers figures in the order they appear in the sources, so keep the two in step.
+- An id ending in `-s<number>` makes the figure supplementary: `Fig. S1`, placed after the main figures.
+- The text in `![...]` is the caption.
 
-1. Include `{...}` attribute block; this is how makedoc parses IDs and width.
-2. Include `#fig-...` in attributes for stable linking.
-3. Supplementary detection is ID-based: IDs ending in `-s<number>` (for example `#fig-main-s1`) are treated as supplementary.
-4. Alt text (the text inside `![ ... ]`) is used as caption/title text in figure workflows and retained as the accessible DOCX image description, including `captions_page`. Supply a meaningful description; build paths are not valid alt text.
-5. Relative image paths are resolved from the Markdown file they appear in. Absolute image paths still work.
-
-### 3.4 `manuscript/authors.yaml`
-
-Example:
+### 3.3 `authors.yaml`
 
 ```yaml
-title_note: Optional short note under author line.
+title_note: Optional line under the authors.
 authors:
   - name: Jane A. Example
     affiliations: [aff1, aff2]
@@ -190,24 +100,16 @@ authors:
     orcid: 0000-0000-0000-0000
   - name: John B. Sample
     affiliations: [aff2]
-    corresponding: false
-    email: john@example.org
-    orcid: 0000-0000-0000-0001
 affiliations:
   aff1: Department of Biology, Example University, City, Country
-  aff2: Institute of Ecology, Example Center, City, Country
+  aff2: Institute of Ecology, Example Centre, City, Country
 ```
 
-Schema notes:
+Every author needs at least one affiliation key that exists under `affiliations`. Affiliations are numbered in order of first use.
 
-1. `affiliations` must be a non-empty mapping.
-2. `authors` must be a non-empty list.
-3. Every `authors[*].affiliations` entry must reference an existing affiliation key.
-4. Output renders names with superscript affiliation numbers (for example `Jane Example*^1,2^`).
+### 3.4 Bibliography
 
-### 3.5 `references/refs.yaml`
-
-Example:
+Pandoc CSL YAML with a top-level `references:` list:
 
 ```yaml
 ---
@@ -223,279 +125,128 @@ references:
       - year: 2020
     container-title: Example Journal
     volume: '12'
-    issue: '3'
     page: 101-118
 ...
 ```
 
-Rules:
+Give each entry both `id` and `citation-key`, equal to the `@key` used in the text. Keep one bibliography file per repository.
 
-1. Root key should be `references:` containing a list.
-2. Each entry should include at least one citation key field: `citation-key` or `id`.
-3. Best practice: set both `id` and `citation-key` to the same value.
-4. Markdown `@citekeys` must exactly match these keys.
-
-Filename policy:
-
-1. `refs.yaml` is only a convention, not a parser requirement.
-2. Choose one canonical bibliography filename in the manuscript repo.
-3. Point profile key `bibliography` at that canonical file.
-4. Avoid maintaining duplicate bibliography files with the same content, because they drift.
-
-### 3.6 `csl/journal-style.csl`
-
-- Place the chosen journal CSL file here.
-- Point profile key `csl` to this path.
-- Optional: maintain `csl_search_dirs` for discovery/sourcing workflows.
-
-## 4. Build profile template (`settings/build.yaml`)
-
-Use this as your starting point. In external-path mode, profile entries may be absolute or relative to `settings/build.yaml`.
-
-```yaml
-default_profile: my_ms
-
-profiles:
-  my_ms:
-    description: Active manuscript profile
-    manuscript_sources:
-      - ../manuscript/text/main.md
-      - ../manuscript/text/figures.md
-    # Optional. If omitted, defaults to manuscript_sources.
-    lint_sources:
-      - ../manuscript/text/main.md
-      - ../manuscript/text/figures.md
-
-    author_metadata: ../manuscript/authors.yaml
-    bibliography: ../references/refs.yaml
-    csl: ../csl/journal-style.csl
-    journal: Journal Name
-    csl_search_dirs:
-      - ../csl
-
-    output_dir: dist
-    output_stem: manuscript
-
-    page_numbers: lower_right      # lower_right | none
-    line_spacing: single           # single | 1.1 | 1.25 | 1.5 | 2
-    line_numbering: continuous     # continuous | page | section | none
-
-    review_markup:
-      enabled: false               # true only for visible review-trace profiles
-
-    figures:
-      placement: pages             # pages | inline | captions_page
-      caption_position: top        # top | bottom
-      placeholder_id: figures      # used by inline mode
-
-    margins:
-      unit: cm                     # cm | in
-      paper_size: a4               # a4 | letter
-      top: 2.0
-      right: 2.5
-      bottom: 2.0
-      left: 2.5
-```
-
-The generated PDF preamble loads `needspace` for explicit source
-`\Needspace{...}` pagination commands.
-
-Page size, margins, page numbers, line spacing and line numbering are applied to
-both PDF and DOCX. DOCX page numbers use a right-aligned footer. Empty/image-only
-paragraphs do not receive manuscript line numbers. Body headings and standalone
-bold subcaptions stay with the next paragraph; a body paragraph immediately before
-a table or the start of a list stays with its first row/item. These rules do not
-chain table cells or list items together. Table rows are kept together where they
-fit on a page. Columns
-can autofit their content while retaining authored widths as preferences; review
-long identifiers and wide tables in the rendered DOCX. Known build-input custom
-properties are stripped, but unrelated user metadata is retained. Blank core
-title and creator properties are filled from the leading rendered title block
-and the selected profile's author names. A directly following subtitle (or
-Heading 2 after Heading 1) is joined to the title with an em dash, including
-supplement title blocks. Existing authored core values take precedence. Author
-emails, affiliations, ORCIDs and YAML paths are not copied into core metadata.
-
-## 5. Figure placement modes and what they do
-
-### 5.1 `placement: pages` (default)
-
-- Figures are extracted from manuscript sources.
-- Figures are appended after references.
-- One page break per figure.
-- Captions render as `**Fig. X.**` + image.
-- Supplementary figures are grouped after `## Supplementary Information` when main figures are present; standalone supplementary-only output omits that separator.
-
-### 5.2 `placement: inline`
-
-- Figures are extracted and inserted at `<div id="<placeholder_id>"></div>`.
-- If placeholder is missing, figures are appended at end with a warning.
-- Caption position can be `top` or `bottom`.
-
-### 5.3 `placement: captions_page`
-
-- Adds a `## Figure Captions` page after references.
-- Lists caption lines there (one per figure).
-- Then adds figure pages with label only (`Fig. 1.`), image only.
-- Supplementary section appears after main figures; standalone supplementary-only output omits the separator heading.
-
-## 6. Behavior that surprises new users
-
-1. `lint_sources` defaults to `manuscript_sources` if omitted.
-2. References are page-broken by default.
-3. Introduction is page-broken by default.
-4. Heading spacing is normalized in prepared markdown for `##` headings.
-5. If `output_dir` is `dist`, makedoc auto-routes output to a Make-safe subfolder (`dist/<profile-root>/`) inferred from manuscript paths/repo/fallback.
-6. If `output_dir` is any other relative path, it resolves relative to `settings/build.yaml`.
-7. Relative paths in profile entries are resolved from the config file directory, and relative image paths in markdown are resolved from the source Markdown file they appear in.
-8. Review markup is ignored unless `review_markup.enabled: true` is set in the selected profile.
-
-## 7. Lint and audit expectations (must pass)
-
-`makedoc` quality gates include:
-
-1. `lint-manuscript`:
-   - fails on unresolved `[REF]`
-   - fails on likely manual author-year citations `(Name 2020)`
-   - fails on malformed markdown table row counts
-2. `refs-audit`:
-   - fails if manuscript cites keys missing from bibliography
-   - reports unused bibliography keys as non-fatal
-
-Practical implication: convert all citations to Pandoc citekeys before expecting `make check` to pass.
-
-Interim drafting policy:
-
-1. For day-to-day drafting, it is acceptable to run `make all` while citation cleanup is in progress.
-2. Keep `make check` as the strict gate for submission-ready builds.
-3. Prefer a two-profile approach:
-   - `draft` profile for permissive iteration (for example reduced `lint_sources`)
-   - `submission` profile for full strict checks
-4. Do not weaken the submission profile just to accommodate temporary draft-state citations.
-
-## 8. Agent setup checklist for a fresh manuscript repo
-
-Use this sequence when onboarding a repository.
-
-1. Create directories: `manuscript/text`, `manuscript/figures`, `references`, `csl`, `settings`.
-2. Create a primary manuscript file (for example `manuscript/text/main.md` or `manuscript/text/draft_ms_v2.md`) with title, abstract, intro, and `## References` heading.
-3. Create `manuscript/text/figures.md` with figure lines using explicit `#fig-...` IDs.
-4. Create one canonical bibliography YAML file in `references/` with valid citekeys.
-5. Place CSL file in `csl/`.
-6. Create `manuscript/authors.yaml` (if author injection is desired).
-7. Create `settings/build.yaml` profile using either absolute paths or config-relative paths.
-8. If visible review traces are needed, enable `review_markup.enabled` in a draft/review profile and keep tokens line-local.
-9. Ensure markdown cites use `@citekey` syntax only.
-10. Run validations/build from makedoc repo:
+### 3.5 Citation style
 
 ```bash
-make validate-config CONFIG=/abs/path/to/your-repo/settings/build.yaml
-make check CONFIG=/abs/path/to/your-repo/settings/build.yaml
-make all CONFIG=/abs/path/to/your-repo/settings/build.yaml
+makedoc csl search "Ecology Letters"
+makedoc csl fetch "Ecology Letters" --dest csl
 ```
 
-Policy reminder: do not copy manuscript files into `makedoc`; keep a single source of truth in the manuscript repo and build by reference.
+Point the profile's `csl` at the file. With no `csl`, Pandoc's default author–date style is used.
 
-## 9. Common failure modes and fixes
+## 4. Build profiles
 
-### Problem: unknown citation key errors
+`settings/build.yaml` holds one or more profiles. The full key reference is in the makedoc `README.md`; this is the usual shape for a paper with a draft and a submission layout:
 
-Fix:
+```yaml
+default_profile: draft
 
-1. Search for each unknown `@key` in markdown.
-2. Add matching entry in `refs.yaml` or fix typo.
-3. Re-run `make check`.
+common: &common
+  manuscript_sources:
+    - ../text/main.md
+    - ../text/figures.md
+  author_metadata: ../authors.yaml
+  bibliography: ../references/refs.yaml
+  csl: ../csl/journal.csl
+  output_dir: ../build
+  margins: {unit: cm, paper_size: a4, top: 2.0, right: 2.5, bottom: 2.0, left: 2.5}
 
-### Problem: author block not inserted
+profiles:
+  draft:
+    <<: *common
+    output_stem: draft
+    line_spacing: single
+    line_numbering: none
+    figures: {placement: inline, caption_position: bottom}
 
-Fix:
+  submission:
+    <<: *common
+    output_stem: manuscript
+    line_spacing: 2
+    line_numbering: continuous
+    figures: {placement: captions_page}
+```
 
-1. Confirm `author_metadata` path is set and file exists.
-2. Confirm either `<div id="authors"></div>` exists or markdown starts with `# Title`.
-3. Validate author YAML schema (non-empty `authors`, non-empty `affiliations`, valid affiliation IDs).
+`common` is ignored by makedoc itself; it only carries the YAML anchor. Unknown keys are errors, so a typo is caught by `makedoc check`.
 
-### Problem: figure references not linkable
+Select profiles with `-p NAME` (repeatable) or `--all`. With neither, `default_profile` is used.
 
-Fix:
+### Figure placement
 
-1. Ensure figure line has attribute block with `#fig-id`.
-2. Ensure in-text links target exact same anchor (for example `[1](#fig-main-1)`).
-3. Keep figure lines out of code fences.
+| `figures.placement` | Result |
+| --- | --- |
+| `pages` (default) | Figures move after the references, one per page, each with its label and caption. |
+| `captions_page` | A "Figure Captions" page lists all captions; each figure then has its own page with the label only. Common for submission. |
+| `inline` | Figures are placed at `<div id="figures"></div>` in the text (the id is `figures.placeholder_id`). If the placeholder is missing they go at the end, with a warning. |
 
-### Problem: inline figure placement does nothing
+`figures.caption_position` is `top` or `bottom`.
 
-Fix:
+## 5. Checks, warnings and what a green build means
 
-1. Confirm `figures.placement: inline`.
-2. Confirm placeholder exists and ID matches `figures.placeholder_id`.
+`makedoc check` fails on an invalid config, a missing input file, a `[REF]` placeholder, a hand-typed author–year citation, a table row with the wrong number of cells, or a cited key missing from the bibliography. Uncited bibliography entries are counted, not failed.
 
-### Problem: references appear at document end instead of your section
+`makedoc build` does not run those checks, so drafts with unfinished citations still build. It prints every Pandoc and LaTeX warning as `warning [profile]: ...`. Use `--strict` for a submission build so that a warning is a failure.
 
-Fix:
+A build fails, and writes no output for that format, when a character has no glyph in the PDF font, an image file is missing from a figure line, a PNG is 16-bit with alpha, or a required LaTeX package is absent.
 
-1. Add heading `## References` in manuscript source.
-2. Do not put it inside code fences.
+A passing build means the pipeline ran. It does not mean the document is right. Open the PDF and the DOCX: look at tables that might overflow the page, figure sizes, the reference list, and the title page.
 
-### Problem: relative paths in external config behave inconsistently
+## 6. Reproducibility
 
-Fix:
+Each build writes `<output_stem>_build_manifest.json` in the output directory with the makedoc, Pandoc and xelatex versions, the manuscript repository's commit, the resolved profile, SHA-256 hashes of every input (figure images included) and output, and the warnings.
 
-1. Make relative profile entries relative to the external `settings/build.yaml` file.
-2. Re-run `make validate-config` to confirm the resolved files exist.
+The makedoc version is fixed by the tag in the `uvx --from ...@TAG` spec; use a commit hash there for an immutable pin. To move to a newer makedoc, change the pin, rebuild, inspect the outputs, and commit the pin change with them.
 
-### Problem: figures compile but images are missing in PDF/DOCX
+## 7. A wrapper Makefile
 
-Fix:
+```make
+MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 
-1. Use source-relative image `src` paths in figure markdown lines (for example `../figures/fig1.png` from `manuscript/text/figures.md`) or use absolute paths.
-2. Verify each resolved path exists on disk and is readable.
-3. Rebuild and check for Pandoc warnings like `Could not fetch resource ...`.
+.PHONY: all check
+all:
+	$(MAKEDOC) build --all --strict
 
-### Problem: multiple bibliography files exist (`refs.yaml` and another copy)
+check:
+	$(MAKEDOC) check --all
+```
 
-Fix:
+Run it from the directory that holds `settings/`, or pass `-c path/to/build.yaml`.
 
-1. Pick one canonical bibliography file.
-2. Update profile key `bibliography` to point to that file.
-3. Remove duplicate copies or clearly mark one as generated and non-editable.
+## 8. Troubleshooting
 
-### Problem: review markup appears literally in output
+| Symptom | Cause and fix |
+| --- | --- |
+| `citation key 'x' is not in the bibliography` | Typo in the key, or the entry is missing. Fix the text or add the entry. |
+| `Possible manual author-year citation` on a line that is not a citation | The lint matches `(Capitalised … 2020)`. Reword, or keep that file out of `lint_sources`. |
+| `The PDF font has no glyph for these characters` | The character is in a code span, or is outside the fallback set. Use TeX math, or set `fonts.main` / `fonts.mono` to a font that has it. |
+| `PNG files are 16-bit with an alpha channel` | xelatex would render them invisible. Re-save as 8-bit: `magick in.png -depth 8 out.png`. |
+| `Relative image resource not found` | The image path is resolved from the Markdown file's directory. Fix the path. |
+| `Hyper reference 'fig-x' ... undefined` | The text links to a figure id that no figure line defines. |
+| Author block missing | `author_metadata` is not set in the selected profile, or there is neither the placeholder nor a `# Title` heading. |
+| Inline figures appear at the end | The `<div id="figures"></div>` placeholder is missing or its id differs from `figures.placeholder_id`. |
+| Review markup shows as literal `{++ ++}` | `review_markup.enabled` is not `true` in the selected profile, or the token spans more than one line. |
+| Need to see what Pandoc received | `makedoc build --workdir /tmp/work` keeps `prepared.md`, `layout.tex` and the LaTeX log. |
+| Unknown profile key error naming `golden_contract` or `edgecases` | v1 keys. Delete them; see `MIGRATING.md`. |
 
-Fix:
+## 9. Review markup (optional)
 
-1. Confirm the selected profile has `review_markup.enabled: true`.
-2. Confirm the token is on one source line and is not inside inline code, a fenced block, an HTML comment block, or a figure image line.
-3. Use `make test-review-markup` in the `makedoc` repo to compare against the supported proof profile.
+With `review_markup: {enabled: true}` in a profile, these single-line tokens render as bold bracketed traces in both outputs:
 
-## 10. FAQ: decisions for external-repo agents
+| Source | Meaning |
+| --- | --- |
+| `{++ added text ++}` | addition |
+| `{-- deleted text --}` | deletion |
+| `{~~ old ~> new ~~}` | substitution |
+| `{>> note <<}` | reviewer note |
 
-### Q: Are relative paths in external config resolved relative to that config file?
+Tokens cannot nest or span lines. This produces visible traces only. It does not create Word tracked changes; that workflow belongs to Wordmark.
 
-Yes. Relative profile paths are interpreted from the external config file directory.
+## 10. Reporting a makedoc problem
 
-### Q: Are relative image paths in markdown resolved from the source file?
-
-Yes. Relative image paths are interpreted from the Markdown file they appear in.
-
-### Q: Is `main.md` required?
-
-No. `makedoc` accepts any filenames listed in `manuscript_sources`. `main.md` is a naming convention only.
-
-### Q: During drafting, should lint failures be tolerated or should lint be scoped?
-
-Recommended: use a draft/submission split. Keep strict checks in a submission profile, and use a draft profile (or `make all`) during early writing when manual citations/placeholders still exist.
-
-### Q: Should both `refs.yaml` and another bibliography copy be kept?
-
-No, unless there is a strong compatibility reason. Prefer one canonical bibliography file and point profile `bibliography` to it.
-
-## 11. Minimal working example (single profile)
-
-If you just need a first-pass baseline:
-
-1. Use the folder layout in Section 2.
-2. Use the file templates in Section 3.
-3. Use the profile template in Section 4.
-4. Run the three commands in Section 8.
-
-That is enough to get a reproducible manuscript build pipeline with PDF + DOCX output and quality gates.
+Separate the two cases before changing anything. A malformed table, an unknown citation key or a missing figure is the manuscript's problem: fix it in the manuscript repository. Wrong figure order, a broken link that the sources define correctly, bad DOCX layout or a crash is makedoc's problem: report it at <https://github.com/BWBrook/makedoc/issues> with the command, the output and the profile, and do not work around it silently in the manuscript repository.

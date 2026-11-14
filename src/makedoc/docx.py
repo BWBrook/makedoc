@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -491,6 +492,7 @@ def rewrite_docx(
         with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED) as out_zip:
             for member, payload in payloads.items():
                 out_zip.writestr(member, payload)
+        shutil.copymode(path, temp_path)
         temp_path.replace(path)
     finally:
         if temp_path.exists():

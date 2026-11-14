@@ -1,173 +1,49 @@
-name: manuscript-ci
+name: ci
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, v2]
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
-  group: manuscript-ci-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  guard-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install guard dependencies
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
-        with:
-          packages: ripgrep python3-yaml
-          version: guard-deps-v1
-          execute_install_scripts: true
-
-      - name: Print tool versions
-        run: |
-          python3 --version
-          rg --version | head -n 1
-
-      - name: Validate build config
-        run: |
-          make validate-config
-
-      - name: Run Python unit tests
-        run: |
-          make python-tests
-
-      - name: Run manuscript and fixture guards
-        run: |
-          make lint-manuscript
-          make refs-audit
-          make fixture-lint
-          make fixture-refs-audit
-          make check-fixture-guards
-
-  build-main:
-    needs: guard-tests
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install Pandoc and TeX
         uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
-          packages: pandoc texlive-xetex texlive-latex-extra ripgrep python3-yaml
-          version: build-main-deps-v1
+          packages: texlive-xetex texlive-latex-extra texlive-fonts-recommended lmodern poppler-utils
+          version: v2-deps-1
           execute_install_scripts: true
 
-      - name: Ensure build dependencies are present
+      - name: Install Pandoc 3
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-extra \
-            ripgrep \
-            python3-yaml
+          curl -fsSL -o pandoc.deb https://github.com/jgm/pandoc/releases/download/3.6.4/pandoc-3.6.4-1-amd64.deb
+          sudo dpkg -i pandoc.deb
 
-      - name: Build main manuscript outputs
-        run: |
-          make check-tools
-          make test-output-routing
-          make test-external-relative-paths
-          make all
+      - uses: astral-sh/setup-uv@v5
 
-      - name: Summarize main artifacts
-        run: |
-          ls -lh dist/testbed/manuscript.pdf dist/testbed/manuscript.docx dist/testbed/manuscript_build_manifest.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Environment check
+        run: uv run makedoc doctor
 
-      - name: Collect main diagnostics on failure
-        if: failure()
-        run: |
-          make diagnose
+      - name: Tests
+        run: uv run pytest -q
 
-      - name: Upload main diagnostics (failure only)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: manuscript-main-diagnostics
-          path: dist/diagnostics/**/*
-          if-no-files-found: ignore
+      - name: Build the fixture
+        run: uv run makedoc build -c testbed/settings/build.yaml --all --strict
 
-      - name: Upload build artifacts
+      - name: Upload fixture outputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: manuscript-main-artifacts
-          path: |
-            dist/testbed/manuscript.pdf
-            dist/testbed/manuscript.docx
-            dist/testbed/manuscript_build_manifest.json
-          if-no-files-found: ignore
-
-  build-fixture:
-    needs: guard-tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
-        with:
-          packages: pandoc texlive-xetex texlive-latex-extra ripgrep python3-yaml poppler-utils
-          version: build-fixture-deps-v2
-          execute_install_scripts: true
-
-      - name: Ensure build dependencies are present
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-extra \
-            ripgrep \
-            python3-yaml \
-            poppler-utils
-
-      - name: Build fixture outputs
-        run: |
-          make check-tools
-          make fixture-all
-          make fixture-contract-check
-
-      - name: Summarize fixture artifacts
-        run: |
-          ls -lh dist/fixture/fixture_manuscript.pdf dist/fixture/fixture_manuscript.docx dist/fixture/fixture_manuscript_build_manifest.json >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Collect fixture diagnostics on failure
-        if: failure()
-        run: |
-          make fixture-diagnose
-
-      - name: Upload fixture diagnostics (failure only)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: manuscript-fixture-diagnostics
-          path: dist/diagnostics/**/*
-          if-no-files-found: ignore
-
-      - name: Upload fixture artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: manuscript-fixture-artifacts
-          path: |
-            dist/fixture/fixture_manuscript.pdf
-            dist/fixture/fixture_manuscript.docx
-            dist/fixture/fixture_manuscript_build_manifest.json
+          name: fixture-outputs
+          path: testbed/build/
           if-no-files-found: ignore

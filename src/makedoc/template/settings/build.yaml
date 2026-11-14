@@ -1,0 +1,29 @@
+# makedoc build profiles. Paths are relative to this file.
+# Build:  makedoc build -c settings/build.yaml        (add -p NAME or --all)
+# Check:  makedoc check -c settings/build.yaml
+default_profile: main
+
+profiles:
+  main:
+    description: Review layout with line numbers; figures on separate pages after the references.
+    manuscript_sources:
+      - ../text/main.md
+      - ../text/figures.md
+    author_metadata: ../authors.yaml
+    bibliography: ../references/refs.yaml
+    # csl: ../csl/journal.csl        # fetch one with: makedoc csl fetch "Journal Name"
+    output_dir: ../build
+    output_stem: manuscript
+    page_numbers: lower_right        # lower_right | none
+    line_spacing: 1.5                # single | 1.1 | 1.25 | 1.5 | 2
+    line_numbering: continuous       # continuous | page | section | none
+    figures:
+      placement: pages               # pages | captions_page | inline
+      caption_position: top          # top | bottom
+    margins:
+      unit: cm                       # cm | in
+      paper_size: a4                 # a4 | letter
+      top: 2.0
+      right: 2.5
+      bottom: 2.0
+      left: 2.5

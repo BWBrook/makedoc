@@ -1,0 +1,11 @@
+authors:
+  - name: First A. Author
+    affiliations: [inst1]
+    corresponding: true
+    email: first.author@example.org
+    orcid: 0000-0000-0000-0000
+  - name: Second B. Author
+    affiliations: [inst1, inst2]
+affiliations:
+  inst1: Department, University, City, Country
+  inst2: Institute, City, Country

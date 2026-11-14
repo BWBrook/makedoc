@@ -18,14 +18,25 @@ class MarkdownLine:
 
 
 def visible_line_flags(lines: list[str]) -> list[bool]:
-    """Return True for lines that are visible Markdown, False for fenced blocks."""
+    """Return True for lines that are visible Markdown.
+
+    Lines inside fenced blocks are not visible, nor are lines inside an HTML comment
+    block (one whose line begins with ``<!--``, up to the line containing ``-->``).
+    """
     flags: list[bool] = []
     active_fence_char = ""
     active_fence_len = 0
+    in_comment = False
 
     for raw_line in lines:
         stripped = raw_line.strip()
         match = FENCE_OPEN_RE.match(raw_line)
+
+        if not active_fence_char and (in_comment or stripped.startswith("<!--")):
+            flags.append(False)
+            body = stripped if in_comment else stripped[4:]
+            in_comment = "-->" not in body
+            continue
 
         if active_fence_char:
             flags.append(False)
