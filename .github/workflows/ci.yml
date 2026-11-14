@@ -17,12 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Pandoc and TeX
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
-        with:
-          packages: texlive-xetex texlive-latex-extra texlive-fonts-recommended lmodern poppler-utils
-          version: v2-deps-1
-          execute_install_scripts: true
+      # Installed directly: a restored package cache skips the post-install steps that
+      # register the Latin Modern fonts, and xelatex then cannot load them.
+      - name: Install TeX and Poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-xetex texlive-latex-extra texlive-fonts-recommended lmodern fonts-lmodern poppler-utils
 
       - name: Install Pandoc 3
         run: |
