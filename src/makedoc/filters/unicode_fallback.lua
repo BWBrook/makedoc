@@ -165,7 +165,7 @@ local fallback = {
   [0x03BC] = [[\char"00B5\relax{}]],
 }
 
-function Str(el)
+local function replace(el)
   if not el.text:find("[\194-\244]") then
     return nil
   end
@@ -188,3 +188,69 @@ function Str(el)
   flush()
   return out
 end
+
+local function needs_fallback(text)
+  for _, code in utf8.codes(text) do
+    if fallback[code] then
+      return true
+    end
+  end
+  return false
+end
+
+-- Pandoc builds PDF metadata and bookmarks from plain text and drops raw LaTeX, so the
+-- fallbacks above would remove these characters from the PDF title, author and outline.
+-- The two passes below run before the replacement and keep the original characters there.
+
+-- Record the plain title and author for the PDF metadata fields.
+local function keep_plain_metadata(meta)
+  for _, key in ipairs({ "title", "author" }) do
+    local plain_key = key .. "-meta"
+    if meta[key] and not meta[plain_key] then
+      local value = meta[key]
+      if pandoc.utils.type(value) == "List" then
+        local names = pandoc.List()
+        for _, item in ipairs(value) do
+          names:insert(pandoc.utils.stringify(item))
+        end
+        meta[plain_key] = table.concat(names, "; ")
+      else
+        meta[plain_key] = pandoc.utils.stringify(value)
+      end
+    end
+  end
+  return meta
+end
+
+-- Write a heading that needs fallbacks as LaTeX ourselves, giving hyperref the original
+-- text for the bookmark.
+local commands = { "section", "subsection", "subsubsection", "paragraph", "subparagraph" }
+
+local function heading_with_bookmark(header)
+  local plain = pandoc.utils.stringify(header.content)
+  local command = commands[header.level]
+  if not command or not needs_fallback(plain) then
+    return nil
+  end
+  local content = pandoc.Plain(header.content):walk({ Str = replace })
+  local typeset = pandoc.write(pandoc.Pandoc({ content }), "latex"):gsub("%s+$", "")
+  local escaped = pandoc.write(pandoc.Pandoc({ pandoc.Plain({ pandoc.Str(plain) }) }), "latex"):gsub("%s+$", "")
+  -- Name each fallback character by code point: written literally, some of them make
+  -- LaTeX report on every run that labels have changed.
+  local bookmark = {}
+  for _, code in utf8.codes(escaped) do
+    bookmark[#bookmark + 1] = fallback[code] and string.format('\\unichar{"%04X}', code) or utf8.char(code)
+  end
+  escaped = table.concat(bookmark)
+  local label = header.identifier ~= "" and ("\\label{" .. header.identifier .. "}") or ""
+  return pandoc.RawBlock(
+    "latex",
+    string.format("\\%s{\\texorpdfstring{%s}{%s}}%s", command, typeset, escaped, label)
+  )
+end
+
+return {
+  { Meta = keep_plain_metadata },
+  { Header = heading_with_bookmark },
+  { Str = replace },
+}

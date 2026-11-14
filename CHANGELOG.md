@@ -49,10 +49,6 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 - `make-vars`, the profile cache, `profile-scaffold`, `diagnose`, the dependency installer and the `wsl-smoke` target.
 - GitHub Actions annotations from lint output.
 
-### Known limitations
-
-- Characters given a LaTeX fallback are omitted from PDF bookmarks and the PDF title field.
-
 ## 1.0.0
 
 The Makefile-driven tool, frozen at tag `v1.0.0`.

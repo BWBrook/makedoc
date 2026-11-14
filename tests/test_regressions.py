@@ -195,3 +195,45 @@ def test_docx_images_are_scaled_to_the_text_area(tmp_path: Path) -> None:
     text_width_emu = (11906 - 2 * round(4.0 * 1440 / 2.54)) * 635
     extents = [int(node.get("cx")) for node in fitted.iter(f"{{{WP_NS}}}extent")]
     assert extents and all(cx <= text_width_emu for cx in extents)
+
+
+UNICODE_FILTER = Path(__file__).resolve().parents[1] / "src" / "makedoc" / "filters" / "unicode_fallback.lua"
+
+
+@needs_pandoc
+def test_fallback_characters_survive_in_pdf_metadata_and_bookmarks(tmp_path: Path) -> None:
+    import subprocess
+
+    source = tmp_path / "a.md"
+    source.write_text(
+        '---\ntitle: "CO₂ and α"\n---\n\n# α diversity & CO₂ {#sec-a}\n\nText.\n\n## Plain heading\n',
+        encoding="utf-8",
+    )
+    latex = subprocess.run(
+        ["pandoc", str(source), f"--lua-filter={UNICODE_FILTER}", "-t", "latex", "-s"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "pdftitle={CO₂ and α}" in latex
+    assert r'{\unichar{"03B1} diversity \& CO\unichar{"2082}}}\label{sec-a}' in latex
+    assert r"\makedocchar{03B1}{\ensuremath{\alpha}} diversity" in latex
+    assert r"\subsection{Plain heading}\label{plain-heading}" in latex
+
+
+@needs_pdf
+@needs_poppler
+def test_heading_and_title_with_symbols_build_without_warnings(tmp_path: Path) -> None:
+    import subprocess
+
+    source = tmp_path / "main.md"
+    source.write_text(
+        '---\ntitle: "CO₂ and α"\n---\n\n# α diversity and CO₂ {#sec-a}\n\nSee [above](#sec-a).\n',
+        encoding="utf-8",
+    )
+    config = write_config(tmp_path / "build.yaml", {"p": {
+        "manuscript_sources": [str(source)], "bibliography": str(FIXTURE_REFS),
+        "output_dir": "out", "output_stem": "p",
+    }})
+    result = build_profile(load_profile(config, "p"), config, ("pdf",))
+    assert result.warnings == []
+    info = subprocess.run(["pdfinfo", str(result.outputs[0])], capture_output=True, text=True, check=True).stdout
+    assert "CO₂ and α" in info

@@ -178,7 +178,7 @@ def heading_layout_block() -> list[str]:
 def unicode_fallback_block() -> list[str]:
     return [
         "% Used by filters/unicode_fallback.lua: the font's own glyph if present, else a fallback.",
-        "\\newcommand{\\makedocchar}[2]{\\iffontchar\\font\"#1 \\char\"#1\\relax\\else#2\\fi}",
+        "\\DeclareRobustCommand{\\makedocchar}[2]{\\iffontchar\\font\"#1 \\char\"#1\\relax\\else#2\\fi}",
     ]
 
 
