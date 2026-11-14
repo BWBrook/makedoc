@@ -1,0 +1,424 @@
+-- Arranges the parsed manuscript according to the build profile.
+--
+-- Input: the concatenated sources, where each file is preceded by a raw block of format
+-- `makedoc-source` holding that file's directory, and a `makedoc` metadata map written by
+-- build.py (placement, caption_position, placeholder_id, references_new_page, author_block).
+--
+-- It resolves image paths, inserts the author block, moves figures to where the profile
+-- wants them, anchors the bibliography and inserts page breaks. Working on the parsed
+-- document means code blocks, code spans and HTML comments can never be mistaken for
+-- manuscript structure.
+--
+-- Problems the author must fix are reported as `[makedoc-error] ...` on stderr followed
+-- by a Lua error; warnings as `[WARNING] ...`. build.py reads both.
+
+local stringify = pandoc.utils.stringify
+
+local function warn(message)
+  io.stderr:write("[WARNING] " .. message .. "\n")
+end
+
+local function fail(message)
+  io.stderr:write("[makedoc-error] " .. message .. "\n")
+  error("makedoc")
+end
+
+local function words(text)
+  local inlines = pandoc.List()
+  for word in text:gmatch("%S+") do
+    if #inlines > 0 then
+      inlines:insert(pandoc.Space())
+    end
+    inlines:insert(pandoc.Str(word))
+  end
+  return inlines
+end
+
+-- Page breaks -------------------------------------------------------------------------
+
+local function page_break()
+  return {
+    pandoc.RawBlock("latex", "\\clearpage"),
+    pandoc.RawBlock("openxml", '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'),
+  }
+end
+
+local function is_page_break(block)
+  if not block or block.t ~= "RawBlock" then
+    return false
+  end
+  if block.format == "latex" or block.format == "tex" then
+    return block.text:find("\\clearpage", 1, true) ~= nil or block.text:find("\\newpage", 1, true) ~= nil
+  end
+  return block.format == "openxml" and block.text:find('w:type="page"', 1, true) ~= nil
+end
+
+local function append_break(blocks)
+  if not is_page_break(blocks[#blocks]) then
+    blocks:extend(page_break())
+  end
+end
+
+-- Image paths -------------------------------------------------------------------------
+
+local function percent_decode(text)
+  return (text:gsub("%%(%x%x)", function(hex)
+    return string.char(tonumber(hex, 16))
+  end))
+end
+
+local function is_remote(src)
+  return src:match("^%a[%w+.-]*:") ~= nil or src:sub(1, 2) == "//"
+end
+
+local function resolve_image(image, source_dir)
+  local src = image.src
+  if src == "" or is_remote(src) then
+    return image
+  end
+  local path = percent_decode(src)
+  if path:sub(1, 2) == "~/" then
+    path = pandoc.path.join({ os.getenv("HOME") or "~", path:sub(3) })
+  end
+  if pandoc.path.is_relative(path) then
+    if not source_dir then
+      return image
+    end
+    path = pandoc.path.normalize(pandoc.path.join({ source_dir, path }))
+  end
+  local handle = io.open(path, "rb")
+  if not handle then
+    fail("Image file not found: " .. percent_decode(src) .. " -> " .. path)
+  end
+  handle:close()
+  image.src = path
+  return image
+end
+
+local function resolve_images(blocks)
+  local out = pandoc.List()
+  local source_dir = nil
+  for _, block in ipairs(blocks) do
+    if block.t == "RawBlock" and block.format == "makedoc-source" then
+      source_dir = block.text
+    else
+      local dir = source_dir
+      out:insert(pandoc.walk_block(block, {
+        Image = function(image)
+          return resolve_image(image, dir)
+        end,
+      }))
+    end
+  end
+  return out
+end
+
+-- Authors -----------------------------------------------------------------------------
+
+local function insert_authors(blocks, author_block)
+  local addition = author_block:clone()
+  addition:extend(page_break())
+
+  for index, block in ipairs(blocks) do
+    if block.t == "Div" and block.identifier == "authors" then
+      blocks:remove(index)
+      for offset, item in ipairs(addition) do
+        blocks:insert(index + offset - 1, item)
+      end
+      return blocks
+    end
+  end
+  for index, block in ipairs(blocks) do
+    if block.t == "Header" and block.level == 1 then
+      for offset, item in ipairs(addition) do
+        blocks:insert(index + offset, item)
+      end
+      return blocks
+    end
+  end
+  fail('author_metadata is set but there is nowhere to put the authors. Add <div id="authors"></div> '
+    .. "or start the manuscript with a '# Title' heading.")
+end
+
+-- Figures -----------------------------------------------------------------------------
+
+-- A figure is a top-level paragraph holding nothing but an image. Pandoc parses that as a
+-- Figure block when the image has a caption and as a plain paragraph when it has none.
+-- Figure lines written one per line with no blank line between them arrive as a single
+-- paragraph of images separated by soft breaks; each of those images is a figure too.
+local function from_figure_block(block)
+  local image = nil
+  pandoc.walk_block(block, {
+    Image = function(found)
+      image = image or found
+    end,
+  })
+  if not image then
+    return nil
+  end
+  local id = block.identifier ~= "" and block.identifier or image.identifier
+  return { block = block, image = image, id = id, caption = pandoc.utils.blocks_to_inlines(block.caption.long) }
+end
+
+local function from_image(image)
+  local id = image.identifier
+  if #image.caption == 0 then
+    return { block = pandoc.Para({ image }), image = image, id = id, caption = image.caption }
+  end
+  -- Build the block Pandoc's reader would have made had the image stood alone.
+  local inner = image:clone()
+  inner.identifier = ""
+  local block = pandoc.Figure({ pandoc.Plain({ inner }) }, { long = { pandoc.Plain(image.caption) } }, pandoc.Attr(id))
+  return { block = block, image = inner, id = id, caption = image.caption }
+end
+
+local function images_only(block)
+  if block.t ~= "Para" then
+    return nil
+  end
+  local images = pandoc.List()
+  for _, inline in ipairs(block.content) do
+    if inline.t == "Image" then
+      images:insert(inline)
+    elseif inline.t ~= "SoftBreak" then
+      return nil
+    end
+  end
+  return #images > 0 and images or nil
+end
+
+local function extract_figures(blocks)
+  local rest, figures = pandoc.List(), pandoc.List()
+  for _, block in ipairs(blocks) do
+    local found = pandoc.List()
+    if block.t == "Figure" then
+      local figure = from_figure_block(block)
+      if figure then
+        found:insert(figure)
+      end
+    else
+      for _, image in ipairs(images_only(block) or {}) do
+        found:insert(from_image(image))
+      end
+    end
+    if #found == 0 then
+      rest:insert(block)
+    end
+    for _, figure in ipairs(found) do
+      if figure.id == "" then
+        warn("a figure has no #id in its attributes, so the text cannot link to it: " .. figure.image.src)
+      end
+      figures:insert(figure)
+    end
+  end
+  return rest, figures
+end
+
+-- Main figures are numbered in order of appearance. An id ending in -s<number> marks a
+-- supplementary figure, labelled with that number and placed after the main figures.
+local function label_figures(figures)
+  local mains, supplements = pandoc.List(), pandoc.List()
+  for _, figure in ipairs(figures) do
+    local number = figure.id:lower():match("%-s(%d+)$")
+    if number then
+      figure.label = "Fig. S" .. number .. "."
+      supplements:insert(figure)
+    else
+      figure.label = "Fig. " .. (#mains + 1) .. "."
+      mains:insert(figure)
+    end
+  end
+  return mains, supplements
+end
+
+local function label_para(figure)
+  return pandoc.Para({ pandoc.Strong(words(figure.label)) })
+end
+
+local function labelled(figure, caption_position)
+  if caption_position == "bottom" then
+    return { figure.block, label_para(figure) }
+  end
+  return { label_para(figure), figure.block }
+end
+
+-- For the captions-page layout: an anchored label, then the image with no caption. The
+-- id sits on the label because LaTeX output drops the id of an inline image.
+local function label_and_bare_image(figure)
+  local label = pandoc.Strong(words(figure.label))
+  local anchor = figure.id ~= "" and pandoc.Span({ label }, pandoc.Attr(figure.id)) or label
+  local image = figure.image:clone()
+  image.identifier = ""
+  return { pandoc.Para({ anchor }), pandoc.Para({ image }) }
+end
+
+local function supplementary_heading()
+  return pandoc.Header(2, words("Supplementary Information"), pandoc.Attr("supplementary-information"))
+end
+
+local function end_pages(mains, supplements, render)
+  local out = pandoc.List()
+  for _, figure in ipairs(mains) do
+    out:extend(page_break())
+    out:extend(render(figure))
+  end
+  if #supplements > 0 then
+    if #mains > 0 then
+      out:extend(page_break())
+      out:insert(supplementary_heading())
+    end
+    for _, figure in ipairs(supplements) do
+      out:extend(page_break())
+      out:extend(render(figure))
+    end
+  end
+  return out
+end
+
+local function place_figures(blocks, figures, config)
+  if #figures == 0 then
+    return blocks
+  end
+  local mains, supplements = label_figures(figures)
+  local ordered = mains:clone()
+  ordered:extend(supplements)
+
+  if config.placement == "captions_page" then
+    blocks:extend(page_break())
+    blocks:insert(pandoc.Header(2, words("Figure Captions"), pandoc.Attr("figure-captions")))
+    for _, figure in ipairs(ordered) do
+      local line = pandoc.List({ pandoc.Strong(words(figure.label)) })
+      if #figure.caption > 0 then
+        line:insert(pandoc.Space())
+        line:extend(figure.caption)
+      end
+      blocks:insert(pandoc.Para(line))
+    end
+    blocks:extend(end_pages(mains, supplements, label_and_bare_image))
+    return blocks
+  end
+
+  if config.placement == "inline" then
+    local inline_blocks = pandoc.List()
+    for _, figure in ipairs(ordered) do
+      if #figure.caption > 0 then
+        inline_blocks:extend(labelled(figure, config.caption_position))
+      else
+        inline_blocks:insert(figure.block)
+      end
+    end
+    for index, block in ipairs(blocks) do
+      if block.t == "Div" and block.identifier == config.placeholder_id then
+        blocks:remove(index)
+        for offset, item in ipairs(inline_blocks) do
+          blocks:insert(index + offset - 1, item)
+        end
+        return blocks
+      end
+    end
+    warn('no <div id="' .. config.placeholder_id .. '"></div> placeholder found; figures appended at the end')
+    blocks:extend(inline_blocks)
+    return blocks
+  end
+
+  blocks:extend(end_pages(mains, supplements, function(figure)
+    return labelled(figure, config.caption_position)
+  end))
+  return blocks
+end
+
+-- Sections ----------------------------------------------------------------------------
+
+local function heading_starts_with(block, word)
+  if block.t ~= "Header" then
+    return false
+  end
+  return stringify(block.content):lower():match("^%s*" .. word .. "%f[%W]") ~= nil
+end
+
+local function has_refs_div(blocks)
+  local found = false
+  pandoc.walk_block(pandoc.Div(blocks), {
+    Div = function(div)
+      found = found or div.identifier == "refs"
+    end,
+  })
+  return found
+end
+
+-- The first Introduction heading starts a page. The bibliography goes under the first
+-- References heading, or at the end of the text when there is none, so that figures
+-- appended afterwards follow it.
+local function arrange_sections(blocks, references_new_page)
+  local out = pandoc.List()
+  local anchored = has_refs_div(blocks)
+  local intro_done, refs_done = false, false
+  for _, block in ipairs(blocks) do
+    if not intro_done and heading_starts_with(block, "introduction") then
+      intro_done = true
+      append_break(out)
+      out:insert(block)
+    elseif not refs_done and heading_starts_with(block, "references") then
+      refs_done = true
+      if references_new_page then
+        append_break(out)
+      end
+      out:insert(block)
+      if not anchored then
+        out:insert(pandoc.Div({}, pandoc.Attr("refs")))
+        anchored = true
+      end
+    else
+      out:insert(block)
+    end
+  end
+  if not anchored then
+    out:insert(pandoc.Div({}, pandoc.Attr("refs")))
+  end
+  return out
+end
+
+-- Entry point -------------------------------------------------------------------------
+
+local function setting(map, key, default)
+  local value = map[key]
+  if value == nil then
+    return default
+  end
+  if type(value) == "boolean" then
+    return value
+  end
+  return stringify(value)
+end
+
+local function meta_blocks(value)
+  if value == nil then
+    return nil
+  end
+  if pandoc.utils.type(value) == "Blocks" then
+    return value
+  end
+  return pandoc.Blocks({ pandoc.Para(value) })
+end
+
+function Pandoc(doc)
+  local map = doc.meta.makedoc or {}
+  local config = {
+    placement = setting(map, "placement", "pages"),
+    caption_position = setting(map, "caption_position", "top"),
+    placeholder_id = setting(map, "placeholder_id", "figures"),
+    references_new_page = setting(map, "references_new_page", true),
+  }
+  local author_block = meta_blocks(map.author_block)
+  doc.meta.makedoc = nil
+
+  local blocks = resolve_images(doc.blocks)
+  if author_block then
+    blocks = insert_authors(blocks, author_block)
+  end
+  local figures
+  blocks, figures = extract_figures(blocks)
+  blocks = arrange_sections(blocks, config.references_new_page)
+  blocks = place_figures(blocks, figures, config)
+  return pandoc.Pandoc(blocks, doc.meta)
+end

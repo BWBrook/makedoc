@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -15,7 +16,9 @@ from pathlib import Path
 from .docx import normalize_docx
 from .layout import render_layout
 from .manifest import write_manifest
-from .prepare import image_resources, prepare_markdown
+import yaml
+
+from .prepare import prepare_markdown, structure_metadata
 from .profile import Profile
 from .report import collect_warnings
 
@@ -24,7 +27,10 @@ PDF_ENGINE = "xelatex"
 PDF_PASSES = 2  # the second pass settles line numbers and page references
 FORMATS = ("pdf", "docx")
 FONT_VARIABLES = {"main": "mainfont", "sans": "sansfont", "mono": "monofont", "math": "mathfont"}
-UNICODE_FILTER = Path(__file__).parent / "filters" / "unicode_fallback.lua"
+FILTERS = Path(__file__).parent / "filters"
+STRUCTURE_FILTER = FILTERS / "structure.lua"
+UNICODE_FILTER = FILTERS / "unicode_fallback.lua"
+FILTER_ERROR_PREFIX = "[makedoc-error] "
 MISSING_CHARACTER_RE = re.compile(r"Missing character: There is no (\S+) \((U\+[0-9A-F]+)\)")
 
 
@@ -60,17 +66,64 @@ def _pandoc_warnings(stderr: str) -> list[str]:
 def _run_pandoc(args: list[str], label: str) -> list[str]:
     proc = subprocess.run(["pandoc", *args], capture_output=True, text=True, check=False)
     if proc.returncode != 0:
+        reported = [
+            line.removeprefix(FILTER_ERROR_PREFIX)
+            for line in proc.stderr.splitlines()
+            if line.startswith(FILTER_ERROR_PREFIX)
+        ]
+        if reported:
+            raise BuildError("\n".join(reported))
         raise BuildError(f"Pandoc failed while building {label}:\n{proc.stderr.strip()}")
     return _pandoc_warnings(proc.stderr)
 
 
-def _common_args(profile: Profile, prepared: Path) -> list[str]:
+def _resolve(profile: Profile, work: Path) -> tuple[Path, list[str]]:
+    """Parse the sources once and arrange them for the profile; both formats build from this."""
+    prepared = work / "prepared.md"
+    prepared.write_text(prepare_markdown(profile), encoding="utf-8")
+    settings = work / "structure.yaml"
+    settings.write_text(yaml.safe_dump(structure_metadata(profile), allow_unicode=True), encoding="utf-8")
+    resolved = work / "resolved.json"
+    warnings = _run_pandoc(
+        [
+            str(prepared),
+            "--from", PANDOC_FROM,
+            "--to", "json",
+            f"--metadata-file={settings}",
+            f"--lua-filter={STRUCTURE_FILTER}",
+            "-o", str(resolved),
+        ],
+        "the document structure",
+    )
+    return resolved, warnings
+
+
+def document_images(resolved: Path) -> list[Path]:
+    """Local image files used by the resolved document, in order of first use."""
+    found: list[Path] = []
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            if node.get("t") == "Image":
+                path = Path(node["c"][2][0])
+                if path.is_absolute() and path.resolve() not in found:
+                    found.append(path.resolve())
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(json.loads(resolved.read_text(encoding="utf-8"))["blocks"])
+    return found
+
+
+def _common_args(profile: Profile, resolved: Path) -> list[str]:
     args = [
-        str(prepared),
-        "--from", PANDOC_FROM,
+        str(resolved),
+        "--from", "json",
         "--citeproc",
         "--bibliography", profile.bibliography,
-        f"--resource-path={os.pathsep.join(profile.resource_paths)}",
     ]
     if profile.csl:
         args += ["--csl", profile.csl]
@@ -89,8 +142,8 @@ def invisible_pngs(paths: list[Path]) -> list[Path]:
     return found
 
 
-def _build_pdf(profile: Profile, prepared: Path, work: Path) -> tuple[Path, list[str]]:
-    bad = invisible_pngs(image_resources([Path(item) for item in profile.manuscript_sources]))
+def _build_pdf(profile: Profile, resolved: Path, work: Path) -> tuple[Path, list[str]]:
+    bad = invisible_pngs(document_images(resolved))
     if bad:
         raise BuildError(
             "These PNG files are 16-bit with an alpha channel, which xelatex renders invisible "
@@ -102,7 +155,7 @@ def _build_pdf(profile: Profile, prepared: Path, work: Path) -> tuple[Path, list
     latex_dir = work / "latex"
     latex_dir.mkdir(exist_ok=True)
     staged = work / "out.pdf"
-    args = _common_args(profile, prepared) + [
+    args = _common_args(profile, resolved) + [
         f"--include-in-header={layout}",
         f"--lua-filter={UNICODE_FILTER}",
         f"--pdf-engine={PDF_ENGINE}",
@@ -128,9 +181,9 @@ def _build_pdf(profile: Profile, prepared: Path, work: Path) -> tuple[Path, list
     return staged, warnings
 
 
-def _build_docx(profile: Profile, prepared: Path, work: Path) -> tuple[Path, list[str]]:
+def _build_docx(profile: Profile, resolved: Path, work: Path) -> tuple[Path, list[str]]:
     staged = work / "out.docx"
-    warnings = _run_pandoc(_common_args(profile, prepared) + ["-o", str(staged)], "DOCX")
+    warnings = _run_pandoc(_common_args(profile, resolved) + ["-o", str(staged)], "DOCX")
     normalize_docx(staged, profile)
     return staged, warnings
 
@@ -148,9 +201,8 @@ def build_profile(
     """
     require_tools(formats)
     with collect_warnings() as own_warnings, _work_directory(workdir) as work:
-        prepared = work / "prepared.md"
         try:
-            prepared.write_text(prepare_markdown(profile), encoding="utf-8")
+            resolved, structure_warnings = _resolve(profile, work)
         except ValueError as exc:
             raise BuildError(str(exc)) from exc
 
@@ -161,15 +213,15 @@ def build_profile(
         for fmt in formats:
             builder, target = builders[fmt]
             try:
-                staged, fmt_warnings = builder(profile, prepared, work)
+                staged, fmt_warnings = builder(profile, resolved, work)
             except ValueError as exc:
                 raise BuildError(str(exc)) from exc
             shutil.move(staged, target)
             outputs.append(Path(target))
             pandoc_warnings.extend(f"{fmt}: {w}" for w in fmt_warnings)
 
-        warnings = own_warnings + pandoc_warnings
-        manifest = write_manifest(profile, config_path, outputs, warnings)
+        warnings = own_warnings + structure_warnings + pandoc_warnings
+        manifest = write_manifest(profile, config_path, outputs, warnings, document_images(resolved))
         return BuildResult(profile=profile, outputs=outputs, manifest=manifest, warnings=warnings)
 
 

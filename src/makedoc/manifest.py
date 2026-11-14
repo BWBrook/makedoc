@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .prepare import image_resources
 from .profile import Profile
 
 
@@ -49,11 +48,11 @@ def manifest_path(profile: Profile) -> Path:
 
 
 def write_manifest(
-    profile: Profile, config_path: Path, outputs: list[Path], warnings: list[str]
+    profile: Profile, config_path: Path, outputs: list[Path], warnings: list[str], images: list[Path]
 ) -> Path:
     repo = config_path.resolve().parent
     inputs = [config_path.resolve(), *(Path(item) for item in profile.manuscript_sources)]
-    inputs.extend(image_resources([Path(item) for item in profile.manuscript_sources]))
+    inputs.extend(images)
     for optional in (profile.author_metadata, profile.bibliography, profile.csl):
         if optional:
             inputs.append(Path(optional))
