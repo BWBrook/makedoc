@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Shared markdown scanning helpers for lint and citation audit flows."""
 
 from __future__ import annotations

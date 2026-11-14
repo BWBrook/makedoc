@@ -6,11 +6,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from prepare_markdown_sources import (
+from makedoc.prepare import (
     FigureBlock,
     apply_review_markup,
     build_figure_blocks,

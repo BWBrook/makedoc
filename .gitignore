@@ -2,23 +2,6 @@ dist/
 .cache/
 __pycache__/
 *.pyc
-
-# LaTeX/PDF intermediate files
-*.aux
-*.bbl
-*.bcf
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.out
-*.run.xml
-*.synctex.gz
-*.toc
-
-# Ad-hoc local scratch PDFs/logs used during layout experiments
-test-*.aux
-test-*.log
-test-*.out
-test-*.pdf
-texput.log
+.venv/
+testbed/build/
+*.egg-info/

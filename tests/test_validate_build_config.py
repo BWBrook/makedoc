@@ -5,11 +5,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from validate_build_config import validate_schema
+from makedoc.validate import validate_schema
 
 
 class ValidateBuildConfigTests(unittest.TestCase):

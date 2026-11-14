@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
 """Search and source CSL files by journal name."""
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import sys
@@ -17,7 +15,7 @@ from typing import Any
 
 
 ZOTERO_STYLE_INDEX_URL = "https://www.zotero.org/styles-files/styles.json"
-REQUEST_HEADERS = {"User-Agent": "makedoc-csl-resolver/1.0"}
+REQUEST_HEADERS = {"User-Agent": "makedoc"}
 
 
 @dataclass(frozen=True)
@@ -28,72 +26,6 @@ class Candidate:
     href: str
     source: str
     path: Path | None = None
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    search_parser = subparsers.add_parser("search", help="Search local and remote CSL matches.")
-    add_search_args(search_parser)
-    search_parser.set_defaults(func=cmd_search)
-
-    source_parser = subparsers.add_parser(
-        "source",
-        help="Resolve a CSL path. Prefer local matches, otherwise download top remote match.",
-    )
-    add_search_args(source_parser)
-    source_parser.add_argument(
-        "--dest-dir",
-        default="csl",
-        help="Directory where downloaded CSL files are written (default: csl).",
-    )
-    source_parser.add_argument("--filename", help="Optional output filename for downloaded style.")
-    source_parser.add_argument(
-        "--local-only",
-        action="store_true",
-        help="Do not fetch remote styles; fail if no local match is found.",
-    )
-    source_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite destination file if it already exists.",
-    )
-    source_parser.add_argument(
-        "--path-only",
-        action="store_true",
-        help="Print only the resolved CSL path.",
-    )
-    source_parser.set_defaults(func=cmd_source)
-
-    return parser.parse_args()
-
-
-def add_search_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--journal", required=True, help="Journal name to search for.")
-    parser.add_argument(
-        "--search-dir",
-        action="append",
-        default=[],
-        help="Local directory to search recursively for *.csl files (repeatable).",
-    )
-    parser.add_argument(
-        "--max-results",
-        type=int,
-        default=8,
-        help="Maximum number of candidates to print (default: 8).",
-    )
-    parser.add_argument(
-        "--cache-file",
-        default=".cache/zotero_styles.json",
-        help="Cache file for remote Zotero style index (default: .cache/zotero_styles.json).",
-    )
-    parser.add_argument(
-        "--cache-ttl-hours",
-        type=float,
-        default=24.0,
-        help="How long to reuse cached style index before refreshing (default: 24h).",
-    )
 
 
 def normalize(text: str) -> str:
@@ -256,7 +188,7 @@ def download_csl(url: str) -> bytes:
     return payload
 
 
-def cmd_search(args: argparse.Namespace) -> int:
+def cmd_search(args: Any) -> int:
     local = find_local_candidates(args.journal, args.search_dir)
     remote, remote_err = find_remote_candidates(
         args.journal,
@@ -274,7 +206,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0 if (local or remote) else 1
 
 
-def cmd_source(args: argparse.Namespace) -> int:
+def cmd_source(args: Any) -> int:
     local = find_local_candidates(args.journal, args.search_dir)
     remote: list[Candidate] = []
     remote_err: str | None = None
@@ -335,12 +267,3 @@ def cmd_source(args: argparse.Namespace) -> int:
         print(f"Downloaded CSL to: {destination}")
         print(f"Matched remote style: {selected.title} ({selected.href})")
     return 0
-
-
-def main() -> int:
-    args = parse_args()
-    return args.func(args)
-
-
-if __name__ == "__main__":
-    sys.exit(main())

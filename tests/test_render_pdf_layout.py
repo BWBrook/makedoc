@@ -6,11 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from render_pdf_layout import build_block
+from makedoc.layout import build_block
 
 
 class RenderPdfLayoutTests(unittest.TestCase):

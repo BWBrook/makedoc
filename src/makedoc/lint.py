@@ -1,16 +1,12 @@
-#!/usr/bin/env python3
 """Lint markdown manuscript sources for unresolved citations and table issues."""
 
 from __future__ import annotations
 
-import argparse
-import os
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from markdown_scan import MarkdownLine, scan_markdown_lines
+from .markdown_scan import MarkdownLine, scan_markdown_lines
 
 
 PLACEHOLDER_RE = re.compile(r"\[REF\]")
@@ -26,17 +22,6 @@ class LintError:
     source: Path
     line: int
     message: str
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--source",
-        action="append",
-        required=True,
-        help="Markdown source file to lint (repeatable).",
-    )
-    return parser.parse_args()
 
 
 def split_table_cells(line: str) -> list[str]:
@@ -164,28 +149,8 @@ def lint_source(source: Path) -> list[LintError]:
     return errors
 
 
-def emit_error(err: LintError) -> None:
-    print(f"{err.source}:{err.line}: {err.message}")
-    if os.getenv("GITHUB_ACTIONS") == "true" and os.getenv("DISABLE_GHA_ANNOTATIONS") != "1":
-        msg = err.message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-        print(f"::error file={err.source},line={err.line}::{msg}")
-
-
-def main() -> int:
-    args = parse_args()
-    sources = [Path(item) for item in args.source]
-    all_errors: list[LintError] = []
+def lint_sources(sources: list[Path]) -> list[LintError]:
+    errors: list[LintError] = []
     for source in sources:
-        all_errors.extend(lint_source(source))
-
-    if all_errors:
-        for err in all_errors:
-            emit_error(err)
-        return 1
-
-    print("Manuscript lint passed.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+        errors.extend(lint_source(source))
+    return errors

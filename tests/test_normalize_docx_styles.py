@@ -10,11 +10,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from normalize_docx_styles import (
+from makedoc.docx import (
     CP_NS,
     CT_NS,
     DC_NS,
@@ -311,7 +307,7 @@ class NormalizeDocxStylesTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc"), "Pandoc required for DOCX round-trip fixture")
     def test_docx_round_trip_preserves_math_links_alt_and_custom_user_metadata(self) -> None:
-        from prepare_markdown_sources import FigureBlock, build_figure_blocks
+        from makedoc.prepare import FigureBlock, build_figure_blocks
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "fixture.docx"

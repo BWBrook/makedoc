@@ -1,43 +1,22 @@
-#!/usr/bin/env python3
 """Validate build profile configuration contract."""
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
 from typing import Any
 
-from build_profile import load_config, resolve_profile
-from profile_schema import (
-    ALLOWED_EDGECASE_KEYS,
+import yaml
+
+from .profile import load_config, resolve_profile
+from .schema import (
     ALLOWED_FIGURE_KEYS,
     ALLOWED_MARGIN_KEYS,
     ALLOWED_PROFILE_KEYS,
     ALLOWED_REVIEW_MARKUP_KEYS,
     ALLOWED_TOP_LEVEL_KEYS,
+    FONT_KEYS,
+    REMOVED_PROFILE_KEYS,
 )
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--config",
-        default="settings/build.yaml",
-        help="Path to build config YAML (default: settings/build.yaml).",
-    )
-    parser.add_argument(
-        "--profile",
-        action="append",
-        default=[],
-        help="Profile name to validate with path checks (repeatable).",
-    )
-    parser.add_argument(
-        "--no-check-paths",
-        action="store_true",
-        help="Skip filesystem existence checks for selected profile paths.",
-    )
-    return parser.parse_args()
 
 
 def append_error(errors: list[str], message: str) -> None:
@@ -65,27 +44,29 @@ def validate_schema(config: dict[str, Any], errors: list[str]) -> dict[str, Any]
             append_error(errors, f"Profile '{name}' must be a mapping.")
             continue
 
-        unknown_profile_keys = sorted(set(raw_profile.keys()) - ALLOWED_PROFILE_KEYS)
+        for key, instruction in REMOVED_PROFILE_KEYS.items():
+            if key in raw_profile:
+                append_error(
+                    errors,
+                    f"Profile '{name}' uses '{key}', removed in makedoc 2: {instruction} "
+                    "(see MIGRATING.md).",
+                )
+        fonts = raw_profile.get("fonts")
+        if isinstance(fonts, dict):
+            unknown_font_keys = sorted(set(fonts) - set(FONT_KEYS))
+            if unknown_font_keys:
+                append_error(
+                    errors, f"Profile '{name}' fonts has unknown keys: {', '.join(unknown_font_keys)}"
+                )
+
+        unknown_profile_keys = sorted(
+            set(raw_profile.keys()) - ALLOWED_PROFILE_KEYS - set(REMOVED_PROFILE_KEYS)
+        )
         if unknown_profile_keys:
             append_error(
                 errors,
                 f"Profile '{name}' has unknown keys: {', '.join(unknown_profile_keys)}",
             )
-
-        edgecases = raw_profile.get("edgecases")
-        if edgecases is not None:
-            if not isinstance(edgecases, dict):
-                append_error(errors, f"Profile '{name}' key 'edgecases' must be a mapping.")
-            else:
-                unknown_edge_keys = sorted(set(edgecases.keys()) - ALLOWED_EDGECASE_KEYS)
-                if unknown_edge_keys:
-                    append_error(
-                        errors,
-                        (
-                            f"Profile '{name}' edgecases has unknown keys: "
-                            f"{', '.join(unknown_edge_keys)}"
-                        ),
-                    )
 
         figures = raw_profile.get("figures")
         if figures is not None:
@@ -179,15 +160,6 @@ def validate_selected_profiles(
                 ("csl", profile.csl),
             ]
         )
-        if profile.golden_contract:
-            path_checks.append(("golden_contract", profile.golden_contract))
-        if profile.edgecase_unknown_cite:
-            path_checks.append(("edgecases.unknown_cite", profile.edgecase_unknown_cite))
-        if profile.edgecase_manual_cite:
-            path_checks.append(("edgecases.manual_cite", profile.edgecase_manual_cite))
-        if profile.edgecase_malformed_table:
-            path_checks.append(("edgecases.malformed_table", profile.edgecase_malformed_table))
-
         for label, raw_path in path_checks:
             if not raw_path:
                 continue
@@ -199,39 +171,19 @@ def validate_selected_profiles(
                 )
 
 
-def main() -> int:
-    args = parse_args()
+def validate_config(config_path: Path, profile_names: list[str], *, check_paths: bool = True) -> list[str]:
+    """Return a list of problems with the config; empty means valid."""
     errors: list[str] = []
-
-    config_path = Path(args.config)
     try:
         config = load_config(config_path)
-    except ValueError as exc:
-        print(f"ERROR: {exc}")
-        return 1
-
-    profiles = validate_schema(config, errors)
-    if profiles:
+    except (ValueError, yaml.YAMLError) as exc:
+        return [str(exc)]
+    if validate_schema(config, errors):
         validate_selected_profiles(
             config=config,
             config_path=config_path,
-            profile_names=[item for item in args.profile if item.strip()],
-            check_paths=not args.no_check_paths,
+            profile_names=profile_names,
+            check_paths=check_paths,
             errors=errors,
         )
-
-    if errors:
-        print("Build config validation failed:")
-        for err in errors:
-            print(f"  - {err}")
-        return 1
-
-    selected_display = ", ".join([item for item in args.profile if item.strip()]) or str(
-        config.get("default_profile", "")
-    )
-    print(f"Build config validation passed for selected profile(s): {selected_display}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return errors

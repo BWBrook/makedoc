@@ -7,12 +7,8 @@ import unittest
 from pathlib import Path
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from lint_manuscript import lint_source
-from refs_audit import scan_citations
+from makedoc.lint import lint_source
+from makedoc.refs import scan_citations
 
 
 class MarkdownScanningTests(unittest.TestCase):

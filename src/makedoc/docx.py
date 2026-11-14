@@ -1,24 +1,24 @@
-#!/usr/bin/env python3
 """Normalize DOCX style/layout defaults for manuscript output."""
 
 from __future__ import annotations
 
-import argparse
 import io
+import logging
 import re
-import sys
 import tempfile
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from prepare_markdown_sources import _load_author_metadata
-from profile_schema import (
+from .prepare import load_author_metadata
+from .profile import Profile
+from .schema import (
     DEFAULT_MARGINS, LINE_NUMBERING_CHOICES, LINE_SPACING_CHOICES,
     MARGIN_PAPER_SIZE_CHOICES, MARGIN_UNIT_CHOICES,
     PAGE_NUMBERING_CHOICES, PAGE_NUMBERING_DEFAULT,
 )
 
+log = logging.getLogger("makedoc")
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -72,39 +72,6 @@ LINE_NUMBERING_RESTART_VALUES = {
     "page": "newPage",
     "section": "newSection",
 }
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--docx", required=True, help="Path to DOCX file to normalize.")
-    parser.add_argument("--author-metadata", default="",
-                        help="Selected profile's author YAML; only names enter core metadata.")
-    parser.add_argument(
-        "--heading-color",
-        default="000000",
-        help="Hex heading color override (default: 000000).",
-    )
-    parser.add_argument(
-        "--line-spacing",
-        choices=LINE_SPACING_CHOICES,
-        default="single",
-        help="Paragraph line spacing mode for DOCX output.",
-    )
-    parser.add_argument(
-        "--line-numbering",
-        choices=LINE_NUMBERING_CHOICES,
-        default="none",
-        help="Line numbering mode for DOCX output.",
-    )
-    parser.add_argument("--page-numbers", choices=PAGE_NUMBERING_CHOICES,
-                        default=PAGE_NUMBERING_DEFAULT)
-    parser.add_argument("--paper-size", choices=MARGIN_PAPER_SIZE_CHOICES,
-                        default=DEFAULT_MARGINS["paper_size"])
-    parser.add_argument("--margin-unit", choices=MARGIN_UNIT_CHOICES,
-                        default=DEFAULT_MARGINS["unit"])
-    for side in ("top", "right", "bottom", "left"):
-        parser.add_argument(f"--margin-{side}", type=float, default=DEFAULT_MARGINS[side])
-    return parser.parse_args()
 
 
 def normalize_heading_styles(styles_xml: bytes, heading_color: str) -> bytes:
@@ -346,7 +313,7 @@ def normalize_document_layout(document_xml: bytes, *, paper_size: str,
                         image.set(attr, f"Image {image.get('id', '')}".strip())
                     else:
                         del image.attrib[attr]
-                    print(f"Warning: removed source-path image {attr}; supply descriptive image alt text.", file=sys.stderr)
+                    log.warning("removed source-path image %s from DOCX; supply descriptive image alt text", attr)
     return serialize_xml(root, document_xml)
 
 
@@ -502,7 +469,7 @@ def rewrite_docx(
         raise ValueError("DOCX margins must be positive.")
     author_names = []
     if author_metadata.strip():
-        _, authors, _ = _load_author_metadata(Path(author_metadata))
+        _, authors, _ = load_author_metadata(Path(author_metadata))
         author_names = [author.name for author in authors]
     with zipfile.ZipFile(path, "r") as src_zip:
         payloads = {member: src_zip.read(member) for member in src_zip.namelist()}
@@ -530,17 +497,16 @@ def rewrite_docx(
             temp_path.unlink()
 
 
-def main() -> int:
-    args = parse_args()
-    rewrite_docx(Path(args.docx), heading_color=args.heading_color.strip().upper(),
-                 line_spacing_mode=args.line_spacing, line_numbering_mode=args.line_numbering,
-                 page_numbers=args.page_numbers, paper_size=args.paper_size,
-                 margin_unit=args.margin_unit,
-                 author_metadata=args.author_metadata,
-                 margins={side: getattr(args, f"margin_{side}")
-                          for side in ("top", "right", "bottom", "left")})
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def normalize_docx(path: Path, profile: Profile) -> None:
+    margins = profile.margins
+    rewrite_docx(
+        path,
+        heading_color="000000",
+        line_spacing_mode=profile.line_spacing,
+        line_numbering_mode=profile.line_numbering,
+        page_numbers=profile.page_numbers,
+        paper_size=margins.paper_size,
+        margin_unit=margins.unit,
+        margins={side: getattr(margins, side) for side in ("top", "right", "bottom", "left")},
+        author_metadata=profile.author_metadata,
+    )

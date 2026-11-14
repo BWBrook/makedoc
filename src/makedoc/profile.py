@@ -1,25 +1,18 @@
-#!/usr/bin/env python3
 """Resolve manuscript build profile values from YAML configuration."""
 
 from __future__ import annotations
 
-import argparse
-import json
-import os
-import re
-import shlex
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from profile_schema import (
-    DEFAULT_CONFIG,
+from .schema import (
     DEFAULT_FIGURE_SETTINGS,
     DEFAULT_MARGINS,
     DEFAULT_REVIEW_MARKUP,
     FIGURE_CAPTION_POSITION_CHOICES,
     FIGURE_PLACEMENT_CHOICES,
+    FONT_KEYS,
     LINE_NUMBERING_CHOICES,
     LINE_SPACING_CHOICES,
     MARGIN_PAPER_SIZE_CHOICES,
@@ -74,87 +67,6 @@ class ReviewMarkup:
         }
 
 
-def _find_repo_root(path: Path) -> Path | None:
-    for parent in [path, *path.parents]:
-        if (parent / ".git").exists():
-            return parent
-    return None
-
-
-def _safe_output_subdir(raw_name: str) -> str:
-    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name.strip()).strip("-._")
-    return safe or "manuscript"
-
-
-def _derive_output_subdir(manuscript_sources: list[str], repo_name: str | None = None) -> str:
-    source_paths = [Path(source).expanduser() for source in manuscript_sources]
-
-    # Prefer explicit manuscript root markers.
-    manuscript_candidates: list[str] = []
-    for raw in source_paths:
-        source = raw.resolve()
-        for ancestor in [source] + list(source.parents):
-            if ancestor.name.lower() == "manuscript":
-                container = ancestor.parent
-                if container.name:
-                    manuscript_candidates.append(_safe_output_subdir(container.name))
-                break
-
-    if manuscript_candidates:
-        # Prefer the most common match when inputs span multiple paths.
-        ranked = sorted(
-            {name: manuscript_candidates.count(name) for name in set(manuscript_candidates)}.items(),
-            key=lambda item: (-item[1], item[0]),
-        )
-        if ranked:
-            return ranked[0][0]
-
-    if repo_name:
-        return _safe_output_subdir(repo_name)
-
-    # Last-resort collision-safe fallback.
-    return _next_fallback_dir("manuscript")
-
-
-def _next_fallback_dir(prefix: str) -> str:
-    base_dir = Path("dist")
-    existing = []
-    for item in base_dir.glob(f"{prefix}-*"):
-        if not item.is_dir():
-            continue
-        suffix = item.name.removeprefix(f"{prefix}-")
-        if suffix.isdigit():
-            existing.append(int(suffix))
-
-    next_n = (max(existing) + 1) if existing else 1
-    return f"{prefix}-{next_n}"
-
-
-def _infer_output_dir(output_dir: str, manuscript_sources: list[str], *, config_dir: Path) -> str:
-    candidate = Path(output_dir).expanduser()
-    base_output = candidate.as_posix()
-    if base_output == "dist":
-        repo_name: str | None = None
-        for source in manuscript_sources:
-            resolved = Path(source).expanduser().resolve()
-            repo_root = _find_repo_root(resolved)
-            if repo_root:
-                repo_name = repo_root.name
-                break
-
-        inferred = _derive_output_subdir(manuscript_sources, repo_name=repo_name)
-        return str(Path("dist") / inferred)
-
-    if candidate.parts and candidate.parts[0] == "dist":
-        return output_dir
-
-    if base_output != "dist":
-        if candidate.is_absolute():
-            return str(candidate.resolve())
-        return str((config_dir / candidate).resolve())
-    return output_dir
-
-
 @dataclass(frozen=True)
 class Profile:
     name: str
@@ -171,10 +83,6 @@ class Profile:
     output_stem: str
     pdf_out: str
     docx_out: str
-    golden_contract: str
-    edgecase_unknown_cite: str
-    edgecase_manual_cite: str
-    edgecase_malformed_table: str
     page_numbers: str
     line_spacing: str
     line_numbering: str
@@ -182,6 +90,7 @@ class Profile:
     margins: Margins
     figures: Figures
     review_markup: ReviewMarkup
+    fonts: dict[str, str]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -199,12 +108,6 @@ class Profile:
             "output_stem": self.output_stem,
             "pdf_out": self.pdf_out,
             "docx_out": self.docx_out,
-            "golden_contract": self.golden_contract,
-            "edgecases": {
-                "unknown_cite": self.edgecase_unknown_cite,
-                "manual_cite": self.edgecase_manual_cite,
-                "malformed_table": self.edgecase_malformed_table,
-            },
             "page_numbers": self.page_numbers,
             "line_spacing": self.line_spacing,
             "line_numbering": self.line_numbering,
@@ -212,51 +115,8 @@ class Profile:
             "margins": self.margins.to_dict(),
             "figures": self.figures.to_dict(),
             "review_markup": self.review_markup.to_dict(),
+            "fonts": dict(self.fonts),
         }
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--config",
-        default=str(DEFAULT_CONFIG),
-        help="Path to build profile YAML (default: settings/build.yaml).",
-    )
-    parser.add_argument(
-        "--profile",
-        help="Profile name. If omitted, the file's default_profile is used.",
-    )
-
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    make_vars = subparsers.add_parser(
-        "make-vars", help="Emit Makefile variable assignments for the selected profile."
-    )
-    make_vars.add_argument(
-        "--prefix",
-        default="ACTIVE",
-        help="Variable prefix for emitted Make assignments (default: ACTIVE).",
-    )
-
-    show = subparsers.add_parser("show", help="Show resolved profile values.")
-    show.add_argument(
-        "--format",
-        choices=("yaml", "json"),
-        default="yaml",
-        help="Output format (default: yaml).",
-    )
-
-    subparsers.add_parser("list-profiles", help="List available profile names.")
-
-    value = subparsers.add_parser("value", help="Return one value from resolved profile data.")
-    value.add_argument("--key", required=True, help="Dotted key path, e.g. edgecases.manual_cite")
-    value.add_argument(
-        "--join",
-        default="\n",
-        help="Delimiter for list output (default: newline).",
-    )
-
-    return parser.parse_args()
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -499,13 +359,14 @@ def _resolve_profile_values(raw_profile: dict[str, Any], *, config_dir: Path) ->
         config_dir=config_dir,
     )
     bibliography = resolve_relative_path(expect_str(raw_profile, "bibliography"), config_dir=config_dir)
-    csl = resolve_relative_path(expect_str(raw_profile, "csl"), config_dir=config_dir)
+    csl = resolve_optional_relative_path(
+        expect_str(raw_profile, "csl", required=False), config_dir=config_dir
+    )
     author_metadata = resolve_optional_relative_path(
         expect_str(raw_profile, "author_metadata", required=False),
         config_dir=config_dir,
     )
-    requested_output_dir = expect_str(raw_profile, "output_dir")
-    output_dir = _infer_output_dir(requested_output_dir, manuscript_sources, config_dir=config_dir)
+    output_dir = resolve_relative_path(expect_str(raw_profile, "output_dir"), config_dir=config_dir)
     output_stem = expect_str(raw_profile, "output_stem")
 
     resource_paths = dedupe_keep_order([str(Path(source).parent) for source in manuscript_sources])
@@ -521,10 +382,6 @@ def _resolve_profile_values(raw_profile: dict[str, Any], *, config_dir: Path) ->
         "output_stem": output_stem,
         "pdf_out": str(Path(output_dir) / f"{output_stem}.pdf"),
         "docx_out": str(Path(output_dir) / f"{output_stem}.docx"),
-        "golden_contract": resolve_optional_relative_path(
-            expect_str(raw_profile, "golden_contract", required=False),
-            config_dir=config_dir,
-        ),
         "resource_paths": resource_paths,
         "csl_search_dirs": _resolve_csl_search_dirs(raw_profile, csl, config_dir=config_dir),
     }
@@ -539,35 +396,13 @@ def _resolve_csl_search_dirs(
         return csl_search_dirs
 
     derived_dirs: list[str] = []
-    csl_parent = str(Path(csl).parent)
+    csl_parent = str(Path(csl).parent) if csl else ""
     if csl_parent not in ("", "."):
         derived_dirs.append(csl_parent)
     config_csl_dir = (config_dir / "csl").resolve()
     if config_csl_dir.exists():
         derived_dirs.append(str(config_csl_dir))
     return dedupe_keep_order(derived_dirs)
-
-
-def _resolve_edgecase_paths(
-    raw_profile: dict[str, Any], *, config_dir: Path
-) -> tuple[str, str, str]:
-    edgecases = raw_profile.get("edgecases") or {}
-    if not isinstance(edgecases, dict):
-        raise ValueError("Profile key 'edgecases' must be a mapping when present.")
-
-    values = {
-        "edgecases.unknown_cite": edgecases.get("unknown_cite", ""),
-        "edgecases.manual_cite": edgecases.get("manual_cite", ""),
-        "edgecases.malformed_table": edgecases.get("malformed_table", ""),
-    }
-    for key, value in values.items():
-        if value and not isinstance(value, str):
-            raise ValueError(f"Profile key '{key}' must be a string path.")
-
-    return tuple(
-        resolve_optional_relative_path(str(value).strip(), config_dir=config_dir)
-        for value in values.values()
-    )
 
 
 def _resolve_layout_settings(raw_profile: dict[str, Any]) -> tuple[str, str, str, bool]:
@@ -655,6 +490,18 @@ def _resolve_review_markup(raw_profile: dict[str, Any]) -> ReviewMarkup:
     return ReviewMarkup(enabled=enabled)
 
 
+def _resolve_fonts(raw_profile: dict[str, Any]) -> dict[str, str]:
+    fonts_raw = raw_profile.get("fonts") or {}
+    if not isinstance(fonts_raw, dict):
+        raise ValueError("Profile key 'fonts' must be a mapping when present.")
+    fonts: dict[str, str] = {}
+    for key in FONT_KEYS:
+        value = expect_str(fonts_raw, key, required=False)
+        if value:
+            fonts[key] = value
+    return fonts
+
+
 def _resolve_margins(raw_profile: dict[str, Any]) -> Margins:
     margins_raw = raw_profile.get("margins", {})
     if margins_raw is None:
@@ -718,13 +565,6 @@ def resolve_profile(
     output_stem = values["output_stem"]
     pdf_out = values["pdf_out"]
     docx_out = values["docx_out"]
-    golden_contract = values["golden_contract"]
-
-    (
-        edge_unknown_path,
-        edge_manual_path,
-        edge_table_path,
-    ) = _resolve_edgecase_paths(raw_profile, config_dir=config_dir)
 
     (
         page_numbers,
@@ -754,10 +594,6 @@ def resolve_profile(
         output_stem=output_stem,
         pdf_out=pdf_out,
         docx_out=docx_out,
-        golden_contract=golden_contract,
-        edgecase_unknown_cite=edge_unknown_path,
-        edgecase_manual_cite=edge_manual_path,
-        edgecase_malformed_table=edge_table_path,
         page_numbers=page_numbers,
         line_spacing=line_spacing,
         line_numbering=line_numbering,
@@ -765,166 +601,14 @@ def resolve_profile(
         margins=margins,
         figures=figures,
         review_markup=review_markup,
+        fonts=_resolve_fonts(raw_profile),
     )
 
 
-def escape_make_value(value: str) -> str:
-    out = value
-    out = out.replace("\\", "\\\\")
-    out = out.replace("#", "\\#")
-    out = out.replace(":", "\\:")
-    out = out.replace("$", "$$")
-    out = out.replace(" ", "\\ ")
-    return out
+def load_profile(config_path: Path, profile_name: str | None = None) -> Profile:
+    return resolve_profile(load_config(config_path), profile_name, config_path=config_path)
 
 
-def format_make_value(value: Any) -> str:
-    if isinstance(value, list):
-        return " ".join(escape_make_value(str(item)) for item in value)
-    return escape_make_value(str(value))
-
-
-def format_shell_value(value: Any) -> str:
-    if isinstance(value, list):
-        return " ".join(shlex.quote(str(item)) for item in value)
-    return shlex.quote(str(value))
-
-
-def escape_make_assignment(value: str) -> str:
-    out = value
-    out = out.replace("#", "\\#")
-    out = out.replace("$", "$$")
-    return out
-
-
-def _make_variable_values(profile: Profile, base: str) -> dict[str, Any]:
-    return {
-        f"{base}_PROFILE": profile.name,
-        f"{base}_DESCRIPTION": profile.description,
-        f"{base}_MANUSCRIPT_SOURCES": profile.manuscript_sources,
-        f"{base}_LINT_SOURCES": profile.lint_sources,
-        f"{base}_AUTHOR_METADATA": profile.author_metadata,
-        f"{base}_BIBLIOGRAPHY": profile.bibliography,
-        f"{base}_CSL": profile.csl,
-        f"{base}_JOURNAL": profile.journal,
-        f"{base}_CSL_SEARCH_DIRS": profile.csl_search_dirs,
-        f"{base}_RESOURCE_PATHS": profile.resource_paths,
-        f"{base}_RESOURCE_PATH": os.pathsep.join(profile.resource_paths),
-        f"{base}_OUTPUT_DIR": profile.output_dir,
-        f"{base}_OUTPUT_STEM": profile.output_stem,
-        f"{base}_PDF_OUT": profile.pdf_out,
-        f"{base}_DOCX_OUT": profile.docx_out,
-        f"{base}_GOLDEN_CONTRACT": profile.golden_contract,
-        f"{base}_EDGECASE_UNKNOWN_CITE": profile.edgecase_unknown_cite,
-        f"{base}_EDGECASE_MANUAL_CITE": profile.edgecase_manual_cite,
-        f"{base}_EDGECASE_MALFORMED_TABLE": profile.edgecase_malformed_table,
-        f"{base}_PAGE_NUMBERS": profile.page_numbers,
-        f"{base}_LINE_SPACING": profile.line_spacing,
-        f"{base}_LINE_NUMBERING": profile.line_numbering,
-        f"{base}_FIGURE_PLACEMENT": profile.figures.placement,
-        f"{base}_FIGURE_CAPTION_POSITION": profile.figures.caption_position,
-        f"{base}_FIGURE_PLACEHOLDER_ID": profile.figures.placeholder_id,
-        f"{base}_REVIEW_MARKUP_ENABLED": profile.review_markup.enabled,
-        f"{base}_MARGIN_UNIT": profile.margins.unit,
-        f"{base}_MARGIN_PAPER_SIZE": profile.margins.paper_size,
-        f"{base}_MARGIN_TOP": profile.margins.top,
-        f"{base}_MARGIN_RIGHT": profile.margins.right,
-        f"{base}_MARGIN_BOTTOM": profile.margins.bottom,
-        f"{base}_MARGIN_LEFT": profile.margins.left,
-    }
-
-
-def _shell_variable_values(profile: Profile, base: str) -> dict[str, Any]:
-    return {
-        f"{base}_MANUSCRIPT_SOURCES_SH": profile.manuscript_sources,
-        f"{base}_LINT_SOURCES_SH": profile.lint_sources,
-        f"{base}_AUTHOR_METADATA_SH": profile.author_metadata,
-        f"{base}_BIBLIOGRAPHY_SH": profile.bibliography,
-        f"{base}_CSL_SH": profile.csl,
-        f"{base}_CSL_SEARCH_DIRS_SH": profile.csl_search_dirs,
-        f"{base}_RESOURCE_PATH_SH": os.pathsep.join(profile.resource_paths),
-        f"{base}_OUTPUT_DIR_SH": profile.output_dir,
-        f"{base}_PDF_OUT_SH": profile.pdf_out,
-        f"{base}_DOCX_OUT_SH": profile.docx_out,
-        f"{base}_GOLDEN_CONTRACT_SH": profile.golden_contract,
-        f"{base}_EDGECASE_UNKNOWN_CITE_SH": profile.edgecase_unknown_cite,
-        f"{base}_EDGECASE_MANUAL_CITE_SH": profile.edgecase_manual_cite,
-        f"{base}_EDGECASE_MALFORMED_TABLE_SH": profile.edgecase_malformed_table,
-    }
-
-
-def emit_make_vars(profile: Profile, prefix: str) -> str:
-    base = prefix.strip().upper() if prefix.strip() else "ACTIVE"
-    values = _make_variable_values(profile, base)
-    shell_values = _shell_variable_values(profile, base)
-    lines = [f"{name} := {format_make_value(value)}" for name, value in values.items()]
-    lines.extend(
-        f"{name} := {escape_make_assignment(format_shell_value(value))}"
-        for name, value in shell_values.items()
-    )
-    return "\n".join(lines)
-
-
-def lookup_key(data: Any, dotted_key: str) -> Any:
-    current = data
-    for part in dotted_key.split("."):
-        if isinstance(current, dict) and part in current:
-            current = current[part]
-            continue
-        raise KeyError(f"Unknown key path: {dotted_key}")
-    return current
-
-
-def main() -> int:
-    args = parse_args()
-    try:
-        config_path = Path(args.config)
-        config = load_config(config_path)
-        profile = resolve_profile(config, args.profile, config_path=config_path)
-    except (ValueError, yaml.YAMLError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-
-    if args.command == "make-vars":
-        print(emit_make_vars(profile, args.prefix))
-        return 0
-
-    if args.command == "list-profiles":
-        profiles = config.get("profiles", {})
-        selected = profile.name
-        for name in profiles:
-            marker = "*" if name == selected else " "
-            print(f"{marker} {name}")
-        return 0
-
-    profile_data = profile.to_dict()
-
-    if args.command == "show":
-        if args.format == "json":
-            print(json.dumps(profile_data, indent=2, sort_keys=True))
-        else:
-            print(yaml.safe_dump(profile_data, sort_keys=False).strip())
-        return 0
-
-    if args.command == "value":
-        try:
-            value = lookup_key(profile_data, args.key)
-        except KeyError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 1
-
-        if isinstance(value, list):
-            print(args.join.join(str(item) for item in value))
-            return 0
-        if isinstance(value, dict):
-            print(json.dumps(value, sort_keys=True))
-            return 0
-        print(value)
-        return 0
-
-    print(f"Error: unknown command '{args.command}'", file=sys.stderr)
-    return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def profile_names(config: dict[str, Any]) -> list[str]:
+    profiles = config.get("profiles")
+    return list(profiles) if isinstance(profiles, dict) else []

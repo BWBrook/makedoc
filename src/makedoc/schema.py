@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Shared schema constants for makedoc profile configuration."""
 
 from __future__ import annotations
@@ -34,7 +33,8 @@ DEFAULT_REVIEW_MARKUP = {
     "enabled": False,
 }
 
-ALLOWED_TOP_LEVEL_KEYS = {"default_profile", "profiles"}
+# `common` holds YAML anchors shared between profiles; makedoc itself ignores it.
+ALLOWED_TOP_LEVEL_KEYS = {"default_profile", "profiles", "common"}
 ALLOWED_PROFILE_KEYS = {
     "description",
     "manuscript_sources",
@@ -46,8 +46,6 @@ ALLOWED_PROFILE_KEYS = {
     "csl_search_dirs",
     "output_dir",
     "output_stem",
-    "golden_contract",
-    "edgecases",
     "page_numbers",
     "line_spacing",
     "line_numbering",
@@ -55,8 +53,15 @@ ALLOWED_PROFILE_KEYS = {
     "figures",
     "margins",
     "review_markup",
+    "fonts",
 }
 ALLOWED_FIGURE_KEYS = {"placement", "caption_position", "placeholder_id"}
-ALLOWED_EDGECASE_KEYS = {"unknown_cite", "manual_cite", "malformed_table"}
 ALLOWED_MARGIN_KEYS = {"unit", "paper_size", "top", "right", "bottom", "left"}
 ALLOWED_REVIEW_MARKUP_KEYS = {"enabled"}
+FONT_KEYS = ("main", "sans", "mono", "math")
+
+# Keys that existed in makedoc v1. Each maps to the instruction shown when a config still uses it.
+REMOVED_PROFILE_KEYS = {
+    "golden_contract": "fixture contracts are internal to makedoc's own tests; delete this key",
+    "edgecases": "edge-case fixtures are internal to makedoc's own tests; delete this key",
+}

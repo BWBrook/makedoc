@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Prepare concatenated markdown for build.
 
 The source pipeline now normalizes figure blocks and reference placement:
@@ -40,15 +39,17 @@ Experimental review markup:
 
 from __future__ import annotations
 
-import argparse
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from markdown_scan import scan_markdown_lines, strip_inline_code_spans, visible_line_flags
 import yaml
 
-from build_profile import load_config, resolve_profile
+from .markdown_scan import scan_markdown_lines, strip_inline_code_spans, visible_line_flags
+from .profile import Profile
+
+log = logging.getLogger("makedoc")
 
 
 REFERENCE_SECTION_RE = re.compile(r"^(?P<prefix>#{1,6})\s+references\b", re.IGNORECASE)
@@ -92,33 +93,13 @@ class AuthorRecord:
     orcid: str
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--config",
-        default="settings/build.yaml",
-        help="Path to build profile YAML (default: settings/build.yaml).",
-    )
-    parser.add_argument(
-        "--profile",
-        default="",
-        help="Profile name to prepare markdown for (default: default_profile).",
-    )
-    parser.add_argument(
-        "--output",
-        required=True,
-        help="Output path for the prepared markdown file.",
-    )
-    return parser.parse_args()
-
-
 def _as_nonempty_str(value: object, *, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"Author metadata '{label}' must be a non-empty string.")
     return value.strip()
 
 
-def _load_author_metadata(path: Path) -> tuple[str, list[AuthorRecord], dict[str, str]]:
+def load_author_metadata(path: Path) -> tuple[str, list[AuthorRecord], dict[str, str]]:
     if not path.exists():
         raise ValueError(f"Author metadata file not found: {path}")
 
@@ -185,7 +166,7 @@ def _load_author_metadata(path: Path) -> tuple[str, list[AuthorRecord], dict[str
 
 
 def _author_block_lines(author_metadata_path: str) -> list[str]:
-    title_note, authors, affiliations = _load_author_metadata(Path(author_metadata_path))
+    title_note, authors, affiliations = load_author_metadata(Path(author_metadata_path))
 
     ordered_affiliations: list[str] = []
     for author in authors:
@@ -519,10 +500,7 @@ def extract_figures(lines: list[str]) -> tuple[list[str], list[FigureBlock]]:
             )
         )
         if not figure_id:
-            print(
-                f"Warning: figure line has no explicit ID token in attrs; this can break "
-                f"anchor links: {line.rstrip()}",
-            )
+            log.warning("figure has no #id in its attributes, so it cannot be linked: %s", line.strip())
 
     return out_lines, figures
 
@@ -537,6 +515,23 @@ def validate_relative_image_resources(source_path: Path) -> None:
     for line in scan_markdown_lines(source_path):
         for match in IMAGE_REFERENCE_RE.finditer(line.searchable):
             resolve_image_resource(source_path, match.group("src") or "", line.line)
+
+
+def image_resources(sources: list[Path]) -> list[Path]:
+    """Local image files referenced by the given Markdown sources, in order of first use."""
+    found: list[Path] = []
+    for source in sources:
+        for line in scan_markdown_lines(source):
+            for match in IMAGE_REFERENCE_RE.finditer(line.searchable):
+                src = (match.group("src") or "").strip()
+                if not src or is_external_resource(src):
+                    continue
+                path = Path(src).expanduser()
+                if not path.is_absolute():
+                    path = (source.parent / path).resolve()
+                if path not in found:
+                    found.append(path)
+    return found
 
 
 def resolve_image_resource(source_path: Path, raw_src: str, line_number: int) -> str:
@@ -654,11 +649,17 @@ def _build_figure_block_with_caption_position(
     return f"{caption}\n\n{figure.raw}"
 
 
-def _image_without_caption_text(figure: FigureBlock) -> str:
-    # A nonbreaking space makes the image an inline image, suppressing a second
-    # visible caption without discarding its accessible description. See
-    # Pandoc's implicit_figures contract.
-    return figure.raw + "\\ "
+def _label_and_bare_image(label: str, figure: FigureBlock) -> str:
+    """Figure page for captions_page mode: an anchored label, then the image with no caption.
+
+    Pandoc drops the id of an inline image in LaTeX output, so the id moves to the label,
+    where in-text links land. The trailing nonbreaking space keeps the image inline, which
+    suppresses a second visible caption while keeping its alt text (implicit_figures).
+    """
+    attrs = FIGURE_ID_RE.sub("", figure.attrs, count=1).strip()
+    image = f"![{figure.title}]({figure.src})" + (f"{{{attrs}}}" if attrs else "")
+    anchor = f"[{_caption_line(label)}]{{#{figure.figure_id}}}" if figure.figure_id else _caption_line(label)
+    return f"{anchor}\n\n{image}\\ "
 
 
 def _page_break_block() -> str:
@@ -690,14 +691,14 @@ def build_figure_blocks(
             blocks.append(_title_line(label, figure))
         for label, figure in main_figures:
             blocks.append(
-                f"{_page_break_block()}\n\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}"
+                f"{_page_break_block()}\n\n{_label_and_bare_image(label, figure)}"
             )
         if supplementary_figures:
             if main_figures:
                 blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
             for label, figure in supplementary_figures:
                 blocks.append(
-                    f"{_page_break_block()}\n\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}"
+                    f"{_page_break_block()}\n\n{_label_and_bare_image(label, figure)}"
                 )
         return "\n\n".join(blocks) + ("\n" if blocks else "")
 
@@ -756,10 +757,7 @@ def apply_figure_placement(
             if is_figure_placeholder(line, placeholder):
                 new_lines = lines[:index] + [figure_blocks] + lines[index + 1 :]
                 return new_lines
-        print(
-            f"Warning: no placeholder <div id=\"{placeholder}\"></div> found; appending figures "
-            "at end of prepared manuscript.",
-        )
+        log.warning('no <div id="%s"></div> placeholder found; figures appended at the end', placeholder)
 
     # Default behavior: place all figure blocks after all manuscript content.
     return lines + ["", figure_blocks]
@@ -775,32 +773,14 @@ def load_markdown_sources(sources: list[str]) -> str:
     return "\n\n".join(chunks) + "\n"
 
 
-def main() -> int:
-    args = parse_args()
-    config_path = Path(args.config)
-    config = load_config(config_path)
-    profile = resolve_profile(config, args.profile.strip() if args.profile else None, config_path=config_path)
-
-    raw = load_markdown_sources(profile.manuscript_sources)
-    lines = raw.splitlines()
+def prepare_markdown(profile: Profile) -> str:
+    """Return the single Markdown document handed to Pandoc for this profile."""
+    lines = load_markdown_sources(profile.manuscript_sources).splitlines()
     lines = apply_author_metadata(lines, profile.author_metadata)
-    lines_without_figures, figures = extract_figures(lines)
-    review_lines = apply_review_markup(lines_without_figures, profile.review_markup.enabled)
-    intro_paginated = apply_introduction_page_break(review_lines)
-    refs_lines = reference_placement(intro_paginated, profile.references_new_page)
-    spaced_lines = apply_major_section_spacing(refs_lines)
-    prepared_lines = apply_figure_placement(
-        lines=spaced_lines,
-        figures=figures,
-        profile=profile,
-    )
-    prepared = "\n".join(prepared_lines) + "\n"
-
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(prepared, encoding="utf-8")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    lines, figures = extract_figures(lines)
+    lines = apply_review_markup(lines, profile.review_markup.enabled)
+    lines = apply_introduction_page_break(lines)
+    lines = reference_placement(lines, profile.references_new_page)
+    lines = apply_major_section_spacing(lines)
+    lines = apply_figure_placement(lines=lines, figures=figures, profile=profile)
+    return "\n".join(lines) + "\n"

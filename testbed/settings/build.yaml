@@ -1,0 +1,56 @@
+# Profiles for makedoc's own regression fixture. Paths are relative to this file.
+default_profile: default
+
+common: &common
+  bibliography: ../references/fixture_refs.yaml
+  csl: ../csl/fixture_style.csl
+  journal: Oikos
+  margins:
+    unit: cm
+    paper_size: a4
+    top: 2.0
+    bottom: 2.0
+    left: 2.5
+    right: 2.5
+
+profiles:
+  default:
+    <<: *common
+    description: Captions page followed by one figure per page, 1.5 spacing.
+    manuscript_sources:
+      - ../manuscript/text/fixture_main.md
+      - ../manuscript/text/fixture_figures.md
+    author_metadata: ../manuscript/authors.yaml
+    output_dir: ../build/default
+    output_stem: manuscript
+    line_spacing: 1.5
+    line_numbering: continuous
+    figures:
+      placement: captions_page
+
+  fixture:
+    <<: *common
+    description: One captioned figure per page after the references, single spacing.
+    manuscript_sources:
+      - ../manuscript/text/fixture_main.md
+      - ../manuscript/text/fixture_figures.md
+    author_metadata: ../manuscript/authors.yaml
+    output_dir: ../build/fixture
+    output_stem: fixture_manuscript
+    line_spacing: single
+    line_numbering: continuous
+    figures:
+      placement: pages
+
+  review_markup:
+    <<: *common
+    description: Visible review-markup rendering probe.
+    manuscript_sources:
+      - ../manuscript/text/review_markup_probe.md
+    output_dir: ../build/review-markup
+    output_stem: review_markup_probe
+    page_numbers: none
+    line_numbering: none
+    references_new_page: false
+    review_markup:
+      enabled: true

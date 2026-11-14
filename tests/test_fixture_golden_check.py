@@ -7,11 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-import fixture_golden_check
+import golden_check
 
 
 class FixtureGoldenCheckTests(unittest.TestCase):
