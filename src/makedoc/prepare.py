@@ -39,7 +39,6 @@ Experimental review markup:
 
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,8 +47,7 @@ import yaml
 
 from .markdown_scan import scan_markdown_lines, strip_inline_code_spans, visible_line_flags
 from .profile import Profile
-
-log = logging.getLogger("makedoc")
+from .report import warn
 
 
 REFERENCE_SECTION_RE = re.compile(r"^(?P<prefix>#{1,6})\s+references\b", re.IGNORECASE)
@@ -500,7 +498,7 @@ def extract_figures(lines: list[str]) -> tuple[list[str], list[FigureBlock]]:
             )
         )
         if not figure_id:
-            log.warning("figure has no #id in its attributes, so it cannot be linked: %s", line.strip())
+            warn(f"figure has no #id in its attributes, so it cannot be linked: {line.strip()}")
 
     return out_lines, figures
 
@@ -757,7 +755,7 @@ def apply_figure_placement(
             if is_figure_placeholder(line, placeholder):
                 new_lines = lines[:index] + [figure_blocks] + lines[index + 1 :]
                 return new_lines
-        log.warning('no <div id="%s"></div> placeholder found; figures appended at the end', placeholder)
+        warn(f'no <div id="{placeholder}"></div> placeholder found; figures appended at the end')
 
     # Default behavior: place all figure blocks after all manuscript content.
     return lines + ["", figure_blocks]

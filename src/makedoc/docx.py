@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import logging
 import re
 import shutil
 import tempfile
@@ -13,13 +12,13 @@ from xml.etree import ElementTree as ET
 
 from .prepare import load_author_metadata
 from .profile import Profile
+from .report import warn
 from .schema import (
     DEFAULT_MARGINS, LINE_NUMBERING_CHOICES, LINE_SPACING_CHOICES,
     MARGIN_PAPER_SIZE_CHOICES, MARGIN_UNIT_CHOICES,
     PAGE_NUMBERING_CHOICES, PAGE_NUMBERING_DEFAULT,
 )
 
-log = logging.getLogger("makedoc")
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -314,7 +313,10 @@ def normalize_document_layout(document_xml: bytes, *, paper_size: str,
                         image.set(attr, f"Image {image.get('id', '')}".strip())
                     else:
                         del image.attrib[attr]
-                    log.warning("removed source-path image %s from DOCX; supply descriptive image alt text", attr)
+                    # Pandoc always puts the source path in pic:cNvPr; only a path in the
+                    # outer wp:docPr description means the author gave no alt text.
+                    if local == "docPr" and attr == "descr":
+                        warn("an image has no alt text; its file path was removed from the DOCX description")
     return serialize_xml(root, document_xml)
 
 

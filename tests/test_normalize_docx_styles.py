@@ -322,7 +322,7 @@ authors:
   - name: Second Author
     affiliations: [a]
 ''')
-            image = SCRIPTS_DIR.parent / "testbed/manuscript/figures/fig1_dummy.png"
+            image = Path(__file__).resolve().parents[1] / "testbed/manuscript/figures/fig1_dummy.png"
             description = "A synthetic curve used to test accessible image descriptions."
             figure = FigureBlock(raw=f"![{description}]({image}){{#fig-one width=60%}}",
                 figure_id="fig-one", title=description, src=str(image), attrs="#fig-one width=60%")

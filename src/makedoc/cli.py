@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import shutil
 import subprocess
 import sys
@@ -269,7 +268,6 @@ def cmd_csl_fetch(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.ERROR, format="%(message)s")
     args = parser().parse_args(argv)
     try:
         return args.func(args)

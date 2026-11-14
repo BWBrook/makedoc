@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,8 +17,7 @@ from .layout import render_layout
 from .manifest import write_manifest
 from .prepare import image_resources, prepare_markdown
 from .profile import Profile
-
-log = logging.getLogger("makedoc")
+from .report import collect_warnings
 
 PANDOC_FROM = "markdown+yaml_metadata_block+tex_math_dollars+tex_math_single_backslash"
 PDF_ENGINE = "xelatex"
@@ -122,8 +122,8 @@ def _build_pdf(profile: Profile, prepared: Path, work: Path) -> tuple[Path, list
         raise BuildError(
             "The PDF font has no glyph for these characters, so they would be absent from the PDF: "
             + ", ".join(missing)
-            + ". Write them as TeX math (for example $\\le$), or set `fonts.main` in the profile "
-            "to a font that has them."
+            + ". In body text, write them as TeX math (for example $\\le$) or set `fonts.main` "
+            "to a font that has them. In a code span, set `fonts.mono` or remove them."
         )
     return staged, warnings
 
@@ -147,27 +147,16 @@ def build_profile(
     directory. Outputs are moved into place only after each format succeeds.
     """
     require_tools(formats)
-    capture = _WarningCapture()
-    log.addHandler(capture)
-    temp: tempfile.TemporaryDirectory[str] | None = None
-    try:
-        if workdir is None:
-            temp = tempfile.TemporaryDirectory(prefix="makedoc-")
-            work = Path(temp.name)
-        else:
-            work = workdir
-            work.mkdir(parents=True, exist_ok=True)
-
+    with collect_warnings() as own_warnings, _work_directory(workdir) as work:
         prepared = work / "prepared.md"
         try:
             prepared.write_text(prepare_markdown(profile), encoding="utf-8")
         except ValueError as exc:
             raise BuildError(str(exc)) from exc
 
-        output_dir = Path(profile.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        Path(profile.output_dir).mkdir(parents=True, exist_ok=True)
         outputs: list[Path] = []
-        warnings: list[str] = []
+        pandoc_warnings: list[str] = []
         builders = {"pdf": (_build_pdf, profile.pdf_out), "docx": (_build_docx, profile.docx_out)}
         for fmt in formats:
             builder, target = builders[fmt]
@@ -177,21 +166,18 @@ def build_profile(
                 raise BuildError(str(exc)) from exc
             shutil.move(staged, target)
             outputs.append(Path(target))
-            warnings.extend(f"{fmt}: {w}" for w in fmt_warnings)
+            pandoc_warnings.extend(f"{fmt}: {w}" for w in fmt_warnings)
 
-        warnings = capture.messages + warnings
+        warnings = own_warnings + pandoc_warnings
         manifest = write_manifest(profile, config_path, outputs, warnings)
         return BuildResult(profile=profile, outputs=outputs, manifest=manifest, warnings=warnings)
-    finally:
-        log.removeHandler(capture)
-        if temp is not None:
-            temp.cleanup()
 
 
-class _WarningCapture(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__(level=logging.WARNING)
-        self.messages: list[str] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.messages.append(record.getMessage())
+@contextmanager
+def _work_directory(workdir: Path | None) -> Iterator[Path]:
+    if workdir is not None:
+        workdir.mkdir(parents=True, exist_ok=True)
+        yield workdir
+        return
+    with tempfile.TemporaryDirectory(prefix="makedoc-") as temp:
+        yield Path(temp)

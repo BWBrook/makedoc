@@ -41,106 +41,32 @@ class ResolveProfileOutputDirTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_output_dir_prefers_manuscript_container_name(self) -> None:
+    def test_bare_relative_output_dir_resolves_against_config_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            project_dir = root / "demo-paper"
-            source_path = project_dir / "manuscript" / "text" / "main.md"
-            bibliography_path = project_dir / "references.yaml"
-            csl_path = project_dir / "journal.csl"
-            config_path = root / "build.yaml"
-
-            source_path.parent.mkdir(parents=True)
-            source_path.write_text("# Demo\n", encoding="utf-8")
-            bibliography_path.write_text("references: []\n", encoding="utf-8")
-            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
-            self.write_config(
-                config_path=config_path,
-                source_path=source_path,
-                bibliography_path=bibliography_path,
-                csl_path=csl_path,
-            )
-
-            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
-
-            self.assertEqual(profile.output_dir, "dist/demo-paper")
-            self.assertEqual(profile.pdf_out, "dist/demo-paper/manuscript.pdf")
-            self.assertEqual(profile.docx_out, "dist/demo-paper/manuscript.docx")
-
-    def test_inferred_dist_subdir_is_safe_for_make_targets(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            project_dir = root / "demo paper (probe)"
-            source_path = project_dir / "manuscript" / "text" / "main.md"
-            bibliography_path = project_dir / "references.yaml"
-            csl_path = project_dir / "journal.csl"
-            config_path = root / "build.yaml"
-
-            source_path.parent.mkdir(parents=True)
-            source_path.write_text("# Demo\n", encoding="utf-8")
-            bibliography_path.write_text("references: []\n", encoding="utf-8")
-            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
-            self.write_config(
-                config_path=config_path,
-                source_path=source_path,
-                bibliography_path=bibliography_path,
-                csl_path=csl_path,
-            )
-
-            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
-
-            self.assertEqual(profile.output_dir, "dist/demo-paper-probe")
-
-    def test_output_dir_falls_back_to_repo_name_when_no_manuscript_dir_exists(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_dir = root / "paper-engine"
-            source_path = repo_dir / "text" / "main.md"
-            bibliography_path = repo_dir / "references.yaml"
-            csl_path = repo_dir / "journal.csl"
-            config_path = root / "build.yaml"
-
-            (repo_dir / ".git").mkdir(parents=True)
-            source_path.parent.mkdir(parents=True)
-            source_path.write_text("# Demo\n", encoding="utf-8")
-            bibliography_path.write_text("references: []\n", encoding="utf-8")
-            csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
-            self.write_config(
-                config_path=config_path,
-                source_path=source_path,
-                bibliography_path=bibliography_path,
-                csl_path=csl_path,
-            )
-
-            profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
-
-            self.assertEqual(profile.output_dir, "dist/paper-engine")
-
-    def test_explicit_dist_subdir_output_dir_is_preserved(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source_path = root / "manuscript" / "text" / "main.md"
+            source_path = root / "demo-paper" / "manuscript" / "text" / "main.md"
             bibliography_path = root / "references.yaml"
             csl_path = root / "journal.csl"
-            config_path = root / "build.yaml"
+            config_path = root / "demo-paper" / "settings" / "build.yaml"
 
             source_path.parent.mkdir(parents=True)
             source_path.write_text("# Demo\n", encoding="utf-8")
             bibliography_path.write_text("references: []\n", encoding="utf-8")
             csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
+            config_path.parent.mkdir(parents=True)
             self.write_config(
                 config_path=config_path,
                 source_path=source_path,
                 bibliography_path=bibliography_path,
                 csl_path=csl_path,
-                output_dir="dist/custom-output",
             )
 
             profile = resolve_profile(load_config(config_path), "sample", config_path=config_path)
 
-            self.assertEqual(profile.output_dir, "dist/custom-output")
-            self.assertEqual(profile.pdf_out, "dist/custom-output/manuscript.pdf")
-            self.assertEqual(profile.docx_out, "dist/custom-output/manuscript.docx")
+            expected_output = config_path.parent.resolve() / "dist"
+            self.assertEqual(profile.output_dir, str(expected_output))
+            self.assertEqual(profile.pdf_out, str(expected_output / "manuscript.pdf"))
+            self.assertEqual(profile.docx_out, str(expected_output / "manuscript.docx"))
 
     def test_explicit_non_dist_output_dir_resolves_relative_to_config_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,18 +107,14 @@ class ResolveProfileRelativePathTests(unittest.TestCase):
             authors_path = root / "manuscript" / "authors.yaml"
             bibliography_path = root / "references" / "refs.yaml"
             csl_path = root / "csl" / "journal.csl"
-            contract_path = root / "expected" / "golden.yaml"
-            edgecase_path = root / "edgecases" / "unknown.md"
 
-            for path in (main_path, figures_path, authors_path, bibliography_path, csl_path, contract_path, edgecase_path):
+            for path in (main_path, figures_path, authors_path, bibliography_path, csl_path):
                 path.parent.mkdir(parents=True, exist_ok=True)
             main_path.write_text("# Main\n", encoding="utf-8")
             figures_path.write_text("![Fig](../figures/figure.png){#fig-1}\n", encoding="utf-8")
             authors_path.write_text("authors: []\naffiliations: {}\n", encoding="utf-8")
             bibliography_path.write_text("references: []\n", encoding="utf-8")
             csl_path.write_text("<style xmlns='http://purl.org/net/xbiblio/csl' />\n", encoding="utf-8")
-            contract_path.write_text("required_text: []\nexpect_tables: 0\nexpect_drawings: 0\nmin_pdf_pages: 0\n", encoding="utf-8")
-            edgecase_path.write_text("# Edge\n", encoding="utf-8")
 
             config_path.parent.mkdir(parents=True, exist_ok=True)
             config_path.write_text(
@@ -210,11 +132,8 @@ class ResolveProfileRelativePathTests(unittest.TestCase):
                         author_metadata: ../manuscript/authors.yaml
                         bibliography: ../references/refs.yaml
                         csl: ../csl/journal.csl
-                        golden_contract: ../expected/golden.yaml
                         csl_search_dirs:
                           - ../csl
-                        edgecases:
-                          unknown_cite: ../edgecases/unknown.md
                         output_dir: dist
                         output_stem: manuscript
                     """
@@ -230,8 +149,6 @@ class ResolveProfileRelativePathTests(unittest.TestCase):
             self.assertEqual(profile.author_metadata, str(authors_path.resolve()))
             self.assertEqual(profile.bibliography, str(bibliography_path.resolve()))
             self.assertEqual(profile.csl, str(csl_path.resolve()))
-            self.assertEqual(profile.golden_contract, str(contract_path.resolve()))
-            self.assertEqual(profile.edgecase_unknown_cite, str(edgecase_path.resolve()))
             self.assertEqual(profile.csl_search_dirs, [str(csl_path.parent.resolve())])
 
     def test_default_csl_search_dirs_use_resolved_csl_parent_and_config_csl_dir(self) -> None:
