@@ -8,9 +8,11 @@ Read `README.md` first: it is the user-facing reference for commands, profile ke
 
 - `src/makedoc/cli.py`: argument parsing and the commands.
 - `src/makedoc/profile.py`, `schema.py`, `validate.py`: profile resolution, allowed keys and config validation.
-- `src/makedoc/prepare.py`, `markdown_scan.py`: turn the Markdown sources into the single document handed to Pandoc (authors, figures, references, page breaks, review markup).
+- `src/makedoc/prepare.py`: the text-level steps only: join the sources, mark each file's directory, expand review markup, and write the settings for the structure filter.
+- `src/makedoc/filters/structure.lua`: arranges the parsed document: image paths, author block, figure extraction, numbering and placement, bibliography anchor, page breaks. Structural logic belongs here, on the parsed document, never in regexes over Markdown text.
 - `src/makedoc/layout.py`: the LaTeX header for a profile. `filters/unicode_fallback.lua`: fallbacks for characters the PDF font lacks.
-- `src/makedoc/build.py`: runs Pandoc, collects warnings, moves outputs into place, writes the manifest (`manifest.py`).
+- `src/makedoc/markdown_scan.py`: line scanner that skips code and comments, used by lint, the citation audit and review markup (these report line numbers, which the parsed document does not carry).
+- `src/makedoc/build.py`: runs Pandoc in two stages (sources to a structured `resolved.json`, then that to PDF and DOCX), collects warnings, moves outputs into place, writes the manifest (`manifest.py`).
 - `src/makedoc/docx.py`: post-processes the DOCX to match the profile.
 - `src/makedoc/lint.py`, `refs.py`: source lint and citation audit used by `makedoc check`.
 - `src/makedoc/csl.py`: citation style search and download.

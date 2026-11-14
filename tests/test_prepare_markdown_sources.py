@@ -1,228 +1,173 @@
 from __future__ import annotations
 
-import sys
-import tempfile
-import unittest
 from pathlib import Path
 
+import pytest
 
-from makedoc.prepare import (
-    FigureBlock,
-    apply_review_markup,
-    build_figure_blocks,
-    extract_figures,
-    load_markdown_sources,
-)
+from makedoc.build import BuildError
+from makedoc.prepare import apply_review_markup, prepare_markdown
+from support import FIGURES_DIR, manuscript, needs_pandoc, nodes, resolve, text
 
-
-class PrepareMarkdownSourcesTests(unittest.TestCase):
-    def test_load_markdown_sources_accepts_source_relative_image_paths(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source_path = root / "manuscript" / "text" / "figures.md"
-            image_path = root / "manuscript" / "figures" / "fig1.png"
-
-            source_path.parent.mkdir(parents=True, exist_ok=True)
-            image_path.parent.mkdir(parents=True, exist_ok=True)
-            image_path.write_bytes(b"fixture")
-            source_path.write_text(
-                "![Figure](../figures/fig1.png){#fig-1 width=90%}\n",
-                encoding="utf-8",
-            )
-
-            merged = load_markdown_sources([str(source_path)])
-
-            self.assertIn(image_path.resolve().as_posix(), merged)
-            self.assertNotIn("../figures/fig1.png", merged)
-
-    def test_load_markdown_sources_rewrites_colliding_relative_image_paths(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source_a = root / "a" / "text" / "figures.md"
-            source_b = root / "b" / "text" / "figures.md"
-            image_a = root / "a" / "figures" / "shared.png"
-            image_b = root / "b" / "figures" / "shared.png"
-
-            for path in (source_a, source_b, image_a, image_b):
-                path.parent.mkdir(parents=True, exist_ok=True)
-            image_a.write_bytes(b"first")
-            image_b.write_bytes(b"second")
-            source_a.write_text(
-                "![First](../figures/shared.png){#fig-first}\n",
-                encoding="utf-8",
-            )
-            source_b.write_text(
-                "![Second](../figures/shared.png){#fig-second}\n",
-                encoding="utf-8",
-            )
-
-            merged = load_markdown_sources([str(source_a), str(source_b)])
-
-            self.assertIn(image_a.resolve().as_posix(), merged)
-            self.assertIn(image_b.resolve().as_posix(), merged)
-            self.assertEqual(merged.count("../figures/shared.png"), 0)
-
-    def test_missing_relative_image_reports_resolved_path(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source_path = root / "manuscript" / "text" / "figures.md"
-            source_path.parent.mkdir(parents=True, exist_ok=True)
-            source_path.write_text(
-                "![Figure](../figures/missing.png){#fig-1 width=90%}\n",
-                encoding="utf-8",
-            )
-
-            expected_resolved = (source_path.parent / "../figures/missing.png").resolve()
-            with self.assertRaisesRegex(ValueError, str(expected_resolved)):
-                load_markdown_sources([str(source_path)])
-
-    def test_inline_code_image_example_is_ignored(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source_path = root / "manuscript" / "text" / "notes.md"
-            source_path.parent.mkdir(parents=True, exist_ok=True)
-            source_path.write_text(
-                "Use `![Example](../figures/missing.png)` in docs.\n",
-                encoding="utf-8",
-            )
-
-            load_markdown_sources([str(source_path)])
-
-    def test_tilde_fenced_figure_example_is_not_extracted(self) -> None:
-        lines = [
-            "# Demo",
-            "",
-            "~~~markdown",
-            "![Example](../figures/example.png){#fig-example}",
-            "~~~",
-            "",
-            "Body",
-        ]
-
-        remaining, figures = extract_figures(lines)
-
-        self.assertEqual(figures, [])
-        self.assertEqual(remaining, lines)
-
-    def test_uppercase_supplementary_id_orders_without_crashing(self) -> None:
-        figure = FigureBlock(
-            raw="![Supplement](fig.png){#fig-main-S1}",
-            figure_id="fig-main-S1",
-            title="Supplement",
-            src="fig.png",
-            attrs="#fig-main-S1",
-        )
-
-        content = build_figure_blocks([figure], "top", "pages")
-
-        self.assertIn("**Fig. S1.**", content)
-
-    def test_supplementary_divider_only_separates_mixed_figure_sets(self) -> None:
-        supplementary = FigureBlock(
-            raw="![Supplement](fig-s1.png){#fig-main-s1}",
-            figure_id="fig-main-s1",
-            title="Supplement",
-            src="fig-s1.png",
-            attrs="#fig-main-s1",
-        )
-        main = FigureBlock(
-            raw="![Main](fig-1.png){#fig-main-1}",
-            figure_id="fig-main-1",
-            title="Main",
-            src="fig-1.png",
-            attrs="#fig-main-1",
-        )
-
-        for placement in ("pages", "captions_page"):
-            standalone = build_figure_blocks([supplementary], "top", placement)
-            mixed = build_figure_blocks([main, supplementary], "top", placement)
-
-            self.assertNotIn("## Supplementary Information", standalone)
-            self.assertIn("## Supplementary Information", mixed)
-
-    def test_review_markup_is_default_off(self) -> None:
-        lines = ["This keeps {++ draft markup ++} untouched."]
-
-        self.assertEqual(apply_review_markup(lines), lines)
-
-    def test_review_markup_renders_visible_markdown_when_enabled(self) -> None:
-        lines = [
-            "This {++ adds text ++}, {-- removes text --}, "
-            "{~~ replaces old ~> adds new ~~}, and {>> check this <<}."
-        ]
-
-        rendered = apply_review_markup(lines, enabled=True)
-
-        self.assertEqual(
-            rendered,
-            [
-                "This **[+ adds text +]**, **[- removes text -]**, "
-                "**[- replaces old -]** **[+ adds new +]**, "
-                "and **[Reviewer note: check this]**."
-            ],
-        )
-
-    def test_review_markup_skips_inline_code_and_fenced_blocks(self) -> None:
-        lines = [
-            "Visible {++ added ++} but `literal {-- deletion --}` remains.",
-            "",
-            "```markdown",
-            "{++ fenced addition ++}",
-            "```",
-        ]
-
-        rendered = apply_review_markup(lines, enabled=True)
-
-        self.assertEqual(
-            rendered,
-            [
-                "Visible **[+ added +]** but `literal {-- deletion --}` remains.",
-                "",
-                "```markdown",
-                "{++ fenced addition ++}",
-                "```",
-            ],
-        )
-
-    def test_review_markup_preserves_figure_lines(self) -> None:
-        figure_line = "![Caption {++ addition ++}.](../figures/fig1.png){#fig-1}"
-
-        rendered = apply_review_markup([figure_line], enabled=True)
-
-        self.assertEqual(rendered, [figure_line])
-
-    def test_review_markup_skips_html_comment_blocks(self) -> None:
-        lines = [
-            "<!--",
-            "{++ hidden addition ++}",
-            "-->",
-            "Visible {++ addition ++}.",
-        ]
-
-        rendered = apply_review_markup(lines, enabled=True)
-
-        self.assertEqual(
-            rendered,
-            [
-                "<!--",
-                "{++ hidden addition ++}",
-                "-->",
-                "Visible **[+ addition +]**.",
-            ],
-        )
-
-    def test_review_markup_is_line_local(self) -> None:
-        lines = [
-            "{++ multiline",
-            "addition ++}",
-            "{~~ old",
-            "~> new ~~}",
-        ]
-
-        rendered = apply_review_markup(lines, enabled=True)
-
-        self.assertEqual(rendered, lines)
+FIG = FIGURES_DIR / "fig1_dummy.png"
 
 
-if __name__ == "__main__":
-    unittest.main()
+def image_sources(blocks: list) -> list[str]:
+    return [image["c"][2][0] for image in nodes(blocks, "Image")]
+
+
+def labels(blocks: list) -> list[str]:
+    return [text(strong) for strong in nodes(blocks, "Strong") if text(strong).startswith("Fig. ")]
+
+
+@needs_pandoc
+def test_source_relative_image_path_resolves(tmp_path: Path) -> None:
+    image = tmp_path / "manuscript" / "figures" / "fig1.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(FIG.read_bytes())
+
+    resolved = resolve(manuscript(tmp_path, {
+        "manuscript/text/figures.md": "![Figure](../figures/fig1.png){#fig-1 width=90%}\n",
+    }))
+
+    assert resolved.images == [image.resolve()]
+    assert all(Path(src).is_absolute() for src in image_sources(resolved.blocks))
+
+
+@needs_pandoc
+def test_colliding_relative_image_paths_resolve_per_source_file(tmp_path: Path) -> None:
+    for name in ("a", "b"):
+        image = tmp_path / name / "figures" / "shared.png"
+        image.parent.mkdir(parents=True)
+        image.write_bytes(FIG.read_bytes())
+
+    resolved = resolve(manuscript(tmp_path, {
+        "a/text/figures.md": "![First](../figures/shared.png){#fig-first}\n",
+        "b/text/figures.md": "![Second](../figures/shared.png){#fig-second}\n",
+    }))
+
+    assert resolved.images == [
+        (tmp_path / "a" / "figures" / "shared.png").resolve(),
+        (tmp_path / "b" / "figures" / "shared.png").resolve(),
+    ]
+
+
+@needs_pandoc
+def test_missing_relative_image_reports_where_it_looked(tmp_path: Path) -> None:
+    profile = manuscript(tmp_path, {
+        "manuscript/text/figures.md": "![Figure](../figures/missing.png){#fig-1 width=90%}\n",
+    })
+
+    with pytest.raises(BuildError, match="Image file not found") as caught:
+        resolve(profile)
+    assert "../figures/missing.png" in str(caught.value)
+    assert str((tmp_path / "manuscript" / "figures" / "missing.png").resolve()) in str(caught.value)
+
+
+@needs_pandoc
+def test_image_example_in_inline_code_is_ignored(tmp_path: Path) -> None:
+    resolved = resolve(manuscript(tmp_path, "Use `![Example](../figures/missing.png)` in docs.\n"))
+
+    assert nodes(resolved.blocks, "Image") == []
+    assert [code["c"][1] for code in nodes(resolved.blocks, "Code")] == ["![Example](../figures/missing.png)"]
+
+
+@needs_pandoc
+def test_tilde_fenced_figure_example_is_not_extracted(tmp_path: Path) -> None:
+    figure_line = "![Example](../figures/example.png){#fig-example}"
+    resolved = resolve(manuscript(tmp_path, f"# Demo\n\n~~~markdown\n{figure_line}\n~~~\n\nBody\n"))
+
+    assert [block["c"][1] for block in resolved.blocks if block["t"] == "CodeBlock"] == [figure_line]
+    assert labels(resolved.blocks) == []
+    assert resolved.warnings == []
+
+
+@needs_pandoc
+def test_uppercase_supplementary_id_is_labelled_as_supplementary(tmp_path: Path) -> None:
+    resolved = resolve(manuscript(tmp_path, f"# T\n\n![Supplement]({FIG}){{#fig-main-S1}}\n"))
+
+    assert labels(resolved.blocks) == ["Fig. S1."]
+
+
+@needs_pandoc
+@pytest.mark.parametrize("placement", ["pages", "captions_page"])
+def test_supplementary_heading_only_separates_mixed_figure_sets(tmp_path: Path, placement: str) -> None:
+    supplementary = f"![Supplement]({FIG}){{#fig-main-s1}}\n"
+    main = f"![Main]({FIG}){{#fig-main-1}}\n\n"
+    figures = {"placement": placement}
+
+    standalone = resolve(manuscript(tmp_path / "standalone", "# T\n\n" + supplementary, figures=figures))
+    mixed = resolve(manuscript(tmp_path / "mixed", "# T\n\n" + main + supplementary, figures=figures))
+
+    assert "## Supplementary Information" not in standalone.lines
+    assert "## Supplementary Information" in mixed.lines
+    assert labels(standalone.blocks)[-1] == "Fig. S1."
+    assert mixed.lines.index("## Supplementary Information") < max(
+        i for i, line in enumerate(mixed.lines) if "Fig. S1." in line
+    )
+
+
+def test_prepare_markdown_marks_each_source_directory(tmp_path: Path) -> None:
+    profile = manuscript(tmp_path, {"one/a.md": "A.\n", "two/b.md": "B.\n"})
+
+    prepared = prepare_markdown(profile)
+
+    first = f"```{{=makedoc-source}}\n{(tmp_path / 'one').resolve()}\n```"
+    second = f"```{{=makedoc-source}}\n{(tmp_path / 'two').resolve()}\n```"
+    assert prepared.index(first) < prepared.index("A.") < prepared.index(second) < prepared.index("B.")
+
+
+def test_review_markup_is_default_off() -> None:
+    lines = ["This keeps {++ draft markup ++} untouched."]
+
+    assert apply_review_markup(lines) == lines
+
+
+def test_review_markup_renders_visible_markdown_when_enabled() -> None:
+    lines = [
+        "This {++ adds text ++}, {-- removes text --}, "
+        "{~~ replaces old ~> adds new ~~}, and {>> check this <<}."
+    ]
+
+    assert apply_review_markup(lines, enabled=True) == [
+        "This **[+ adds text +]**, **[- removes text -]**, "
+        "**[- replaces old -]** **[+ adds new +]**, "
+        "and **[Reviewer note: check this]**."
+    ]
+
+
+def test_review_markup_skips_inline_code_and_fenced_blocks() -> None:
+    lines = [
+        "Visible {++ added ++} but `literal {-- deletion --}` remains.",
+        "",
+        "```markdown",
+        "{++ fenced addition ++}",
+        "```",
+    ]
+
+    assert apply_review_markup(lines, enabled=True) == [
+        "Visible **[+ added +]** but `literal {-- deletion --}` remains.",
+        "",
+        "```markdown",
+        "{++ fenced addition ++}",
+        "```",
+    ]
+
+
+def test_review_markup_expands_figure_captions() -> None:
+    rendered = apply_review_markup(["![Caption {++ addition ++}.](../figures/fig1.png){#fig-1}"], enabled=True)
+
+    assert rendered == ["![Caption **[+ addition +]**.](../figures/fig1.png){#fig-1}"]
+
+
+def test_review_markup_skips_html_comment_blocks() -> None:
+    lines = ["<!--", "{++ hidden addition ++}", "-->", "Visible {++ addition ++}."]
+
+    assert apply_review_markup(lines, enabled=True) == [
+        "<!--", "{++ hidden addition ++}", "-->", "Visible **[+ addition +]**.",
+    ]
+
+
+def test_review_markup_is_line_local() -> None:
+    lines = ["{++ multiline", "addition ++}", "{~~ old", "~> new ~~}"]
+
+    assert apply_review_markup(lines, enabled=True) == lines

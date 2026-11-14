@@ -8,6 +8,8 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 
 - The Makefile and `scripts/` are replaced by the `makedoc` command: `build`, `check`, `profiles`, `show`, `init`, `doctor`, `csl`.
 - A manuscript repository pins makedoc by release tag or commit in its `uvx` invocation, not by the HEAD of a shared checkout.
+- Authors, figures, the bibliography anchor and page breaks are arranged on the document after Pandoc has parsed it (a Lua filter), not by matching lines of Markdown. Code blocks, code spans and HTML comments can no longer be mistaken for structure.
+- A paragraph holding only an image is a figure whether or not it has an attribute block. Review markup is expanded in figure captions.
 - Every build starts from the sources in a private temporary directory. Builds can run concurrently, and there is no cache to go stale.
 - `output_dir` is always relative to the config file. The v1 routing of `output_dir: dist` into the makedoc checkout is gone.
 - Pandoc and LaTeX warnings are printed and recorded in the manifest. `--strict` makes them fail the build.
@@ -50,8 +52,6 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 ### Known limitations
 
 - Characters given a LaTeX fallback are omitted from PDF bookmarks and the PDF title field.
-- Review markup is not applied inside figure captions.
-- A figure line inside a code span that runs over several lines is still treated as a figure.
 
 ## 1.0.0
 

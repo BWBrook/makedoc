@@ -71,11 +71,11 @@ The pattern is in Fig. [1](#fig-main-1).
 - **`## References`** receives the bibliography. Without it, the bibliography goes at the end.
 - **Page breaks** are inserted after the author block, before the first `Introduction` heading and before `References` (`references_new_page: false` turns the last one off).
 - **Symbols.** Type Greek letters, `≤ ≥ ≈ ≠ → ±`, and sub- or superscripts such as `CO₂` and `m⁻²` directly in body text, or write TeX math (`$\alpha \le 0.05$`). Inside code spans only characters the monospace font has will render; anything else fails the build by name.
-- **Fenced code blocks and HTML comment blocks** are ignored by every build step and by lint.
+- **Code blocks, code spans and HTML comments** are never treated as figures, headings or placeholders, and lint skips them. Commenting out a figure line removes the figure.
 
 ### 3.2 Figures
 
-One image per line, with an attribute block:
+A figure is a paragraph that holds only an image. Write one per line, with an attribute block:
 
 ```markdown
 ![Caption of the first figure.](../figures/fig1.png){#fig-main-1 width=90%}
@@ -231,7 +231,7 @@ Run it from the directory that holds `settings/`, or pass `-c path/to/build.yaml
 | Author block missing | `author_metadata` is not set in the selected profile, or there is neither the placeholder nor a `# Title` heading. |
 | Inline figures appear at the end | The `<div id="figures"></div>` placeholder is missing or its id differs from `figures.placeholder_id`. |
 | Review markup shows as literal `{++ ++}` | `review_markup.enabled` is not `true` in the selected profile, or the token spans more than one line. |
-| Need to see what Pandoc received | `makedoc build --workdir /tmp/work` keeps `prepared.md`, `layout.tex` and the LaTeX log. |
+| Need to see what makedoc did to the sources | `makedoc build --workdir /tmp/work` keeps `prepared.md` (joined sources), `resolved.json` (the arranged document; view it with `pandoc -f json -t markdown resolved.json`), `layout.tex` and the LaTeX log. |
 | Unknown profile key error naming `golden_contract` or `edgecases` | v1 keys. Delete them; see `MIGRATING.md`. |
 
 ## 9. Review markup (optional)

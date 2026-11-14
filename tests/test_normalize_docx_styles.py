@@ -307,7 +307,8 @@ class NormalizeDocxStylesTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc"), "Pandoc required for DOCX round-trip fixture")
     def test_docx_round_trip_preserves_math_links_alt_and_custom_user_metadata(self) -> None:
-        from makedoc.prepare import FigureBlock, build_figure_blocks
+        from makedoc.build import _resolve
+        from support import manuscript
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "fixture.docx"
@@ -324,11 +325,11 @@ authors:
 ''')
             image = Path(__file__).resolve().parents[1] / "testbed/manuscript/figures/fig1_dummy.png"
             description = "A synthetic curve used to test accessible image descriptions."
-            figure = FigureBlock(raw=f"![{description}]({image}){{#fig-one width=60%}}",
-                figure_id="fig-one", title=description, src=str(image), attrs="#fig-one width=60%")
             markdown = "# Heading\n\nEquation $x^2 + y^2$ and [a link](https://example.org).\n\n| Identifier | Value |\n|---|---|\n| main_70 | -0.1 |\n\n"
-            markdown += build_figure_blocks([figure], "top", "captions_page")
-            subprocess.run(["pandoc", "-f", "markdown", "-o", str(path)], input=markdown,
+            markdown += f"![{description}]({image}){{#fig-one width=60%}}\n"
+            profile = manuscript(root / "src", markdown, figures={"placement": "captions_page"})
+            resolved, _ = _resolve(profile, root)
+            subprocess.run(["pandoc", str(resolved), "-f", "json", "-o", str(path)],
                            text=True, check=True, capture_output=True)
             with zipfile.ZipFile(path) as z:
                 payloads = {name: z.read(name) for name in z.namelist()}

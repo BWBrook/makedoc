@@ -43,19 +43,34 @@ local function page_break()
   }
 end
 
-local function is_page_break(block)
+local function break_kind(block)
   if not block or block.t ~= "RawBlock" then
-    return false
+    return nil
   end
   if block.format == "latex" or block.format == "tex" then
-    return block.text:find("\\clearpage", 1, true) ~= nil or block.text:find("\\newpage", 1, true) ~= nil
+    if block.text:find("\\clearpage", 1, true) or block.text:find("\\newpage", 1, true) then
+      return "latex"
+    end
+  elseif block.format == "openxml" and block.text:find('w:type="page"', 1, true) then
+    return "openxml"
   end
-  return block.format == "openxml" and block.text:find('w:type="page"', 1, true) ~= nil
+  return nil
 end
 
+-- Add a page break for whichever output format does not already have one at the end of
+-- `blocks`, so an author's own \clearpage is not doubled in the PDF yet still gets its
+-- DOCX counterpart.
 local function append_break(blocks)
-  if not is_page_break(blocks[#blocks]) then
-    blocks:extend(page_break())
+  local present = {}
+  local index = #blocks
+  while index > 0 and break_kind(blocks[index]) do
+    present[break_kind(blocks[index])] = true
+    index = index - 1
+  end
+  for _, block in ipairs(page_break()) do
+    if not present[break_kind(block)] then
+      blocks:insert(block)
+    end
   end
 end
 
@@ -71,6 +86,19 @@ local function is_remote(src)
   return src:match("^%a[%w+.-]*:") ~= nil or src:sub(1, 2) == "//"
 end
 
+-- Remove "." and ".." components, which pandoc.path.normalize leaves in place.
+local function collapse(path)
+  local parts = pandoc.List()
+  for _, part in ipairs(pandoc.path.split(path)) do
+    if part == ".." and #parts > 0 and parts[#parts] ~= ".." and not parts[#parts]:match("[/\\]$") then
+      parts:remove(#parts)
+    elseif part ~= "." then
+      parts:insert(part)
+    end
+  end
+  return pandoc.path.join(parts)
+end
+
 local function resolve_image(image, source_dir)
   local src = image.src
   if src == "" or is_remote(src) then
@@ -84,8 +112,9 @@ local function resolve_image(image, source_dir)
     if not source_dir then
       return image
     end
-    path = pandoc.path.normalize(pandoc.path.join({ source_dir, path }))
+    path = pandoc.path.join({ source_dir, path })
   end
+  path = collapse(path)
   local handle = io.open(path, "rb")
   if not handle then
     fail("Image file not found: " .. percent_decode(src) .. " -> " .. path)
@@ -104,6 +133,12 @@ local function resolve_images(blocks)
     else
       local dir = source_dir
       out:insert(pandoc.walk_block(block, {
+        RawBlock = function(raw)
+          if raw.format == "makedoc-source" then
+            fail("A source file ends inside an unclosed block (such as a ':::' div or a list), which "
+              .. "swallowed the start of the next file, the one in " .. raw.text .. ". Close the block.")
+          end
+        end,
         Image = function(image)
           return resolve_image(image, dir)
         end,

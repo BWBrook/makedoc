@@ -3,9 +3,21 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from makedoc.prepare import DOCX_PAGEBREAK_OPENXML, prepare_markdown
+from makedoc.prepare import author_block_markdown, prepare_markdown
 from makedoc.profile import load_profile
-from support import FIGURES_DIR, FIXTURE_CSL, FIXTURE_REFS, TESTBED_CONFIG, write_config
+from support import (
+    FIGURES_DIR,
+    FIXTURE_REFS,
+    TESTBED_CONFIG,
+    identifier,
+    is_page_break,
+    manuscript,
+    needs_pandoc,
+    nodes,
+    resolve,
+    text,
+    write_config,
+)
 
 AUTHORS_YAML = """\
 title_note: Synthetic author metadata block
@@ -20,8 +32,7 @@ affiliations:
   aff1: Department of Synthetic Ecology, Harborview University
   aff2: Centre for Reproducible Workflows, Southern Institute of Systems Science
 """
-AUTHOR_LINE = "Ava K. Morgan*^1,2^, Theo J. Patel^2^"
-CLEARPAGE = "\\clearpage"
+AUTHOR_TEXT = "Ava K. Morgan*1,2, Theo J. Patel2"
 FIG1 = "Fixture main figure used for CI layout and rendering checks."
 FIG2 = "Fixture richness figure used for CI cross-reference and image embedding checks."
 FIGS1 = "Fixture supplementary figure used for supplementary material rendering checks."
@@ -30,45 +41,53 @@ THREE_FIGURES = (
     f"![{FIG2}](../figures/fig2_dummy.png){{#fig-fixture-richness width=85%}}\n"
     f"![{FIGS1}](../figures/figS1_dummy.png){{#fig-fixture-s1 width=85%}}\n"
 )
+LATEX_BREAK = "\\clearpage"
+DOCX_BREAK = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
 
 
-def line_of(lines: list[str], needle: str) -> int:
-    return next(i for i, line in enumerate(lines) if needle in line)
+def outline(blocks: list) -> list[str]:
+    """Top-level blocks as short labels: headings, page breaks, figures, images and text."""
+    out = []
+    for block in blocks:
+        kind = block["t"]
+        if kind == "Header":
+            out.append("#" * block["c"][0] + " " + text(block["c"][2]))
+        elif is_page_break(block):
+            out.append("BREAK:" + block["c"][0])
+        elif kind == "Div":
+            out.append(f"DIV#{identifier(block)}")
+        elif kind == "Figure":
+            out.append(f"FIGURE#{identifier(block)}")
+        else:
+            out.append(text(block))
+    return out
 
 
-def occurs_between(lines: list[str], needle: str, start: str, end: str) -> bool:
-    lo, hi = line_of(lines, start), line_of(lines, end)
+def index_of(items: list[str], needle: str) -> int:
+    return next(i for i, item in enumerate(items) if needle in item)
+
+
+def breaks_between(items: list[str], start: str, end: str) -> list[str]:
+    lo, hi = index_of(items, start), index_of(items, end)
     assert lo < hi
-    return any(needle in line for line in lines[lo + 1 : hi])
+    return [item for item in items[lo + 1 : hi] if item.startswith("BREAK:")]
 
 
-def prepare_single(tmp_path: Path, main: str, **profile) -> list[str]:
-    main_path = tmp_path / "main.md"
-    main_path.write_text(main, encoding="utf-8")
+def resolve_with_authors(tmp_path: Path, main: str, **profile):
     authors = tmp_path / "authors.yaml"
     authors.write_text(AUTHORS_YAML, encoding="utf-8")
-    config = write_config(tmp_path / "build.yaml", {"p": {
-        "manuscript_sources": [str(main_path)],
-        "bibliography": str(FIXTURE_REFS),
-        "csl": str(FIXTURE_CSL),
-        "author_metadata": str(authors),
-        "output_dir": "out",
-        "output_stem": "authors",
-        "line_numbering": "none",
-        **profile,
-    }})
-    return prepare_markdown(load_profile(config, "p")).splitlines()
+    return resolve(manuscript(tmp_path, main, author_metadata=str(authors), line_numbering="none", **profile))
 
 
-def prepare_figure_repo(tmp_path: Path, main: str, figures: str, **figure_settings) -> tuple[list[str], Path]:
+def resolve_figure_repo(tmp_path: Path, main: str, figures: str, **figure_settings):
     repo = tmp_path / "repo"
     (repo / "manuscript" / "figures").mkdir(parents=True)
     for name in ("fig1_dummy.png", "fig2_dummy.png", "figS1_dummy.png"):
         shutil.copy(FIGURES_DIR / name, repo / "manuscript" / "figures" / name)
-    text = repo / "manuscript" / "text"
-    text.mkdir()
-    (text / "main.md").write_text(main, encoding="utf-8")
-    (text / "figures.md").write_text(figures, encoding="utf-8")
+    text_dir = repo / "manuscript" / "text"
+    text_dir.mkdir()
+    (text_dir / "main.md").write_text(main, encoding="utf-8")
+    (text_dir / "figures.md").write_text(figures, encoding="utf-8")
     config = write_config(repo / "settings" / "build.yaml", {"p": {
         "manuscript_sources": ["../manuscript/text/main.md", "../manuscript/text/figures.md"],
         "bibliography": str(FIXTURE_REFS),
@@ -76,71 +95,94 @@ def prepare_figure_repo(tmp_path: Path, main: str, figures: str, **figure_settin
         "output_stem": "fixture",
         "figures": {"placeholder_id": "figures", **figure_settings},
     }})
-    figures_dir = (repo / "manuscript" / "figures").resolve()
-    return prepare_markdown(load_profile(config, "p")).splitlines(), figures_dir
+    return resolve(load_profile(config, "p")), (repo / "manuscript" / "figures").resolve()
 
 
+def test_author_block_markdown_lists_authors_affiliations_and_contact(tmp_path: Path) -> None:
+    authors = tmp_path / "authors.yaml"
+    authors.write_text(AUTHORS_YAML, encoding="utf-8")
+
+    block = author_block_markdown(str(authors)).splitlines()
+
+    assert block[0] == "Ava K. Morgan*^1,2^, Theo J. Patel^2^"
+    assert "*Synthetic author metadata block*" in block
+    assert "1. Department of Synthetic Ecology, Harborview University" in block
+    assert "2. Centre for Reproducible Workflows, Southern Institute of Systems Science" in block
+    assert block[-1] == "**Corresponding author:** Ava K. Morgan (ava.morgan@example.org)"
+
+
+@needs_pandoc
 def test_author_placeholder_is_replaced_with_author_block_and_page_breaks(tmp_path: Path) -> None:
-    lines = prepare_single(tmp_path, (
+    resolved = resolve_with_authors(tmp_path, (
         "# Author Injection Placeholder Check\n\n<div id=\"authors\"></div>\n\n## Abstract\n\n"
         "Synthetic abstract body.\n\n## Keywords\n\nworkflow; fixtures\n\n## Introduction\n\n"
         "Body starts here.\n\n## References\n\nDummy reference list placeholder.\n"
     ))
-    text = "\n".join(lines)
+    items = outline(resolved.blocks)
 
-    assert '<div id="authors"></div>' not in text
-    assert AUTHOR_LINE in text
-    assert "1. Department of Synthetic Ecology, Harborview University" in text
-    assert "2. Centre for Reproducible Workflows, Southern Institute of Systems Science" in text
-    assert "**Corresponding author:** Ava K. Morgan (ava.morgan@example.org)" in text
-    assert line_of(lines, "# Author Injection Placeholder Check") < line_of(lines, AUTHOR_LINE) < line_of(lines, "## Abstract")
-    assert occurs_between(lines, CLEARPAGE, AUTHOR_LINE, "## Abstract")
-    assert occurs_between(lines, CLEARPAGE, "## Keywords", "## Introduction")
-    assert occurs_between(lines, CLEARPAGE, "## Introduction", "## References")
-    assert text.count(CLEARPAGE) >= 3
-    assert text.count(DOCX_PAGEBREAK_OPENXML) >= 3
-    keywords = line_of(lines, "## Keywords")
-    assert lines[keywords - 1].strip() == lines[keywords - 2].strip() == ""
+    assert "DIV#authors" not in items
+    assert items[0] == "# Author Injection Placeholder Check"
+    assert items[1] == AUTHOR_TEXT
+    assert "Corresponding author: Ava K. Morgan (ava.morgan@example.org)" in items
+    assert [text(item) for item in nodes(resolved.blocks, "OrderedList")[0]["c"][1]] == [
+        "Department of Synthetic Ecology, Harborview University",
+        "Centre for Reproducible Workflows, Southern Institute of Systems Science",
+    ]
+    pair = ["BREAK:latex", "BREAK:openxml"]
+    assert breaks_between(items, "Corresponding author", "## Abstract") == pair
+    assert breaks_between(items, "## Abstract", "## Keywords") == []
+    assert breaks_between(items, "## Keywords", "## Introduction") == pair
+    assert breaks_between(items, "## Introduction", "## References") == pair
+    assert resolved.markdown.count(LATEX_BREAK) == 3
+    assert resolved.markdown.count(DOCX_BREAK) == 3
 
 
+@needs_pandoc
 def test_author_block_falls_back_to_after_title_without_placeholder(tmp_path: Path) -> None:
-    lines = prepare_single(tmp_path, (
+    resolved = resolve_with_authors(tmp_path, (
         "# Author Injection Fallback Check\n\nBody starts here.\n\n## References\n\n"
         "Dummy reference list placeholder.\n"
     ))
-    assert (
-        line_of(lines, "# Author Injection Fallback Check")
-        < line_of(lines, AUTHOR_LINE)
-        < line_of(lines, "Body starts here.")
-    )
+    items = outline(resolved.blocks)
+
+    assert items.index("# Author Injection Fallback Check") < items.index(AUTHOR_TEXT) < items.index("Body starts here.")
 
 
+@needs_pandoc
+def test_author_page_break_is_not_doubled_before_an_immediate_introduction(tmp_path: Path) -> None:
+    resolved = resolve_with_authors(tmp_path, "# Title\n\n## Introduction\n\nBody.\n")
+    items = outline(resolved.blocks)
+
+    assert breaks_between(items, "Corresponding author", "## Introduction") == ["BREAK:latex", "BREAK:openxml"]
+
+
+@needs_pandoc
 def test_pages_mode_puts_each_figure_on_its_own_page_with_supplementary_last(tmp_path: Path) -> None:
-    lines, _ = prepare_figure_repo(
+    resolved, _ = resolve_figure_repo(
         tmp_path,
         "# Figure Mode Regression: pages\n\nNo figure placeholder.\n\n## References\n\nDummy.\n",
         THREE_FIGURES,
         placement="pages",
         caption_position="top",
     )
-    text = "\n".join(lines)
+    items = outline(resolved.blocks)
 
-    for label in ("**Fig. 1.**", "**Fig. 2.**", "**Fig. S1.**", "## Supplementary Information"):
-        assert label in text
-    assert line_of(lines, "**Fig. 1.**") < line_of(lines, "**Fig. 2.**") < line_of(lines, "**Fig. S1.**")
-    assert (
-        line_of(lines, "**Fig. 2.**")
-        < line_of(lines, "## Supplementary Information")
-        < line_of(lines, "**Fig. S1.**")
-    )
-    assert line_of(lines, "**Fig. 1.**") < line_of(lines, f"![{FIG1}]")
-    assert text.count(CLEARPAGE) >= 4
-    assert text.count(DOCX_PAGEBREAK_OPENXML) >= 4
-    assert '<div id="figures"></div>' not in text
+    assert [item for item in items if item.startswith(("Fig.", "FIGURE", "## Supp"))] == [
+        "Fig. 1.", "FIGURE#fig-fixture-main",
+        "Fig. 2.", "FIGURE#fig-fixture-richness",
+        "## Supplementary Information",
+        "Fig. S1.", "FIGURE#fig-fixture-s1",
+    ]
+    assert breaks_between(items, "## References", "Fig. 1.")
+    assert breaks_between(items, "FIGURE#fig-fixture-main", "Fig. 2.")
+    assert breaks_between(items, "## Supplementary Information", "Fig. S1.")
+    assert resolved.markdown.count(LATEX_BREAK) == resolved.markdown.count(DOCX_BREAK) >= 4
+    assert "DIV#figures" not in items
 
 
+@needs_pandoc
 def test_inline_mode_replaces_placeholder_with_bottom_caption(tmp_path: Path) -> None:
-    lines, _ = prepare_figure_repo(
+    resolved, _ = resolve_figure_repo(
         tmp_path,
         "# Figure Mode Regression: inline\n\nText before inserted figures.\n\n<div id=\"figures\"></div>\n\n"
         "More text after placeholder.\n\n## References\n\nDummy reference list placeholder.\n",
@@ -148,18 +190,19 @@ def test_inline_mode_replaces_placeholder_with_bottom_caption(tmp_path: Path) ->
         placement="inline",
         caption_position="bottom",
     )
-    text = "\n".join(lines)
+    items = outline(resolved.blocks)
 
-    assert '<div id="figures"></div>' not in text
-    assert text.count(CLEARPAGE) == 1
-    assert text.count(DOCX_PAGEBREAK_OPENXML) == 1
-    assert occurs_between(lines, CLEARPAGE, "More text after placeholder.", "## References")
-    assert line_of(lines, "Text before inserted figures.") < line_of(lines, f"![{FIG1}]")
-    assert line_of(lines, f"![{FIG1}]") < line_of(lines, "**Fig. 1.**") < line_of(lines, "More text after placeholder.")
+    assert "DIV#figures" not in items
+    assert items[1:4] == ["Text before inserted figures.", "FIGURE#fig-fixture-main", "Fig. 1."]
+    assert items[4] == "More text after placeholder."
+    assert resolved.markdown.count(LATEX_BREAK) == resolved.markdown.count(DOCX_BREAK) == 1
+    assert breaks_between(items, "More text after placeholder.", "## References")
+    assert resolved.warnings == []
 
 
+@needs_pandoc
 def test_inline_mode_empty_alt_text_suppresses_automatic_caption(tmp_path: Path) -> None:
-    lines, figures_dir = prepare_figure_repo(
+    resolved, figures_dir = resolve_figure_repo(
         tmp_path,
         "# Inline empty alt\n\nText before.\n\n<div id=\"figures\"></div>\n\nCustom caption text.\n\n"
         "## References\n\nDummy.\n",
@@ -167,58 +210,70 @@ def test_inline_mode_empty_alt_text_suppresses_automatic_caption(tmp_path: Path)
         placement="inline",
         caption_position="top",
     )
-    text = "\n".join(lines)
+    items = outline(resolved.blocks)
+    placed = resolved.blocks[items.index("Text before.") + 1]
 
-    assert '<div id="figures"></div>' not in text
-    assert f"![]({(figures_dir / 'fig1_dummy.png').as_posix()}){{#fig-fixture-main width=95%}}" in text
-    assert "**Fig. 1.**" not in text
+    assert "DIV#figures" not in items
+    assert placed["t"] == "Para"
+    [image] = placed["c"]
+    assert image["t"] == "Image"
+    assert image["c"][0] == ["fig-fixture-main", [], [["width", "95%"]]]
+    assert image["c"][1] == []
+    assert Path(image["c"][2][0]).resolve() == figures_dir / "fig1_dummy.png"
+    assert not any(item.startswith("Fig.") for item in items)
 
 
+@needs_pandoc
 def test_captions_page_lists_captions_then_anchored_figure_pages(tmp_path: Path) -> None:
-    lines, figures_dir = prepare_figure_repo(
+    resolved, figures_dir = resolve_figure_repo(
         tmp_path,
         "# Figure Mode Regression: captions page\n\nNo inline figure slot.\n\n## References\n\nDummy.\n",
         THREE_FIGURES,
         placement="captions_page",
         caption_position="top",
     )
-    text = "\n".join(lines)
+    items = outline(resolved.blocks)
+    blocks = resolved.blocks
 
-    caption_lines = [f"**Fig. 1.** {FIG1}", f"**Fig. 2.** {FIG2}", f"**Fig. S1.** {FIGS1}"]
-    for caption in caption_lines:
-        assert caption in lines
-        assert f"- {caption}" not in text
-    assert (
-        line_of(lines, "## Figure Captions")
-        < lines.index(caption_lines[0])
-        < lines.index(caption_lines[1])
-        < line_of(lines, "## Supplementary Information")
-    )
-    assert text.count(CLEARPAGE) >= 5
-    assert text.count(DOCX_PAGEBREAK_OPENXML) >= 5
+    captions = [f"Fig. 1. {FIG1}", f"Fig. 2. {FIG2}", f"Fig. S1. {FIGS1}"]
+    heading = items.index("## Figure Captions")
+    assert items[heading + 1 : heading + 4] == captions
+    assert all(blocks[heading + offset]["t"] == "Para" for offset in (1, 2, 3))
+    assert nodes(blocks, "BulletList") == []
+    assert breaks_between(items, "## References", "## Figure Captions")
+    assert resolved.markdown.count(LATEX_BREAK) == resolved.markdown.count(DOCX_BREAK) >= 5
 
-    for label, fig_id, name, title, width in (
-        ("Fig. 1", "fig-fixture-main", "fig1_dummy.png", FIG1, "95%"),
-        ("Fig. 2", "fig-fixture-richness", "fig2_dummy.png", FIG2, "85%"),
-        ("Fig. S1", "fig-fixture-s1", "figS1_dummy.png", FIGS1, "85%"),
+    for label, fig_id, name, width in (
+        ("Fig. 1.", "fig-fixture-main", "fig1_dummy.png", "95%"),
+        ("Fig. 2.", "fig-fixture-richness", "fig2_dummy.png", "85%"),
+        ("Fig. S1.", "fig-fixture-s1", "figS1_dummy.png", "85%"),
     ):
-        anchor = f"[**{label}.**]{{#{fig_id}}}"
-        assert anchor in lines
-        image = f"![{title}]({(figures_dir / name).as_posix()}){{width={width}}}\\ "
-        assert image in lines
-        assert lines.index(anchor) < lines.index(image)
-        assert f"#{fig_id} " not in lines[lines.index(image)]
-    assert line_of(lines, "## Supplementary Information") < lines.index("[**Fig. S1.**]{#fig-fixture-s1}")
+        [anchor] = [span for span in nodes(blocks, "Span") if identifier(span) == fig_id]
+        assert [node["t"] for node in anchor["c"][1]] == ["Strong"]
+        assert text(anchor) == label
+        position = next(i for i, block in enumerate(blocks) if anchor in block.get("c", []))
+        assert position > heading + 3
+        assert is_page_break(blocks[position - 1])
+        image_para = blocks[position + 1]
+        assert image_para["t"] == "Para"
+        [image] = image_para["c"]
+        assert image["t"] == "Image"
+        assert image["c"][0] == ["", [], [["width", width]]]
+        assert Path(image["c"][2][0]).resolve() == figures_dir / name
+    assert nodes(blocks, "Figure") == []
+    anchors = [i for i, block in enumerate(blocks) if block["t"] == "Para" and nodes(block, "Span")]
+    assert anchors[1] < items.index("## Supplementary Information") < anchors[2]
 
 
+@needs_pandoc
 def test_profile_paths_and_image_paths_resolve_from_config_and_markdown(tmp_path: Path) -> None:
     repo = tmp_path / "with spaces (probe)" / "external paper"
     (repo / "manuscript" / "figures").mkdir(parents=True)
     shutil.copy(FIGURES_DIR / "fig1_dummy.png", repo / "manuscript" / "figures")
-    text = repo / "manuscript" / "text"
-    text.mkdir()
-    (text / "main.md").write_text("# External\n\nBody.\n", encoding="utf-8")
-    (text / "figures.md").write_text("![One.](../figures/fig1_dummy.png){#fig-one}\n", encoding="utf-8")
+    text_dir = repo / "manuscript" / "text"
+    text_dir.mkdir()
+    (text_dir / "main.md").write_text("# External\n\nBody.\n", encoding="utf-8")
+    (text_dir / "figures.md").write_text("![One.](../figures/fig1_dummy.png){#fig-one}\n", encoding="utf-8")
     (repo / "refs.yaml").write_text("references: []\n", encoding="utf-8")
     config = write_config(repo / "settings" / "build.yaml", {"ext": {
         "manuscript_sources": ["../manuscript/text/main.md", "../manuscript/text/figures.md"],
@@ -228,12 +283,11 @@ def test_profile_paths_and_image_paths_resolve_from_config_and_markdown(tmp_path
     }})
 
     profile = load_profile(config, "ext")
-    prepared = prepare_markdown(profile)
 
-    assert profile.manuscript_sources[0] == str((text / "main.md").resolve())
+    assert profile.manuscript_sources[0] == str((text_dir / "main.md").resolve())
     assert profile.bibliography == str((repo / "refs.yaml").resolve())
     assert profile.output_dir == str((repo / "settings" / "dist").resolve())
-    assert (repo / "manuscript" / "figures" / "fig1_dummy.png").resolve().as_posix() in prepared
+    assert resolve(profile).images == [(repo / "manuscript" / "figures" / "fig1_dummy.png").resolve()]
 
 
 def test_review_markup_probe_renders_visible_markers() -> None:
@@ -256,3 +310,18 @@ def test_review_markup_probe_renders_visible_markers() -> None:
     ):
         assert raw not in prepared
 
+
+@needs_pandoc
+def test_review_markup_probe_survives_parsing() -> None:
+    blocks = resolve(load_profile(TESTBED_CONFIG, "review_markup")).blocks
+
+    assert [text(strong) for strong in nodes(blocks, "Strong")] == [
+        "ordinary Markdown",
+        "[+ inserted review text +]",
+        "[- removed review text -]",
+        "[- outdated wording -]",
+        "[+ revised wording +]",
+        "[Reviewer note: reviewer asks for a clearer transition]",
+    ]
+    assert [code["c"][1] for code in nodes(blocks, "Code")] == ["{++ literal addition ++}"]
+    assert [code["c"][1] for code in nodes(blocks, "CodeBlock")] == ["{-- fenced deletion should remain literal --}"]

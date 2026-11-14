@@ -44,7 +44,7 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 | `make -C ~/work/makedoc csl-search JOURNAL="X"` | `$(MAKEDOC) csl search "X"` |
 | `... csl-source JOURNAL="X" CSL_DEST_DIR=dir` | `$(MAKEDOC) csl fetch "X" --dest dir` |
 | `... profile-scaffold PROFILE_NAME=...` | `$(MAKEDOC) init DIR`, then edit `settings/build.yaml` |
-| `... diagnose` | `$(MAKEDOC) build ... --workdir DIR` keeps `prepared.md`, `layout.tex` and the LaTeX log |
+| `... diagnose` | `$(MAKEDOC) build ... --workdir DIR` keeps `prepared.md`, `resolved.json`, `layout.tex` and the LaTeX log |
 | `... deps-install-minimal`, `wsl-smoke` | `$(MAKEDOC) doctor` prints what is missing and an install command |
 | `PDF_ENGINE=...`, `PANDOC_FROM=...`, `PANDOC=...` overrides | Removed. v2 always uses `xelatex` and the reader `markdown+yaml_metadata_block+tex_math_dollars+tex_math_single_backslash`. If a repository relied on another engine or reader extension, open an issue before migrating. |
 | `-B` or `--always-make` | nothing; every build starts from the sources |
@@ -89,7 +89,9 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 - **Per-section line numbering now restarts at each section.** In v1 `line_numbering: section` never reset.
 - **DOCX images wider than the text area are scaled down** to fit the profile's margins.
 - **Citation keys containing `/`, `&`, `?` and similar** are read in full by the citation audit (for example DOI-style keys).
-- **HTML comment blocks are inert.** A figure line or citation inside `<!-- ... -->` is no longer extracted or linted.
+- **Structure is read from the parsed document.** A figure line, placeholder or heading inside an HTML comment, a code block or a code span is never acted on. v1 matched lines of text and could extract a commented-out figure.
+- **A standalone image without an attribute block is a figure.** v1 moved only image lines that ended in `{...}`; an image paragraph with no attributes stayed where it was. v2 treats any paragraph holding only an image as a figure and places it like the others. To keep an image in the running text, put it in the same paragraph as some text.
+- **Review markup is expanded in figure captions** as well as in body text.
 - **DOCX layout follows the profile**: paper size, margins and page numbers, as well as line spacing and numbering. Title and author metadata are filled in.
 - **A standalone supplement** (a profile whose figures are all supplementary) no longer gets a "Supplementary Information" divider page.
 - **The manifest** drops the makedoc repository's git state and Make version, and adds `makedoc_version`, the manuscript repository's commit, figure image hashes and the build warnings.

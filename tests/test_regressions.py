@@ -9,30 +9,45 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from makedoc.build import build_profile
+from makedoc.build import BuildError, build_profile
 from makedoc.docx import WP_NS, normalize_document_layout
 from makedoc.layout import render_layout
 from makedoc.markdown_scan import scan_lines
-from makedoc.prepare import (
-    extract_figures,
-    image_resources,
-    load_markdown_sources,
-    reference_placement,
-    split_image_destination,
-)
 from makedoc.profile import load_profile
 from makedoc.refs import scan_citations
 from makedoc.validate import validate_config
-from support import FIGURES_DIR, FIXTURE_REFS, needs_pandoc, needs_pdf, needs_poppler, pdf_text, write_config
+from support import (
+    FIGURES_DIR,
+    FIXTURE_REFS,
+    identifier,
+    manuscript,
+    needs_pandoc,
+    needs_pdf,
+    needs_poppler,
+    nodes,
+    pdf_text,
+    resolve,
+    text,
+    write_config,
+)
 
 FIG = FIGURES_DIR / "fig1_dummy.png"
 
 
-def test_figure_inside_comment_opened_mid_line_stays_hidden() -> None:
-    lines = ["Visible text <!-- hidden", f"![Draft.]({FIG}){{#fig-x}}", "-->", "After."]
-    remaining, figures = extract_figures(lines)
-    assert figures == []
-    assert remaining == lines
+@needs_pandoc
+@pytest.mark.parametrize("source", [
+    f"Visible text <!-- hidden\n![Draft.]({FIG}){{#fig-x}}\n-->\nAfter.\n",
+    f"Visible text <!-- hidden\n\n![Draft.]({FIG}){{#fig-x}}\n\n-->\n\nAfter.\n",
+    "<!--\n![Draft.](missing.png){#fig-x}\n-->\n\nAfter.\n",
+], ids=["mid-line", "mid-line-with-blank-lines", "block"])
+def test_figure_inside_comment_is_not_extracted(tmp_path: Path, source: str) -> None:
+    resolved = resolve(manuscript(tmp_path, "# T\n\n" + source))
+
+    assert nodes(resolved.blocks, "Image") == []
+    assert nodes(resolved.blocks, "Figure") == []
+    assert "Fig. 1." not in resolved.markdown
+    assert "After." in text(resolved.blocks)
+    assert resolved.images == []
 
 
 def test_text_after_a_one_line_comment_is_still_scanned(tmp_path: Path) -> None:
@@ -61,35 +76,64 @@ def test_trailing_sentence_punctuation_is_not_part_of_a_key(tmp_path: Path) -> N
     assert [hit.key for hit in scan_citations(source)] == ["doe2020"]
 
 
-def test_image_with_citation_in_caption_is_tracked(tmp_path: Path) -> None:
-    source = tmp_path / "figures.md"
-    source.write_text(f"![Data from [@alpha2020].]({FIG}){{#fig-a}}\n", encoding="utf-8")
-    assert image_resources([source]) == [FIG]
-
-
-@pytest.mark.parametrize("destination", ['{} "A title"', "<{}>", "{}"])
+@needs_pandoc
+@pytest.mark.parametrize("destination", [
+    "fig.png",
+    'fig.png "A title"',
+    "<fig.png>",
+    "<my figure.png>",
+    '<my figure.png> "A title"',
+])
 def test_image_destination_forms_resolve(tmp_path: Path, destination: str) -> None:
-    (tmp_path / "fig.png").write_bytes(FIG.read_bytes())
-    source = tmp_path / "figures.md"
-    source.write_text(f"![Caption.]({destination.format('fig.png')}){{#fig-a}}\n", encoding="utf-8")
-    assert (tmp_path / "fig.png").resolve().as_posix() in load_markdown_sources([str(source)])
-    assert split_image_destination(destination.format("fig.png"))[1] == "fig.png"
+    name = "my figure.png" if "my figure" in destination else "fig.png"
+    (tmp_path / name).write_bytes(FIG.read_bytes())
+
+    resolved = resolve(manuscript(tmp_path, f"# T\n\n![Caption.]({destination}){{#fig-a}}\n"))
+
+    assert resolved.images == [(tmp_path / name).resolve()]
+    assert [identifier(figure) for figure in nodes(resolved.blocks, "Figure")] == ["fig-a"]
+    if "title" in destination:
+        assert nodes(resolved.blocks, "Image")[0]["c"][2][1] == "A title"
 
 
+@needs_pandoc
+def test_image_with_citation_in_caption_is_tracked(tmp_path: Path) -> None:
+    resolved = resolve(manuscript(tmp_path, f"# T\n\n![Data from [@alpha2020].]({FIG}){{#fig-a}}\n"))
+
+    assert resolved.images == [FIG.resolve()]
+    [figure] = nodes(resolved.blocks, "Figure")
+    assert {cite["c"][0][0]["citationId"] for cite in nodes(figure, "Cite")} == {"alpha2020"}
+
+
+@needs_pandoc
 def test_missing_absolute_image_fails(tmp_path: Path) -> None:
-    source = tmp_path / "figures.md"
-    source.write_text(f"![Caption.]({tmp_path / 'absent.png'}){{#fig-a}}\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="Image file not found"):
-        load_markdown_sources([str(source)])
+    absent = tmp_path / "absent.png"
+    with pytest.raises(BuildError, match=f"Image file not found: {absent}"):
+        resolve(manuscript(tmp_path, f"![Caption.]({absent}){{#fig-a}}\n"))
 
 
-def test_bibliography_is_anchored_at_the_end_without_a_references_heading() -> None:
-    assert reference_placement(["# T", "", "Text [@a]."])[-1] == '<div id="refs"></div>'
+@needs_pandoc
+def test_bibliography_is_anchored_at_the_end_without_a_references_heading(tmp_path: Path) -> None:
+    resolved = resolve(manuscript(tmp_path, "# T\n\nText [@a].\n"))
+
+    assert resolved.blocks[-1]["t"] == "Div"
+    assert identifier(resolved.blocks[-1]) == "refs"
 
 
-def test_refs_anchor_inside_comment_does_not_suppress_the_real_one() -> None:
-    lines = ["## References", "", '<!-- <div id="refs"></div> -->']
-    assert '<div id="refs"></div>' in reference_placement(lines, references_new_page=False)
+@needs_pandoc
+@pytest.mark.parametrize("decoy", [
+    '<!-- <div id="refs"></div> -->',
+    '```html\n<div id="refs"></div>\n```',
+    'Write `<div id="refs"></div>` to place it.',
+], ids=["comment", "fenced-code", "code-span"])
+def test_refs_anchor_in_comment_or_code_does_not_suppress_the_real_one(tmp_path: Path, decoy: str) -> None:
+    resolved = resolve(manuscript(
+        tmp_path, f"# T\n\n## References\n\n{decoy}\n", references_new_page=False
+    ))
+
+    divs = [identifier(div) for div in nodes(resolved.blocks, "Div")]
+    assert divs == ["refs"]
+    assert resolved.blocks[2]["t"] == "Div"
 
 
 def _config(tmp_path: Path, **overrides: object) -> Path:
