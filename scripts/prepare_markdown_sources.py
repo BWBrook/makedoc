@@ -655,9 +655,10 @@ def _build_figure_block_with_caption_position(
 
 
 def _image_without_caption_text(figure: FigureBlock) -> str:
-    attrs_block = f"{{{figure.attrs}}}" if figure.attrs else ""
-    # Empty alt text suppresses auto-generated "Figure N:" caption text in Pandoc output.
-    return f"![]({figure.src}){attrs_block}"
+    # A nonbreaking space makes the image an inline image, suppressing a second
+    # visible caption without discarding its accessible description. See
+    # Pandoc's implicit_figures contract.
+    return figure.raw + "\\ "
 
 
 def _page_break_block() -> str:
@@ -692,7 +693,8 @@ def build_figure_blocks(
                 f"{_page_break_block()}\n\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}"
             )
         if supplementary_figures:
-            blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
+            if main_figures:
+                blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
             for label, figure in supplementary_figures:
                 blocks.append(
                     f"{_page_break_block()}\n\n{_caption_line(label)}\n\n{_image_without_caption_text(figure)}"
@@ -716,7 +718,8 @@ def build_figure_blocks(
             f"{_build_figure_block_with_caption_position(label, figure, caption_position)}"
         )
     if supplementary_figures:
-        blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
+        if main_figures:
+            blocks.append(f"{_page_break_block()}\n\n## Supplementary Information")
         for label, figure in supplementary_figures:
             blocks.append(
                 f"{_page_break_block()}\n\n"

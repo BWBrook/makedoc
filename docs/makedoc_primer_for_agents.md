@@ -173,7 +173,7 @@ Rules:
 1. Include `{...}` attribute block; this is how makedoc parses IDs and width.
 2. Include `#fig-...` in attributes for stable linking.
 3. Supplementary detection is ID-based: IDs ending in `-s<number>` (for example `#fig-main-s1`) are treated as supplementary.
-4. Alt text (the text inside `![ ... ]`) is used as caption/title text in figure workflows.
+4. Alt text (the text inside `![ ... ]`) is used as caption/title text in figure workflows and retained as the accessible DOCX image description, including `captions_page`. Supply a meaningful description; build paths are not valid alt text.
 5. Relative image paths are resolved from the Markdown file they appear in. Absolute image paths still work.
 
 ### 3.4 `manuscript/authors.yaml`
@@ -297,6 +297,25 @@ profiles:
       left: 2.5
 ```
 
+The generated PDF preamble loads `needspace` for explicit source
+`\Needspace{...}` pagination commands.
+
+Page size, margins, page numbers, line spacing and line numbering are applied to
+both PDF and DOCX. DOCX page numbers use a right-aligned footer. Empty/image-only
+paragraphs do not receive manuscript line numbers. Body headings and standalone
+bold subcaptions stay with the next paragraph; a body paragraph immediately before
+a table or the start of a list stays with its first row/item. These rules do not
+chain table cells or list items together. Table rows are kept together where they
+fit on a page. Columns
+can autofit their content while retaining authored widths as preferences; review
+long identifiers and wide tables in the rendered DOCX. Known build-input custom
+properties are stripped, but unrelated user metadata is retained. Blank core
+title and creator properties are filled from the leading rendered title block
+and the selected profile's author names. A directly following subtitle (or
+Heading 2 after Heading 1) is joined to the title with an em dash, including
+supplement title blocks. Existing authored core values take precedence. Author
+emails, affiliations, ORCIDs and YAML paths are not copied into core metadata.
+
 ## 5. Figure placement modes and what they do
 
 ### 5.1 `placement: pages` (default)
@@ -305,7 +324,7 @@ profiles:
 - Figures are appended after references.
 - One page break per figure.
 - Captions render as `**Fig. X.**` + image.
-- Supplementary figures are grouped after `## Supplementary Information`.
+- Supplementary figures are grouped after `## Supplementary Information` when main figures are present; standalone supplementary-only output omits that separator.
 
 ### 5.2 `placement: inline`
 
@@ -318,7 +337,7 @@ profiles:
 - Adds a `## Figure Captions` page after references.
 - Lists caption lines there (one per figure).
 - Then adds figure pages with label only (`Fig. 1.`), image only.
-- Supplementary section appears after main figures.
+- Supplementary section appears after main figures; standalone supplementary-only output omits the separator heading.
 
 ## 6. Behavior that surprises new users
 

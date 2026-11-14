@@ -241,7 +241,7 @@ Each profile supports:
 - any other relative `output_dir` value resolves relative to the config file directory.
 - `output_stem`: output basename (without extension)
 - `golden_contract`: optional fixture/contract expectations file used by structure checks
-- `page_numbers`: page-numbering mode for PDF output (`lower_right`, `none`)
+- `page_numbers`: page-numbering mode for PDF and DOCX output (`lower_right`, `none`)
 - `line_spacing`: line spacing mode (`single`, `1.1`, `1.25`, `1.5`, `2`)
 - `line_numbering`: line-numbering mode (`continuous`, `page`, `section`, `none`)
 - `review_markup`:
@@ -256,7 +256,8 @@ Each profile supports:
   - `paper_size`: `a4` (default) or `letter`
   - `top`, `right`, `bottom`, `left`: numeric margin values in selected unit
   - defaults in this repo are `1.5` for every side (metric A4)
-- These styling controls apply to PDF generation paths.
+- Page size, margins, page numbers, line spacing and line numbering apply to both PDF and DOCX outputs.
+- The generated PDF preamble loads `needspace` so explicit source `\Needspace{...}` pagination commands are available.
 - Defaults are metric:
   - paper size: `a4`
   - units: `cm`
@@ -303,9 +304,9 @@ Each profile supports:
   - The current production-experimental style is plain Pandoc Markdown: bold bracketed additions, deletions, substitution sides, and notes. Deletions intentionally do not rely on strikeout, because PDF strikeout made deleted words difficult to read in rendered page images. This avoids new dependencies and remains portable across DOCX and PDF.
   - For external manuscript pilots, use `docs/review_markup_external_adoption.md`.
 - Figure behavior in `scripts/prepare_markdown_sources.py` is profile-driven:
-  - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading.
+  - `placement=pages` (default): figure markdown is extracted from the manuscript sources and added after references, with one `\clearpage` between figures and default heading text (`Fig. 1`, `Fig. 2`, ...; supplementary figures are placed after main figures as `Fig. S1`, ...). Supplementary figures are prefixed with a `## Supplementary Information` heading when main figures are present; standalone supplementary-only output omits that separator.
 - `placement=inline`: extracted figure blocks are injected at `<div id="<placeholder_id>"></div>`, then removed from source locations.
-  - `placement=captions_page`: creates a dedicated `## Figure Captions` page with one plain caption line per figure (no bullets), then appends each figure on successive pages with label-only titles (`Fig. X.`) and image-only blocks (no repeated caption under the image). Supplementary figures are grouped after a `## Supplementary Information` heading.
+  - `placement=captions_page`: creates a dedicated `## Figure Captions` page with one plain caption line per figure (no bullets), then appends each figure on successive pages with label-only titles (`Fig. X.`) and image-only blocks (no repeated caption under the image). Supplementary figures are grouped after a `## Supplementary Information` heading when main figures are present; standalone supplementary-only output omits that separator.
 - captions in `pages` mode are generated as `**Fig. X.**` / `**Fig. S1.**`; in `inline` mode, the auto label is omitted when the figure alt text is empty so authors can supply a manual caption in prose if preferred.
   - page breaks are emitted in both LaTeX and OpenXML raw blocks so PDF and DOCX respect dedicated figure-page separation.
 - DOCX post-processing:
@@ -313,6 +314,15 @@ Each profile supports:
     - normalize heading styles to black (`000000`) by default
     - apply profile-driven line spacing (`single`, `1.1`, `1.25`, `1.5`, `2`)
     - apply profile-driven line numbering (`continuous`, `page`, `section`, `none`)
+    - apply the profile's paper size and margins, with a right-aligned page-number footer when `page_numbers: lower_right`
+    - preserve standard Word XML prefixes and markup-compatibility namespace declarations so Pandoc can read the generated DOCX
+    - keep body headings and standalone bold subcaptions with the next paragraph; keep a table/list lead-in with its first row/item without chaining table cells or list items
+    - keep table rows together and allow table columns to autofit while retaining authored widths as preferences
+    - suppress line numbering on empty, page-break and image-only paragraphs
+    - remove known build-input custom properties (`bibliography`, `csl`, and related file options), preserving other user metadata
+    - fill blank core title/creator properties from the leading rendered title block and configured author names; preserve existing authored values and other properties. A directly following subtitle (or Heading 2 after Heading 1) joins the title with an em dash. Author emails, affiliations, ORCIDs and YAML paths are not copied into core metadata.
+  - `captions_page` retains each image's source description as accessible alt text while suppressing its duplicate visible caption. Supply meaningful text in `![description]`; path-like fallback alt text is removed with a warning.
+  - Table widths still need manuscript-specific inspection, especially for long identifiers or wide numerical tables. Row protection cannot fit a row taller than a page.
 - `edgecases` (optional):
   - `unknown_cite`
   - `manual_cite`

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import sys
+import shutil
+import subprocess
+import tempfile
+import zipfile
 import unittest
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -11,6 +15,9 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from normalize_docx_styles import (
+    CP_NS,
+    CT_NS,
+    DC_NS,
     LINE_ATTR,
     LINE_NUMBERING_COUNTBY_ATTR,
     LINE_NUMBERING_DISTANCE_ATTR,
@@ -19,11 +26,16 @@ from normalize_docx_styles import (
     LINE_RULE_ATTR,
     LNNUMTYPE_TAG,
     NS,
+    REL_NS,
     SECTPR_TAG,
     W_NS,
     normalize_heading_styles,
     normalize_line_numbering,
     normalize_line_spacing,
+    normalize_document_layout,
+    normalize_core_properties,
+    rewrite_docx,
+    serialize_xml,
 )
 
 
@@ -31,6 +43,80 @@ STYLE_ID_ATTR = f"{{{W_NS}}}styleId"
 
 
 class NormalizeDocxStylesTests(unittest.TestCase):
+    def test_core_metadata_fills_blank_fields_without_changing_other_payloads(self) -> None:
+        document = f'''<w:document xmlns:w="{W_NS}"><w:body><w:p/>
+          <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Supplementary information</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Actual </w:t></w:r><w:r><w:t>paper title</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Body text remains exact.</w:t></w:r></w:p>
+        </w:body></w:document>'''.encode()
+        for empty_fields in ('', '<dc:title> </dc:title><dc:creator/>'):
+            with self.subTest(empty_fields=empty_fields):
+                core = f'''<cp:coreProperties xmlns:cp="{CP_NS}" xmlns:dc="{DC_NS}"
+                  xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                  {empty_fields}<dc:subject>Retain subject</dc:subject><cp:keywords>retain keywords</cp:keywords>
+                  <cp:lastModifiedBy>Existing editor</cp:lastModifiedBy>
+                  <dcterms:created xsi:type="dcterms:W3CDTF">2026-10-22T00:00:00Z</dcterms:created>
+                </cp:coreProperties>'''.encode()
+                payloads = {'word/document.xml': document, 'docProps/core.xml': core,
+                            'word/styles.xml': b'unchanged styles', 'word/media/image.png': b'unchanged image'}
+                before = dict(payloads)
+                normalize_core_properties(payloads, ['First Author', 'Second Author'])
+                root = ET.fromstring(payloads['docProps/core.xml'])
+                self.assertEqual(root.find(f'{{{DC_NS}}}title').text,
+                                 'Supplementary information — Actual paper title')
+                self.assertEqual(root.find(f'{{{DC_NS}}}creator').text, 'First Author; Second Author')
+                for node in ET.fromstring(core):
+                    if node.tag not in {f'{{{DC_NS}}}title', f'{{{DC_NS}}}creator'}:
+                        preserved = root.find(node.tag)
+                        self.assertEqual((preserved.text, preserved.attrib), (node.text, node.attrib))
+                self.assertEqual({key: value for key, value in payloads.items() if key != 'docProps/core.xml'},
+                                 {key: value for key, value in before.items() if key != 'docProps/core.xml'})
+                once = dict(payloads)
+                normalize_core_properties(payloads, ['First Author', 'Second Author'])
+                self.assertEqual(payloads, once)
+
+    def test_existing_title_and_creator_take_precedence_independently(self) -> None:
+        document = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Fallback title</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr><w:r><w:t>Subtitle</w:t></w:r></w:p>
+        </w:body></w:document>'''.encode()
+        for title, creator in [('Authored title', 'Authored creator'), ('Authored title', ''), ('', 'Authored creator')]:
+            with self.subTest(title=title, creator=creator):
+                core = f'<cp:coreProperties xmlns:cp="{CP_NS}" xmlns:dc="{DC_NS}"><dc:title>{title}</dc:title><dc:creator>{creator}</dc:creator></cp:coreProperties>'.encode()
+                payloads = {'word/document.xml': document, 'docProps/core.xml': core}
+                normalize_core_properties(payloads, ['Fallback author'])
+                root = ET.fromstring(payloads['docProps/core.xml'])
+                self.assertEqual(root.find(f'{{{DC_NS}}}title').text, title or 'Fallback title — Subtitle')
+                self.assertEqual(root.find(f'{{{DC_NS}}}creator').text, creator or 'Fallback author')
+                if title and creator:
+                    self.assertEqual(payloads['docProps/core.xml'], core)
+
+    def test_missing_core_part_is_registered_without_duplicate_or_colliding_ids(self) -> None:
+        payloads = {'_rels/.rels': f'<Relationships xmlns="{REL_NS}"><Relationship Id="rIdMakedocCore" Type="other" Target="other.xml"/></Relationships>'.encode(),
+                    '[Content_Types].xml': f'<Types xmlns="{CT_NS}"><Default Extension="xml" ContentType="application/xml"/></Types>'.encode()}
+        normalize_core_properties(payloads, ['Configured author'])
+        root = ET.fromstring(payloads['docProps/core.xml'])
+        self.assertEqual(root.find(f'{{{DC_NS}}}creator').text, 'Configured author')
+        rels = ET.fromstring(payloads['_rels/.rels'])
+        self.assertEqual(len({rel.get('Id') for rel in rels}), 2)
+        self.assertEqual(sum(rel.get('Target') == 'docProps/core.xml' for rel in rels), 1)
+        types = ET.fromstring(payloads['[Content_Types].xml'])
+        self.assertEqual(sum(node.get('PartName') == '/docProps/core.xml' for node in types), 1)
+        once = dict(payloads)
+        normalize_core_properties(payloads, ['Configured author'])
+        self.assertEqual(payloads, once)
+
+    def test_metadata_does_not_infer_creator_from_body_or_title_from_later_heading(self) -> None:
+        core = f'<cp:coreProperties xmlns:cp="{CP_NS}" xmlns:dc="{DC_NS}"><dc:title/><dc:creator/></cp:coreProperties>'.encode()
+        document = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:r><w:t>Private Person, person@example.org</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Later section</w:t></w:r></w:p>
+        </w:body></w:document>'''.encode()
+        payloads = {'word/document.xml': document, 'docProps/core.xml': core}
+        before = dict(payloads)
+        normalize_core_properties(payloads, [])
+        self.assertEqual(payloads, before)
+
     def test_normalize_heading_styles_updates_heading_only(self) -> None:
         styles_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -118,6 +204,186 @@ class NormalizeDocxStylesTests(unittest.TestCase):
         sect_pr = root.find(f".//{SECTPR_TAG}")
         self.assertIsNotNone(sect_pr)
         self.assertIsNone(sect_pr.find(LNNUMTYPE_TAG))
+
+
+    def test_namespace_prefixes_and_ignorable_declarations_survive(self) -> None:
+        source = b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" mc:Ignorable="w14"><w:body><w:sectPr/></w:body></w:document>'
+        output = normalize_line_numbering(source, "continuous")
+        self.assertIn(b"<w:document", output)
+        self.assertIn(b'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"', output)
+        self.assertIn(b'mc:Ignorable="w14"', output)
+        self.assertNotIn(b"ns0:", output)
+        ET.fromstring(output)
+
+    def test_spacing_rows_and_heading_layout_preserve_content(self) -> None:
+        source = b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body><w:p/><w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Heading</w:t></w:r></w:p><w:p><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>main_70</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr/></w:body></w:document>'
+        output = normalize_document_layout(source, paper_size="letter", margin_unit="in",
+            margins={side: 1.0 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        self.assertEqual(root.find(".//w:pgSz", NS).get(f"{{{W_NS}}}w"), "12240")
+        self.assertEqual(root.find(".//w:pgMar", NS).get(f"{{{W_NS}}}left"), "1440")
+        paras = root.findall("w:body/w:p", NS)
+        self.assertIsNotNone(paras[0].find("w:pPr/w:suppressLineNumbers", NS))
+        self.assertIsNotNone(paras[1].find("w:pPr/w:keepNext", NS))
+        self.assertIsNone(paras[2].find("w:pPr/w:suppressLineNumbers", NS))
+        self.assertIsNotNone(root.find(".//w:trPr/w:cantSplit", NS))
+        self.assertEqual(root.find(".//w:tblLayout", NS).get(f"{{{W_NS}}}type"), "autofit")
+        self.assertEqual(list(ET.fromstring(source).itertext()), list(root.itertext()))
+
+    def test_table_lead_in_chain_does_not_keep_table_cells_or_rows_together(self) -> None:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:pPr><w:pStyle w:val="Heading2"/><w:keepNext w:val="0"/></w:pPr>
+            <w:r><w:t>Table heading</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Subcaption.</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Introduction immediately before the table.</w:t></w:r></w:p>
+          <w:tbl>
+            <w:tr><w:tc>
+              <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Bold cell</w:t></w:r></w:p>
+              <w:p><w:r><w:t>Cell lead-in.</w:t></w:r></w:p>
+              <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Nested cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+              <w:p/>
+            </w:tc></w:tr>
+            <w:tr><w:tc><w:p><w:r><w:t>Second row</w:t></w:r></w:p></w:tc></w:tr>
+          </w:tbl>
+          <w:p><w:r><w:t>Following body.</w:t></w:r></w:p><w:sectPr/>
+        </w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        body_paragraphs = root.findall("w:body/w:p", NS)
+        for paragraph in body_paragraphs[:3]:
+            self.assertEqual(paragraph.find("w:pPr/w:keepNext", NS).get(f"{{{W_NS}}}val"), "1")
+        self.assertIsNone(body_paragraphs[3].find("w:pPr/w:keepNext", NS))
+        for paragraph in root.findall(".//w:tc/w:p", NS):
+            self.assertIsNone(paragraph.find("w:pPr/w:keepNext", NS))
+        self.assertEqual(len(root.findall(".//w:trPr/w:cantSplit", NS)), 3)
+        self.assertEqual(list(ET.fromstring(source).itertext()), list(root.itertext()))
+
+    def test_list_lead_in_stops_at_first_item_even_when_items_are_bold(self) -> None:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>Heading</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Covariates.</w:t></w:r>
+            <w:r><w:t> The terms were:</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:rPr><w:b/></w:rPr><w:t>First item</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:rPr><w:b/></w:rPr><w:t>Nested item</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:t>Second item</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Following body.</w:t></w:r></w:p><w:sectPr/>
+        </w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        paragraphs = root.findall("w:body/w:p", NS)
+        for paragraph in paragraphs[:2]:
+            self.assertIsNotNone(paragraph.find("w:pPr/w:keepNext", NS))
+        for paragraph in paragraphs[2:]:
+            self.assertIsNone(paragraph.find("w:pPr/w:keepNext", NS))
+
+    def test_standalone_bold_rule_ignores_partial_bold_and_explicit_page_breaks(self) -> None:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>S8a(i).</w:t></w:r>
+            <w:r><w:t> </w:t></w:r>
+            <w:r><w:rPr><w:b w:val="true"/></w:rPr><w:t>Support.</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Partial.</w:t></w:r>
+            <w:r><w:t> Plain body.</w:t></w:r></w:p>
+          <w:p><w:r><w:rPr><w:b w:val="false"/></w:rPr><w:t>Not bold.</w:t></w:r></w:p>
+          <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr>
+            <w:r><w:t>Item after explicit page break.</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:numId w:val="0"/></w:numPr></w:pPr>
+            <w:r><w:t>Unnumbered lead-in.</w:t></w:r></w:p>
+          <w:p><w:pPr><w:numPr><w:numId w:val="2"/></w:numPr></w:pPr>
+            <w:r><w:t>New list.</w:t></w:r></w:p><w:sectPr/>
+        </w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        root = ET.fromstring(output)
+        paragraphs = root.findall("w:body/w:p", NS)
+        for index, paragraph in enumerate(paragraphs):
+            with self.subTest(paragraph=index):
+                self.assertEqual(paragraph.find("w:pPr/w:keepNext", NS) is not None,
+                                 index in {0, 5})
+        second = normalize_document_layout(output, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        self.assertEqual(output, second)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "Pandoc required for DOCX round-trip fixture")
+    def test_docx_round_trip_preserves_math_links_alt_and_custom_user_metadata(self) -> None:
+        from prepare_markdown_sources import FigureBlock, build_figure_blocks
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "fixture.docx"
+            authors = root / "authors.yaml"
+            authors.write_text('''affiliations:
+  a: Private institution
+authors:
+  - name: First Author
+    affiliations: [a]
+    email: private@example.org
+    orcid: private-orcid
+  - name: Second Author
+    affiliations: [a]
+''')
+            image = SCRIPTS_DIR.parent / "testbed/manuscript/figures/fig1_dummy.png"
+            description = "A synthetic curve used to test accessible image descriptions."
+            figure = FigureBlock(raw=f"![{description}]({image}){{#fig-one width=60%}}",
+                figure_id="fig-one", title=description, src=str(image), attrs="#fig-one width=60%")
+            markdown = "# Heading\n\nEquation $x^2 + y^2$ and [a link](https://example.org).\n\n| Identifier | Value |\n|---|---|\n| main_70 | -0.1 |\n\n"
+            markdown += build_figure_blocks([figure], "top", "captions_page")
+            subprocess.run(["pandoc", "-f", "markdown", "-o", str(path)], input=markdown,
+                           text=True, check=True, capture_output=True)
+            with zipfile.ZipFile(path) as z:
+                payloads = {name: z.read(name) for name in z.namelist()}
+            before = ET.fromstring(payloads["word/document.xml"])
+            payloads["docProps/custom.xml"] = b'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="bibliography"><vt:lpwstr>/private/server/refs.yaml</vt:lpwstr></property><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="3" name="Project"><vt:lpwstr>Retain this user metadata</vt:lpwstr></property></Properties>'
+            with zipfile.ZipFile(path, "w") as z:
+                for name, payload in payloads.items():
+                    z.writestr(name, payload)
+            for _ in range(2):
+                rewrite_docx(path, "000000", "1.5", "continuous",
+                    author_metadata=str(authors),
+                    margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+            with zipfile.ZipFile(path) as z:
+                document_xml = z.read("word/document.xml")
+                document = ET.fromstring(document_xml)
+                self.assertNotIn(b"ns0:", document_xml)
+                self.assertEqual(list(before.itertext()), list(document.itertext()))
+                props = ET.fromstring(z.read("docProps/custom.xml"))
+                self.assertEqual([prop.get("name") for prop in props], ["Project"])
+                self.assertNotIn(b"/private/server", z.read("docProps/custom.xml"))
+                core = z.read('docProps/core.xml')
+                core_root = ET.fromstring(core)
+                self.assertEqual(core_root.find(f'{{{DC_NS}}}title').text, 'Heading')
+                self.assertEqual(core_root.find(f'{{{DC_NS}}}creator').text, 'First Author; Second Author')
+                for private in (b'private@example.org', b'private-orcid', b'Private institution', str(authors).encode()):
+                    self.assertNotIn(private, core)
+                self.assertEqual(document.find(".//w:pgSz", NS).get(f"{{{W_NS}}}w"), "11906")
+                self.assertEqual(document.find(".//w:pgMar", NS).get(f"{{{W_NS}}}left"), "1417")
+                section_names = [node.tag.rsplit("}", 1)[-1] for node in document.find(".//w:sectPr", NS)]
+                self.assertLess(section_names.index("pgSz"), section_names.index("pgMar"))
+                self.assertLess(section_names.index("pgMar"), section_names.index("lnNumType"))
+                descriptions = [item.get("descr") for item in document.iter() if item.tag.endswith("}docPr")]
+                self.assertEqual(descriptions, [description])
+                text = "".join(node.text or "" for node in document.findall(".//w:t", NS))
+                self.assertEqual(text.count(description), 1)  # Only the caption-list entry is visible.
+                footer = ET.fromstring(z.read("word/makedoc-page-footer.xml"))
+                self.assertEqual(footer.find(".//w:fldSimple", NS).get(f"{{{W_NS}}}instr"), " PAGE ")
+                rels = ET.fromstring(z.read("word/_rels/document.xml.rels"))
+                footer_rels = [rel for rel in rels if rel.get("Target") == "makedoc-page-footer.xml"]
+                self.assertEqual(len(footer_rels), 1)
+                self.assertTrue(any(rel.get("Target") == "https://example.org" for rel in rels))
+            result = subprocess.run(["pandoc", str(path), "-t", "markdown"], check=True,
+                                    capture_output=True, text=True)
+            self.assertIn("x", result.stdout)
+            self.assertIn("https://example.org", result.stdout)
+            self.assertIn("main_70", result.stdout)
+            rewrite_docx(path, "000000", "single", "none", page_numbers="none")
+            with zipfile.ZipFile(path) as z:
+                document = ET.fromstring(z.read("word/document.xml"))
+                self.assertIsNone(document.find(".//w:footerReference", NS))
+                self.assertIsNone(document.find(".//w:lnNumType", NS))
 
 
 if __name__ == "__main__":
