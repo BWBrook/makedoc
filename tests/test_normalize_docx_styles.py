@@ -297,13 +297,55 @@ class NormalizeDocxStylesTests(unittest.TestCase):
             margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
         root = ET.fromstring(output)
         paragraphs = root.findall("w:body/w:p", NS)
+        self.assertEqual(["".join(node.text for node in paragraph.iterfind(".//w:t", NS)) for paragraph in paragraphs], [
+            "S8a(i). Support.", "Partial. Plain body.", "Not bold.", "Item after explicit page break.",
+            "Unnumbered lead-in.", "New list.",
+        ])
+        self.assertEqual([paragraph.find("w:pPr/w:pageBreakBefore", NS) is not None for paragraph in paragraphs],
+                         [False, False, False, True, False, False])
         for index, paragraph in enumerate(paragraphs):
             with self.subTest(paragraph=index):
                 self.assertEqual(paragraph.find("w:pPr/w:keepNext", NS) is not None,
-                                 index in {0, 5})
+                                 index in {0, 4})
         second = normalize_document_layout(output, paper_size="a4", margin_unit="cm",
             margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
         self.assertEqual(output, second)
+
+    def _layout(self, body: str) -> list[ET.Element]:
+        source = f'''<w:document xmlns:w="{W_NS}"><w:body>{body}<w:sectPr/></w:body></w:document>'''.encode()
+        output = normalize_document_layout(source, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")})
+        self.assertEqual(output, normalize_document_layout(output, paper_size="a4", margin_unit="cm",
+            margins={side: 2.5 for side in ("top", "right", "bottom", "left")}))
+        return list(ET.fromstring(output).find("w:body", NS))
+
+    def test_page_break_paragraph_becomes_page_break_before_on_the_next_paragraph(self) -> None:
+        brk = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+        children = self._layout(
+            f'<w:p><w:r><w:t>One.</w:t></w:r></w:p>{brk}'
+            f'<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Two.</w:t></w:r></w:p>'
+            f'{brk}<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+            f'<w:p><w:r><w:t>Three.</w:t></w:r></w:p>{brk}'
+        )
+        tags = [child.tag.split("}")[1] for child in children]
+        self.assertEqual(tags, ["p", "p", "p", "tbl", "p", "p", "sectPr"])
+        self.assertEqual(children[1].findtext(".//w:t", namespaces=NS), "Two.")
+        self.assertIsNotNone(children[1].find("w:pPr/w:pageBreakBefore", NS))
+        self.assertEqual(children[1].find("w:pPr/w:pStyle", NS).get(f"{{{W_NS}}}val"), "Heading2")
+        for kept in (children[2], children[5]):
+            self.assertIsNotNone(kept.find("w:r/w:br[@w:type='page']", NS))
+        self.assertIsNone(children[4].find("w:pPr/w:pageBreakBefore", NS))
+
+    def test_caption_paragraph_is_kept_with_a_following_image_paragraph(self) -> None:
+        drawing = '<w:p><w:r><w:drawing/></w:r></w:p>'
+        children = self._layout(
+            f'<w:p><w:r><w:t>Fig. 1. Caption.</w:t></w:r></w:p>{drawing}'
+            f'<w:p><w:r><w:t>Body.</w:t></w:r></w:p>'
+            f'{drawing}<w:p><w:r><w:t>Fig. 2. Bottom caption.</w:t></w:r></w:p>'
+            f'<w:p><w:r><w:t>Text</w:t></w:r><w:r><w:drawing/></w:r></w:p>'
+        )
+        keep = [child.find("w:pPr/w:keepNext", NS) is not None for child in children[:-1]]
+        self.assertEqual(keep, [True, False, True, False, False, False])
 
     @unittest.skipUnless(shutil.which("pandoc"), "Pandoc required for DOCX round-trip fixture")
     def test_docx_round_trip_preserves_math_links_alt_and_custom_user_metadata(self) -> None:
@@ -346,7 +388,9 @@ authors:
                 document_xml = z.read("word/document.xml")
                 document = ET.fromstring(document_xml)
                 self.assertNotIn(b"ns0:", document_xml)
-                self.assertEqual(list(before.itertext()), list(document.itertext()))
+                # Page-break paragraphs fold into pageBreakBefore, which drops only whitespace.
+                self.assertEqual([t for t in before.itertext() if t.strip()],
+                                 [t for t in document.itertext() if t.strip()])
                 props = ET.fromstring(z.read("docProps/custom.xml"))
                 self.assertEqual([prop.get("name") for prop in props], ["Project"])
                 self.assertNotIn(b"/private/server", z.read("docProps/custom.xml"))

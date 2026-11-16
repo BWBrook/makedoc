@@ -10,6 +10,7 @@ from makedoc.build import BuildError
 from makedoc.profile import load_profile
 from support import (
     FIGURES_DIR,
+    arranged_figures,
     TESTBED_CONFIG,
     identifier,
     is_page_break,
@@ -78,15 +79,19 @@ def test_consecutive_figure_lines_are_each_extracted(tmp_path: Path) -> None:
         f"# T\n\nText.\n\n![One.]({FIG}){{#fig-one}}\n![Two.]({FIG}){{#fig-two}}\n![Three.]({FIG}){{#fig-three-s1}}\n"
     )))
 
-    assert [identifier(figure) for figure in nodes(resolved.blocks, "Figure")] == ["fig-one", "fig-two", "fig-three-s1"]
+    figures = arranged_figures(resolved.blocks)
+    assert nodes(resolved.blocks, "Figure") == []
+    assert [figure.id for figure in figures] == ["fig-one", "fig-two", "fig-three-s1"]
+    assert [figure.label for figure in figures] == ["Fig. 1.", "Fig. 2.", "Fig. S1."]
     assert labels(resolved.blocks) == ["Fig. 1.", "Fig. 2.", "Fig. S1."]
-    assert [text(figure["c"][1][1]) for figure in nodes(resolved.blocks, "Figure")] == ["One.", "Two.", "Three."]
+    assert [figure.caption for figure in figures] == ["One.", "Two.", "Three."]
+    assert [text(figure.image["c"][1]) for figure in figures] == ["One.", "Two.", "Three."]
 
 
 def test_fixture_figures_are_all_extracted() -> None:
     resolved = resolve(load_profile(TESTBED_CONFIG, "fixture"))
 
-    assert [identifier(figure) for figure in nodes(resolved.blocks, "Figure")] == [
+    assert [figure.id for figure in arranged_figures(resolved.blocks)] == [
         "fig-fixture-main", "fig-fixture-richness", "fig-fixture-s1",
     ]
     assert labels(resolved.blocks) == ["Fig. 1.", "Fig. 2.", "Fig. S1."]
@@ -184,9 +189,9 @@ def test_review_markup_in_figure_caption_is_expanded(tmp_path: Path) -> None:
         review_markup={"enabled": True},
     ))
 
-    [figure] = nodes(resolved.blocks, "Figure")
-    assert text(figure["c"][1][1]) == "Caption [+ added +] and [- cut -]."
-    assert [text(strong) for strong in nodes(figure["c"][1], "Strong")] == ["[+ added +]", "[- cut -]"]
+    [figure] = arranged_figures(resolved.blocks)
+    assert figure.caption == "Caption [+ added +] and [- cut -]."
+    assert [text(strong) for strong in nodes(figure.caption_para["c"][1:], "Strong")] == ["[+ added +]", "[- cut -]"]
     assert resolved.images == [FIG.resolve()]
 
 
@@ -198,6 +203,46 @@ def test_inline_placement_without_placeholder_warns_and_appends(tmp_path: Path) 
     ))
 
     assert any('no <div id="figures"></div> placeholder found' in warning for warning in resolved.warnings)
-    assert kinds(resolved.blocks)[-3:] == ["Div", "Para", "Figure"]
-    assert identifier(resolved.blocks[-1]) == "fig-one"
-    assert text(resolved.blocks[-2]) == "Fig. 1."
+    assert kinds(resolved.blocks)[-6:] == ["Div", "RawBlock", "Para", "RawBlock", "Para", "RawBlock"]
+    assert identifier(resolved.blocks[-6]) == "refs"
+    [figure] = arranged_figures(resolved.blocks)
+    assert (figure.start, figure.position) == (len(resolved.blocks) - 5, "top")
+    assert (figure.id, figure.label, figure.caption) == ("fig-one", "Fig. 1.", "One.")
+
+
+@pytest.mark.parametrize("position", ["top", "bottom"])
+def test_in_place_figures_stay_where_written(tmp_path: Path, position: str) -> None:
+    resolved = resolve(manuscript(tmp_path, (
+        f"# T\n\nBefore.\n\n![One.]({FIG}){{#fig-one width=50%}}\n\nMiddle.\n\n"
+        f"![Supplement.]({FIG}){{#fig-extra-s1}}\n\n![Two.]({FIG})\n\n![]({FIG})\n\nAfter.\n\n## References\n"
+    ), figures={"placement": "in_place", "caption_position": position}))
+    blocks = resolved.blocks
+    figures = arranged_figures(blocks)
+    para = {text(block): i for i, block in enumerate(blocks) if block["t"] == "Para" and text(block)}
+
+    assert [(figure.id, figure.label, figure.caption) for figure in figures] == [
+        ("fig-one", "Fig. 1.", "One."), ("fig-extra-s1", "Fig. S1.", "Supplement."), ("", "Fig. 2.", "Two."),
+    ]
+    assert labels(blocks) == ["Fig. 1.", "Fig. S1.", "Fig. 2."]
+    assert {figure.position for figure in figures} == {position}
+    caption_offset = 1 if position == "top" else 3
+    assert [blocks.index(figure.caption_para) - figure.start for figure in figures] == [caption_offset] * 3
+    assert para["Before."] + 1 == figures[0].start
+    assert figures[0].start + 5 == para["Middle."] == figures[1].start - 1
+    assert figures[2].start == figures[1].start + 5
+    bare = blocks[figures[2].start + 5]
+    assert bare["t"] == "Para" and [node["t"] for node in bare["c"]] == ["Image"]
+    assert bare["c"][0]["c"][1] == []
+    assert figures[2].start + 6 == para["After."]
+    assert figures[0].image["c"][0] == ["", [], [["width", "50%"]]]
+    assert "Supplementary Information" not in [text(h["c"][2]) for h in nodes(blocks, "Header")]
+    assert not any(is_page_break(block) for block in blocks[: para["After."]])
+    assert resolved.warnings == []
+
+
+def test_in_place_uncaptioned_image_does_not_leave_a_gap_in_figure_numbers(tmp_path: Path) -> None:
+    resolved = resolve(manuscript(tmp_path, (
+        f"# T\n\n![One.]({FIG}){{#fig-one}}\n\n![]({FIG})\n\n![Two.]({FIG}){{#fig-two}}\n"
+    ), figures={"placement": "in_place"}))
+
+    assert [figure.label for figure in arranged_figures(resolved.blocks)] == ["Fig. 1.", "Fig. 2."]

@@ -222,6 +222,10 @@ local function images_only(block)
   return #images > 0 and images or nil
 end
 
+-- Each figure leaves a marker where it stood, used by the in_place placement and removed
+-- by the others.
+local FIGURE_MARKER = "makedoc-figure"
+
 local function extract_figures(blocks)
   local rest, figures = pandoc.List(), pandoc.List()
   for _, block in ipairs(blocks) do
@@ -240,10 +244,8 @@ local function extract_figures(blocks)
       rest:insert(block)
     end
     for _, figure in ipairs(found) do
-      if figure.id == "" then
-        warn("a figure has no #id in its attributes, so the text cannot link to it: " .. figure.image.src)
-      end
       figures:insert(figure)
+      rest:insert(pandoc.RawBlock(FIGURE_MARKER, tostring(#figures)))
     end
   end
   return rest, figures
@@ -251,40 +253,69 @@ end
 
 -- Main figures are numbered in order of appearance. An id ending in -s<number> marks a
 -- supplementary figure, labelled with that number and placed after the main figures.
-local function label_figures(figures)
+-- In running text an image with no caption is left unlabelled, so it takes no number.
+local function label_figures(figures, in_text)
   local mains, supplements = pandoc.List(), pandoc.List()
+  local main_count = 0
   for _, figure in ipairs(figures) do
     local number = figure.id:lower():match("%-s(%d+)$")
-    if number then
+    if in_text and #figure.caption == 0 then
+      figure.label = ""
+      (number and supplements or mains):insert(figure)
+    elseif number then
       figure.label = "Fig. S" .. number .. "."
       supplements:insert(figure)
     else
-      figure.label = "Fig. " .. (#mains + 1) .. "."
+      main_count = main_count + 1
+      figure.label = "Fig. " .. main_count .. "."
       mains:insert(figure)
     end
   end
   return mains, supplements
 end
 
-local function label_para(figure)
-  return pandoc.Para({ pandoc.Strong(words(figure.label)) })
-end
-
-local function labelled(figure, caption_position)
-  if caption_position == "bottom" then
-    return { figure.block, label_para(figure) }
-  end
-  return { label_para(figure), figure.block }
-end
-
--- For the captions-page layout: an anchored label, then the image with no caption. The
--- id sits on the label because LaTeX output drops the id of an inline image.
-local function label_and_bare_image(figure)
+-- makedoc writes every arranged figure itself, as a caption paragraph ("Fig. 1. Text")
+-- and an image paragraph, so the label is the only number on the page. For LaTeX the two
+-- are handed to \makedocfigure... (layout.py), which keeps them together, centres the
+-- image and limits its height to what the caption leaves of the page. The id sits on the
+-- label because LaTeX output drops the id of an inline image.
+local function caption_para(figure, with_text)
   local label = pandoc.Strong(words(figure.label))
-  local anchor = figure.id ~= "" and pandoc.Span({ label }, pandoc.Attr(figure.id)) or label
+  local line = pandoc.List({ figure.id ~= "" and pandoc.Span({ label }, pandoc.Attr(figure.id)) or label })
+  if with_text and #figure.caption > 0 then
+    line:insert(pandoc.Space())
+    line:extend(figure.caption)
+  end
+  return pandoc.Para(line)
+end
+
+local function image_para(figure)
   local image = figure.image:clone()
   image.identifier = ""
-  return { pandoc.Para({ anchor }), pandoc.Para({ image }) }
+  image.caption = figure.caption
+  return pandoc.Para({ image })
+end
+
+local function rendered(figure, caption_position, with_text)
+  local first, second, command = caption_para(figure, with_text), image_para(figure), "\\makedocfiguretop"
+  if caption_position == "bottom" then
+    first, second, command = second, first, "\\makedocfigurebottom"
+  end
+  return {
+    pandoc.RawBlock("latex", command),
+    first,
+    pandoc.RawBlock("latex", "\\makedocsep"),
+    second,
+    pandoc.RawBlock("latex", "\\makedocend"),
+  }
+end
+
+-- In running text an image with no caption is left as the author wrote it.
+local function rendered_in_text(figure, caption_position)
+  if #figure.caption == 0 then
+    return { figure.block }
+  end
+  return rendered(figure, caption_position, true)
 end
 
 local function supplementary_heading()
@@ -310,13 +341,39 @@ local function end_pages(mains, supplements, render)
   return out
 end
 
+local function without_markers(blocks, replacement)
+  local out = pandoc.List()
+  for _, block in ipairs(blocks) do
+    if block.t == "RawBlock" and block.format == FIGURE_MARKER then
+      if replacement then
+        out:extend(replacement(tonumber(block.text)))
+      end
+    else
+      out:insert(block)
+    end
+  end
+  return out
+end
+
 local function place_figures(blocks, figures, config)
   if #figures == 0 then
     return blocks
   end
-  local mains, supplements = label_figures(figures)
+  local mains, supplements = label_figures(figures, config.placement == "inline" or config.placement == "in_place")
   local ordered = mains:clone()
   ordered:extend(supplements)
+
+  if config.placement == "in_place" then
+    return without_markers(blocks, function(index)
+      return rendered_in_text(figures[index], config.caption_position)
+    end)
+  end
+  blocks = without_markers(blocks)
+  for _, figure in ipairs(figures) do
+    if figure.id == "" then
+      warn("a figure has no #id in its attributes, so the text cannot link to it: " .. figure.image.src)
+    end
+  end
 
   if config.placement == "captions_page" then
     blocks:extend(page_break())
@@ -329,18 +386,16 @@ local function place_figures(blocks, figures, config)
       end
       blocks:insert(pandoc.Para(line))
     end
-    blocks:extend(end_pages(mains, supplements, label_and_bare_image))
+    blocks:extend(end_pages(mains, supplements, function(figure)
+      return rendered(figure, "top", false)
+    end))
     return blocks
   end
 
   if config.placement == "inline" then
     local inline_blocks = pandoc.List()
     for _, figure in ipairs(ordered) do
-      if #figure.caption > 0 then
-        inline_blocks:extend(labelled(figure, config.caption_position))
-      else
-        inline_blocks:insert(figure.block)
-      end
+      inline_blocks:extend(rendered_in_text(figure, config.caption_position))
     end
     for index, block in ipairs(blocks) do
       if block.t == "Div" and block.identifier == config.placeholder_id then
@@ -357,7 +412,7 @@ local function place_figures(blocks, figures, config)
   end
 
   blocks:extend(end_pages(mains, supplements, function(figure)
-    return labelled(figure, config.caption_position)
+    return rendered(figure, config.caption_position, true)
   end))
   return blocks
 end

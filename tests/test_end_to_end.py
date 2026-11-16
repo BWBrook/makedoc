@@ -7,9 +7,11 @@ import struct
 import subprocess
 import sys
 import threading
+import zipfile
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -22,6 +24,7 @@ from support import (
     FIXTURE_CSL,
     FIXTURE_REFS,
     TESTBED,
+    W_NS,
     docx_stats,
     docx_xml,
     needs_pdf,
@@ -330,3 +333,83 @@ def test_empty_bibliography_passes_check_when_nothing_is_cited(tmp_path: Path) -
         "output_dir": "out", "output_stem": "memo",
     }})
     assert main(["check", "-c", str(config)]) == 0
+
+
+FIGURE_BODY = (
+    "# Figures\n\nOpening paragraph.\n\n"
+    f"![Main caption.]({FIGURES_DIR / 'fig1_dummy.png'}){{#fig-main}}\n\n"
+    "Closing paragraph.\n\n"
+    f"![Supplementary caption.]({FIGURES_DIR / 'figS1_dummy.png'}){{#fig-extra-s1}}\n"
+)
+
+
+@needs_poppler
+@pytest.mark.parametrize("placement", ["pages", "in_place"])
+def test_pdf_figures_carry_only_makedoc_labels(tiny_config, placement: str) -> None:
+    config = tiny_config(extra={"figs": {"figures": {"placement": placement}}}, figs=FIGURE_BODY)
+    result = build_profile(load_profile(config, "figs"), config, ("pdf",))
+    text = squash(pdf_text(result.outputs[0]))
+
+    assert "Fig. 1. Main caption." in text
+    assert "Fig. S1. Supplementary caption." in text
+    assert not re.search(r"Figure \d+:", text)
+    if placement == "in_place":
+        assert text.index("Opening paragraph.") < text.index("Fig. 1.") < text.index("Closing paragraph.") < text.index("Fig. S1.")
+    assert not result.warnings
+
+
+@needs_poppler
+def test_manuscript_header_includes_reach_the_pdf_preamble(tiny_config) -> None:
+    config = tiny_config(wide=(
+        "---\nheader-includes:\n  - \\usepackage{pdflscape}\n---\n\n# Wide\n\nPortrait text.\n\n"
+        "\\begin{landscape}\nLandscape text.\n\\end{landscape}\n"
+    ))
+    result = build_profile(load_profile(config, "wide"), config, ("pdf",))
+
+    assert "Landscape text." in pdf_text(result.outputs[0])
+    sizes = subprocess.run(["pdfinfo", "-f", "1", "-l", "9", str(result.outputs[0])],
+                           capture_output=True, text=True, check=True).stdout
+    assert re.search(r"rot:\s+(90|270)", sizes), sizes
+
+
+def _docx_body(path: Path) -> list:
+    return list(ET.fromstring(docx_xml(path)).find("w:body", W_NS))
+
+
+def test_docx_uses_page_break_before_and_keeps_captions_with_images(tiny_config) -> None:
+    config = tiny_config(figs=FIGURE_BODY)
+    result = build_profile(load_profile(config, "figs"), config, ("docx",))
+    body = _docx_body(result.outputs[0])
+    w = "{" + W_NS["w"] + "}"
+
+    def is_break_only(node) -> bool:
+        runs = node.findall("w:r", W_NS)
+        content = [child for run in runs for child in run if child.tag != w + "rPr"]
+        return bool(content) and all(child.tag == w + "br" and child.get(w + "type") == "page" for child in content)
+
+    def text_of(node) -> str:
+        return "".join(t.text or "" for t in node.iterfind(".//w:t", W_NS))
+
+    for node, following in zip(body, body[1:]):
+        assert not (node.tag == w + "p" and is_break_only(node) and following.tag == w + "p"), text_of(following)
+    captions = [i for i, p in enumerate(body) if text_of(p).startswith("Fig. ")]
+    assert [text_of(body[i]) for i in captions] == ["Fig. 1. Main caption.", "Fig. S1. Supplementary caption."]
+    for i in captions:
+        assert body[i + 1].find(".//w:drawing", W_NS) is not None
+        assert body[i].find("w:pPr/w:keepNext", W_NS) is not None
+        assert body[i].find("w:pPr/w:pageBreakBefore", W_NS) is not None
+
+
+@pytest.mark.skipif(shutil.which("pdftoppm") is None or shutil.which("magick") is None,
+                    reason="pdftoppm and ImageMagick required")
+def test_docx_receives_png_for_pdf_figure(tiny_config, tmp_path: Path) -> None:
+    figure = tmp_path / "plot.pdf"
+    subprocess.run(["magick", "-size", "200x100", "xc:gray", str(figure)], check=True, capture_output=True)
+    config = tiny_config(pdffig=f"# T\n\nText.\n\n![A PDF figure.]({figure}){{#fig-pdf}}\n")
+    result = build_profile(load_profile(config, "pdffig"), config, ("docx",))
+
+    with zipfile.ZipFile(result.outputs[0]) as archive:
+        media = [name for name in archive.namelist() if name.startswith("word/media/")]
+        assert media and all(name.endswith(".png") for name in media), media
+        assert archive.read(media[0])[:8] == b"\x89PNG\r\n\x1a\n"
+    assert not any("pdftoppm" in warning for warning in result.warnings)

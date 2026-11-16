@@ -17,6 +17,7 @@ from makedoc.profile import load_profile
 from makedoc.refs import scan_citations
 from makedoc.validate import validate_config
 from support import (
+    arranged_figures,
     FIGURES_DIR,
     FIXTURE_REFS,
     identifier,
@@ -91,7 +92,7 @@ def test_image_destination_forms_resolve(tmp_path: Path, destination: str) -> No
     resolved = resolve(manuscript(tmp_path, f"# T\n\n![Caption.]({destination}){{#fig-a}}\n"))
 
     assert resolved.images == [(tmp_path / name).resolve()]
-    assert [identifier(figure) for figure in nodes(resolved.blocks, "Figure")] == ["fig-a"]
+    assert [figure.id for figure in arranged_figures(resolved.blocks)] == ["fig-a"]
     if "title" in destination:
         assert nodes(resolved.blocks, "Image")[0]["c"][2][1] == "A title"
 
@@ -101,8 +102,8 @@ def test_image_with_citation_in_caption_is_tracked(tmp_path: Path) -> None:
     resolved = resolve(manuscript(tmp_path, f"# T\n\n![Data from [@alpha2020].]({FIG}){{#fig-a}}\n"))
 
     assert resolved.images == [FIG.resolve()]
-    [figure] = nodes(resolved.blocks, "Figure")
-    assert {cite["c"][0][0]["citationId"] for cite in nodes(figure, "Cite")} == {"alpha2020"}
+    [figure] = arranged_figures(resolved.blocks)
+    assert {cite["c"][0][0]["citationId"] for cite in nodes(figure.caption_para, "Cite")} == {"alpha2020"}
 
 
 @needs_pandoc

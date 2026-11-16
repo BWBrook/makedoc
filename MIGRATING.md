@@ -48,6 +48,10 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 | `... deps-install-minimal`, `wsl-smoke` | `$(MAKEDOC) doctor` prints what is missing and an install command |
 | `PDF_ENGINE=...`, `PANDOC_FROM=...`, `PANDOC=...` overrides | Removed. v2 always uses `xelatex` and the reader `markdown+yaml_metadata_block+tex_math_dollars+tex_math_single_backslash`. If a repository relied on another engine or reader extension, open an issue before migrating. |
 | `-B` or `--always-make` | nothing; every build starts from the sources |
+| `... tidy`, `... clean` | nothing; makedoc keeps no cache. Delete your own `output_dir` if you want a clean slate. |
+| `LAYOUT_RENDER=...`, `SOURCE_RENDER=...` overrides | Removed, with the scripts they replaced. For LaTeX preamble lines use `header-includes` (below). A custom figure renderer has no replacement; open an issue describing the layout you need. |
+| `python <makedoc>/scripts/build_manifest.py ...` | nothing; the build writes the manifest. See "Post-processing the DOCX" below if you re-hashed after a formatter. |
+| `python <makedoc>/scripts/prepare_markdown_sources.py`, `render_pdf_layout.py`, or importing them | Removed. `makedoc build --workdir DIR` writes the same intermediates: `prepared.md`, `resolved.json`, `layout.tex`. |
 
 `-c` defaults to `settings/build.yaml` relative to the current directory, so from the directory that holds `settings/` the flag can be omitted.
 
@@ -60,7 +64,10 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 | `PROFILE_CACHE_DIR=...`, `PDF_ENGINE_OUTPUT_DIR=...` | Each build uses a private temporary directory. |
 | `--always-make` / `-B` because figure images were not prerequisites | No incremental state. |
 | "Do not run two makedoc builds at once" | Concurrent builds are safe. |
-| A glyph scanner for Greek, `≤`, `≈`, arrows, Unicode sub/superscripts | Body text gets LaTeX fallbacks; anything still missing fails the build by name. Characters in code spans still need a monospace font that has them. |
+| A glyph scanner for Greek, `≤`, `≈`, arrows, Unicode sub/superscripts | Body text gets LaTeX fallbacks; anything still missing fails the build by name. Characters in code spans still need a monospace font that has them. If the scanner is part of a larger script, remove only that part. |
+| `TMPDIR=...` pointed at the makedoc checkout or a build directory | Not needed; the default temporary directory is used and cleaned up. |
+| A script that moves standalone page-break paragraphs in the DOCX onto the next paragraph | makedoc now writes `w:pageBreakBefore` itself. |
+| A wrapper that hid Pandoc's `Figure N:` caption on figure pages | makedoc prints one label per figure (`Fig. 1. Caption`). |
 | A script that repairs DOCX page size, margins, page numbers or metadata | makedoc applies the profile's layout to the DOCX. Keep a script only for styling makedoc does not offer, and say so in a comment. |
 
 ## Config changes
@@ -75,6 +82,9 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 | top-level keys other than `default_profile`, `profiles` rejected | `common:` is also accepted, for YAML anchors. |
 | `csl_search_dirs:` searched by `make csl-search` | Still searched: `makedoc csl search` and `csl fetch` read the default profile of `-c CONFIG` (default `settings/build.yaml`) when that file exists. Add other directories with `--dir`. |
 | — | New optional `fonts:` mapping (`main`, `sans`, `mono`, `math`) for the PDF. |
+| — | New `figures.placement: in_place`, which leaves each figure where it is written. |
+
+Outputs that v1 wrote under the makedoc checkout's `dist/<name>/` stay there. Nothing reads them; delete them when the repository has moved.
 
 ## Behaviour changes
 
@@ -90,12 +100,40 @@ MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
 - **DOCX images wider than the text area are scaled down** to fit the profile's margins.
 - **Citation keys containing `/`, `&`, `?` and similar** are read in full by the citation audit (for example DOI-style keys).
 - **Structure is read from the parsed document.** A figure line, placeholder or heading inside an HTML comment, a code block or a code span is never acted on. v1 matched lines of text and could extract a commented-out figure.
-- **A standalone image without an attribute block is a figure.** v1 moved only image lines that ended in `{...}`; an image paragraph with no attributes stayed where it was. v2 treats any paragraph holding only an image as a figure and places it like the others. To keep an image in the running text, put it in the same paragraph as some text.
+- **A standalone image without an attribute block is a figure.** v1 moved only image lines that ended in `{...}`; an image paragraph with no attributes stayed where it was, as a captioned figure in the text. v2 treats any paragraph holding only an image as a figure and places it like the others. If the manuscript relied on the v1 behaviour, set `figures.placement: in_place`: every figure then stays where it is written, labelled `Fig. N.` with its caption.
+- **One label per figure.** In `pages` and `inline` placement v1 printed its own `Fig. S1.` and, under the image, Pandoc's `Figure 1: caption`, with numbers that could disagree. v2 prints `Fig. S1. caption` once, above or below the image according to `caption_position`. Caption and image are kept on one page, the image is centred, and an image too tall for the space the caption leaves is scaled down.
+- **`header-includes` in the manuscript's YAML metadata reaches the LaTeX preamble.** v1 dropped it without a message. It is added after makedoc's own layout, so it can override it. For LaTeX that works after `\begin{document}`, a raw block (```` ```{=latex} ````) in a source file also works and is ignored by the DOCX.
+- **PDF images are converted to 300 dpi PNG for the DOCX**, because Word cannot display a PDF image. The PDF output still embeds the original.
 - **Review markup is expanded in figure captions** as well as in body text.
 - **DOCX layout follows the profile**: paper size, margins and page numbers, as well as line spacing and numbering. Title and author metadata are filled in.
+- **DOCX internals that scripts may match on have changed.** Image alt text (`descr`) is the caption, never the source path, and no local path is written anywhere in the file. Page breaks are `w:pageBreakBefore` on the paragraph that starts the page, not a paragraph of their own. Empty and image-only paragraphs carry `w:suppressLineNumbers`. XML namespace prefixes are the standard ones (`w:`), not `ns0:`. Run any DOCX post-processor you keep against a v2 file and check that it still does its work: one that matches the old shapes can pass while doing nothing.
+- **Blinded builds.** A profile without `author_metadata` produces a PDF with an empty Author field and a DOCX with no author; neither format contains local paths or user names.
 - **A standalone supplement** (a profile whose figures are all supplementary) no longer gets a "Supplementary Information" divider page.
-- **The manifest** drops the makedoc repository's git state and Make version, and adds `makedoc_version`, the manuscript repository's commit, figure image hashes and the build warnings.
+- **The manifest schema changed.** A script that reads it needs these edits:
+
+  | v1 key | v2 |
+  | --- | --- |
+  | `git` (state of the makedoc checkout) | removed; `makedoc_version` is the version string |
+  | — | `manuscript_git: {sha, dirty}`, the manuscript repository |
+  | `tool_versions.make` | removed; `pandoc`, `xelatex`, `python` remain |
+  | `profile` | the resolved profile, absolute paths |
+  | `inputs[]`, `outputs[]` | unchanged shape: `path`, `exists`, `size_bytes`, `sha256`. `inputs` now includes every figure image. |
+  | — | `warnings`: the build's warnings |
 - **`make check` no longer exists as one step.** `makedoc check` does not build; run `makedoc build` after it.
+
+## Post-processing the DOCX
+
+The manifest is written during the build, so its DOCX hash describes the file makedoc produced. If the repository then runs its own formatter or sanitiser over the DOCX, record the final file's hash in the repository's own provenance; makedoc does not re-hash.
+
+## Intermediate files
+
+`makedoc build --workdir DIR` keeps `prepared.md`, `resolved.json`, `layout.tex` and `latex/` (the xelatex log and aux files). With more than one profile each gets `DIR/<profile>/`. These names are stable within makedoc 2 and may be read by repository scripts, for example a page-length audit. Rebuild from the sources to change the output; do not edit the intermediates.
+
+## Pins, old snapshots and collaborators
+
+- A repository pinned to a v1 commit keeps building from a checkout of that commit. `v1.0.0` is the last v1 state; older pinned commits that archived replays depend on are tagged `v1-pin-<sha>` so they stay reachable.
+- Tooling that replays an archived snapshot by mounting a makedoc checkout should stay on its v1 commit for those snapshots. Migrate only the live build.
+- Every machine that builds needs `uv`, Pandoc, xelatex and network access to GitHub on the first run (uvx caches makedoc afterwards). Tell collaborators before the pin changes.
 
 ## A v2 wrapper Makefile
 
@@ -111,6 +149,8 @@ all:
 check:
 	$(MAKEDOC) check --all
 ```
+
+`check` and `build` act on `default_profile` alone unless given `--all` or `-p`.
 
 To test an unreleased makedoc from a local checkout, override the variable:
 

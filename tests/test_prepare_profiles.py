@@ -9,8 +9,10 @@ from support import (
     FIGURES_DIR,
     FIXTURE_REFS,
     TESTBED_CONFIG,
+    arranged_figures,
     identifier,
     is_page_break,
+    latex_command,
     manuscript,
     needs_pandoc,
     nodes,
@@ -46,7 +48,7 @@ DOCX_BREAK = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
 
 
 def outline(blocks: list) -> list[str]:
-    """Top-level blocks as short labels: headings, page breaks, figures, images and text."""
+    """Top-level blocks as short labels: headings, page breaks, figure commands, images and text."""
     out = []
     for block in blocks:
         kind = block["t"]
@@ -58,6 +60,10 @@ def outline(blocks: list) -> list[str]:
             out.append(f"DIV#{identifier(block)}")
         elif kind == "Figure":
             out.append(f"FIGURE#{identifier(block)}")
+        elif (latex_command(block) or "").startswith("\\makedoc"):
+            out.append(latex_command(block))
+        elif kind == "Para" and [node["t"] for node in block["c"]] == ["Image"]:
+            out.append("IMAGE:" + Path(block["c"][0]["c"][2][0]).name)
         else:
             out.append(text(block))
     return out
@@ -167,14 +173,17 @@ def test_pages_mode_puts_each_figure_on_its_own_page_with_supplementary_last(tmp
     )
     items = outline(resolved.blocks)
 
-    assert [item for item in items if item.startswith(("Fig.", "FIGURE", "## Supp"))] == [
-        "Fig. 1.", "FIGURE#fig-fixture-main",
-        "Fig. 2.", "FIGURE#fig-fixture-richness",
+    assert [item for item in items if item.startswith(("Fig.", "FIGURE", "IMAGE", "\\makedoc", "## Supp"))] == [
+        "\\makedocfiguretop", f"Fig. 1. {FIG1}", "\\makedocsep", "IMAGE:fig1_dummy.png", "\\makedocend",
+        "\\makedocfiguretop", f"Fig. 2. {FIG2}", "\\makedocsep", "IMAGE:fig2_dummy.png", "\\makedocend",
         "## Supplementary Information",
-        "Fig. S1.", "FIGURE#fig-fixture-s1",
+        "\\makedocfiguretop", f"Fig. S1. {FIGS1}", "\\makedocsep", "IMAGE:figS1_dummy.png", "\\makedocend",
+    ]
+    assert [figure.id for figure in arranged_figures(resolved.blocks)] == [
+        "fig-fixture-main", "fig-fixture-richness", "fig-fixture-s1",
     ]
     assert breaks_between(items, "## References", "Fig. 1.")
-    assert breaks_between(items, "FIGURE#fig-fixture-main", "Fig. 2.")
+    assert breaks_between(items, "IMAGE:fig1_dummy.png", "Fig. 2.")
     assert breaks_between(items, "## Supplementary Information", "Fig. S1.")
     assert resolved.markdown.count(LATEX_BREAK) == resolved.markdown.count(DOCX_BREAK) >= 4
     assert "DIV#figures" not in items
@@ -193,8 +202,13 @@ def test_inline_mode_replaces_placeholder_with_bottom_caption(tmp_path: Path) ->
     items = outline(resolved.blocks)
 
     assert "DIV#figures" not in items
-    assert items[1:4] == ["Text before inserted figures.", "FIGURE#fig-fixture-main", "Fig. 1."]
-    assert items[4] == "More text after placeholder."
+    assert items[1:7] == [
+        "Text before inserted figures.", "\\makedocfigurebottom", "IMAGE:fig1_dummy.png", "\\makedocsep",
+        f"Fig. 1. {FIG1}", "\\makedocend",
+    ]
+    assert items[7] == "More text after placeholder."
+    [figure] = arranged_figures(resolved.blocks)
+    assert (figure.position, figure.id) == ("bottom", "fig-fixture-main")
     assert resolved.markdown.count(LATEX_BREAK) == resolved.markdown.count(DOCX_BREAK) == 1
     assert breaks_between(items, "More text after placeholder.", "## References")
     assert resolved.warnings == []
@@ -251,18 +265,19 @@ def test_captions_page_lists_captions_then_anchored_figure_pages(tmp_path: Path)
         [anchor] = [span for span in nodes(blocks, "Span") if identifier(span) == fig_id]
         assert [node["t"] for node in anchor["c"][1]] == ["Strong"]
         assert text(anchor) == label
-        position = next(i for i, block in enumerate(blocks) if anchor in block.get("c", []))
-        assert position > heading + 3
-        assert is_page_break(blocks[position - 1])
-        image_para = blocks[position + 1]
-        assert image_para["t"] == "Para"
-        [image] = image_para["c"]
-        assert image["t"] == "Image"
+        [figure] = [figure for figure in arranged_figures(blocks) if figure.id == fig_id]
+        assert figure.caption_para["c"] == [anchor]
+        assert figure.position == "top"
+        assert figure.start > heading + 3
+        assert is_page_break(blocks[figure.start - 1])
+        image = figure.image
         assert image["c"][0] == ["", [], [["width", width]]]
-        assert Path(image["c"][2][0]).resolve() == figures_dir / name
+        assert text(image["c"][1]) == captions[["Fig. 1.", "Fig. 2.", "Fig. S1."].index(label)][len(label) + 1:]
+        assert Path(figure.src).resolve() == figures_dir / name
     assert nodes(blocks, "Figure") == []
-    anchors = [i for i, block in enumerate(blocks) if block["t"] == "Para" and nodes(block, "Span")]
-    assert anchors[1] < items.index("## Supplementary Information") < anchors[2]
+    starts = [figure.start for figure in arranged_figures(blocks)]
+    assert len(starts) == 3
+    assert starts[1] < items.index("## Supplementary Information") < starts[2]
 
 
 @needs_pandoc

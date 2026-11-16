@@ -18,7 +18,7 @@ profiles:
     line_spacing: 1.5                # single | 1.1 | 1.25 | 1.5 | 2
     line_numbering: continuous       # continuous | page | section | none
     figures:
-      placement: pages               # pages | captions_page | inline
+      placement: pages               # pages | captions_page | inline | in_place
       caption_position: top          # top | bottom
     margins:
       unit: cm                       # cm | in

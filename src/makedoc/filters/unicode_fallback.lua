@@ -249,7 +249,31 @@ local function heading_with_bookmark(header)
   )
 end
 
+-- Put the profile's layout header first in header-includes, so lines the manuscript sets
+-- there itself are kept and can override it.
+local function add_layout(meta)
+  local path = meta["makedoc-layout"]
+  if not path then
+    return nil
+  end
+  meta["makedoc-layout"] = nil
+  local handle = assert(io.open(pandoc.utils.stringify(path), "r"))
+  local includes = pandoc.List({ pandoc.MetaBlocks({ pandoc.RawBlock("latex", handle:read("a")) }) })
+  handle:close()
+  local own = meta["header-includes"]
+  if own ~= nil then
+    if pandoc.utils.type(own) == "List" then
+      includes:extend(own)
+    else
+      includes:insert(own)
+    end
+  end
+  meta["header-includes"] = includes
+  return meta
+end
+
 return {
+  { Meta = add_layout },
   { Meta = keep_plain_metadata },
   { Header = heading_with_bookmark },
   { Str = replace },

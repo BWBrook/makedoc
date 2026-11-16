@@ -91,7 +91,7 @@ profiles:
     line_numbering: continuous     # continuous | page | section | none
     references_new_page: true      # page break before the References heading
     figures:
-      placement: pages             # pages | captions_page | inline
+      placement: pages             # pages | captions_page | inline | in_place
       caption_position: top        # top | bottom
       placeholder_id: figures      # the <div id="..."> used by inline placement
     margins:
@@ -115,9 +115,12 @@ A top-level `common:` key is ignored by makedoc, so it can hold a YAML anchor sh
 - **Authors.** With `author_metadata` set, an author block with superscript affiliations replaces `<div id="authors"></div>`, or follows the first `# Title` heading if that placeholder is absent. A page break follows it.
 - **Sections.** The first `Introduction` heading starts a new page. A `References` heading receives the bibliography, on a new page unless `references_new_page: false`. Without that heading the bibliography follows the text, before any figures placed at the end.
 - **Figures.** A figure is a paragraph holding only an image, normally with an attribute block: `![Caption.](../figures/fig1.png){#fig-one width=90%}`. Several such lines in a row, one image per line, are each a figure. Image paths are relative to the Markdown file. An id ending in `-s1`, `-s2`, … marks a supplementary figure. Link to a figure with `Fig. [1](#fig-one)`.
-  - `pages`: figures move after the references, one per page, labelled Fig. 1, Fig. 2, … then Fig. S1, …
+  - `pages`: figures move after the references, one per page, each as `Fig. 1. Caption` with its image; supplementary figures (Fig. S1, …) follow.
   - `captions_page`: a Figure Captions page lists every caption, then each figure follows on its own page with its label only.
-  - `inline`: figures are placed at `<div id="figures"></div>`.
+  - `inline`: all figures are gathered at `<div id="figures"></div>`.
+  - `in_place`: each figure stays where it is written.
+  - Each figure has one label and its caption and image share a page. Only top-level figures are arranged; an image inside a fenced div is left to Pandoc. A PDF image is embedded as it is in the PDF and converted to PNG for the DOCX.
+- **LaTeX additions.** `header-includes` in a source file's YAML metadata is added to the preamble after makedoc's layout.
 - **Unicode.** Greek letters, relations, arrows and Unicode sub- and superscripts typed in body text are rendered through LaTeX fallbacks when the PDF font lacks them. If any character still has no glyph, the build fails and names it; nothing is dropped silently. Code spans use the monospace font and get no fallback.
 - **Images.** A 16-bit PNG with an alpha channel fails the PDF build, because xelatex would embed it fully transparent. Re-save it as 8-bit.
 - **Code and comments.** makedoc arranges the document after Pandoc has parsed it, so anything inside a code block, a code span or an HTML comment is never treated as a figure, heading or placeholder. Lint and the citation audit skip those regions too.

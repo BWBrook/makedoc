@@ -253,6 +253,8 @@ def _keep_body_lead_ins(root: ET.Element) -> None:
         if not has_text and not has_math:
             continue  # Do not turn explicit page breaks or spacers into lead-ins.
         following = children[index + 1] if index + 1 < len(children) else None
+        if following is not None and following.find("w:pPr/w:pageBreakBefore", NS) is not None:
+            following = None  # A lead-in does not reach across a page break.
         style = paragraph.find("w:pPr/w:pStyle", NS)
         is_heading = style is not None and style.get(f"{{{W_NS}}}val") in HEADING_STYLE_IDS
         is_list = _is_list_paragraph(paragraph)
@@ -260,6 +262,59 @@ def _keep_body_lead_ins(root: ET.Element) -> None:
         before_list = (following is not None and following.tag == f"{{{W_NS}}}p"
                        and not is_list and _is_list_paragraph(following))
         if is_heading or before_table or before_list or (not is_list and _is_standalone_bold(paragraph)):
+            props = paragraph.find("w:pPr", NS)
+            if props is None:
+                props = ET.Element(PPR_TAG)
+                paragraph.insert(0, props)
+            _set_child(props, "keepNext", val="1")
+
+
+def _is_page_break_only(paragraph: ET.Element) -> bool:
+    if paragraph.tag != f"{{{W_NS}}}p":
+        return False
+    content = [node for run in paragraph.findall("w:r", NS) for node in run if node.tag != f"{{{W_NS}}}rPr"]
+    runs_only = all(child.tag in (PPR_TAG, f"{{{W_NS}}}r") for child in paragraph)
+    return bool(content) and runs_only and all(
+        node.tag == f"{{{W_NS}}}br" and node.get(f"{{{W_NS}}}type") == "page" for node in content
+    )
+
+
+def _breaks_before_paragraphs(root: ET.Element) -> None:
+    """Turn a paragraph holding only a page break into `pageBreakBefore` on the next one.
+
+    A standalone break paragraph leaves an empty line at the foot of a page, or a blank
+    page when the text before it ends exactly at the page end.
+    """
+    body = root.find("w:body", NS)
+    if body is None:
+        return
+    children = list(body)
+    for index, paragraph in enumerate(children[:-1]):
+        following = children[index + 1]
+        if (not _is_page_break_only(paragraph) or following.tag != f"{{{W_NS}}}p"
+                or _is_page_break_only(following)):
+            continue
+        props = following.find("w:pPr", NS)
+        if props is None:
+            props = ET.Element(PPR_TAG)
+            following.insert(0, props)
+        _set_child(props, "pageBreakBefore")
+        body.remove(paragraph)
+
+
+def _keep_captions_with_images(root: ET.Element) -> None:
+    """Keep a text paragraph on the same page as an image-only paragraph that follows it."""
+    body = root.find("w:body", NS)
+    if body is None:
+        return
+    children = list(body)
+    for paragraph, following in zip(children, children[1:]):
+        if paragraph.tag != f"{{{W_NS}}}p" or following.tag != f"{{{W_NS}}}p":
+            continue
+        image_only = (following.find(".//w:drawing", NS) is not None
+                      and not "".join(node.text or "" for node in following.findall(".//w:t", NS)).strip())
+        has_text = bool("".join(node.text or "" for node in paragraph.findall(".//w:t", NS)).strip())
+        if image_only and has_text:
             props = paragraph.find("w:pPr", NS)
             if props is None:
                 props = ET.Element(PPR_TAG)
@@ -308,6 +363,8 @@ def normalize_document_layout(document_xml: bytes, *, paper_size: str,
                 paragraph.insert(0, ppr)
             _set_child(ppr, "suppressLineNumbers")
     _keep_body_lead_ins(root)
+    _breaks_before_paragraphs(root)
+    _keep_captions_with_images(root)
     for row in root.findall(".//w:tr", NS):
         props = row.find("w:trPr", NS)
         if props is None:

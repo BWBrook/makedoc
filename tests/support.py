@@ -181,3 +181,61 @@ def is_page_break(block: dict) -> bool:
     return block["t"] == "RawBlock" and (
         "\\clearpage" in block["c"][1] or 'w:type="page"' in block["c"][1]
     )
+
+
+FIGURE_COMMANDS = {"\\makedocfiguretop": "top", "\\makedocfigurebottom": "bottom"}
+
+
+def latex_command(block: dict) -> str | None:
+    """The text of a raw LaTeX block, or None for any other block."""
+    if block["t"] == "RawBlock" and block["c"][0] == "latex":
+        return block["c"][1]
+    return None
+
+
+@dataclass
+class ArrangedFigure:
+    """One figure as structure.lua writes it: open command, two paragraphs, separator, end."""
+
+    start: int
+    position: str
+    caption_para: dict
+    image: dict
+
+    @property
+    def id(self) -> str:
+        spans = [span for span in nodes(self.caption_para, "Span") if identifier(span)]
+        return identifier(spans[0]) if spans else ""
+
+    @property
+    def label(self) -> str:
+        return text(self.caption_para["c"][0])
+
+    @property
+    def caption(self) -> str:
+        """Caption text after the label (empty when the paragraph holds the label alone)."""
+        return text(self.caption_para["c"][1:]).strip()
+
+    @property
+    def src(self) -> str:
+        return self.image["c"][2][0]
+
+
+def arranged_figures(blocks: list) -> list[ArrangedFigure]:
+    """Every arranged figure among the top-level `blocks`, checking its five-block shape."""
+    found = []
+    for index, block in enumerate(blocks):
+        position = FIGURE_COMMANDS.get(latex_command(block) or "")
+        if position is None:
+            continue
+        first, sep, second, end = blocks[index + 1 : index + 5]
+        assert latex_command(sep) == "\\makedocsep"
+        assert latex_command(end) == "\\makedocend"
+        caption_para, image_para = (first, second) if position == "top" else (second, first)
+        assert caption_para["t"] == image_para["t"] == "Para"
+        assert caption_para["c"][0]["t"] in ("Span", "Strong")
+        [image] = image_para["c"]
+        assert image["t"] == "Image"
+        assert image["c"][0][0] == ""
+        found.append(ArrangedFigure(index, position, caption_para, image))
+    return found

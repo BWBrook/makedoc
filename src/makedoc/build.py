@@ -20,7 +20,7 @@ import yaml
 
 from .prepare import prepare_markdown, structure_metadata
 from .profile import Profile
-from .report import collect_warnings
+from .report import collect_warnings, warn
 
 PANDOC_FROM = "markdown+yaml_metadata_block+tex_math_dollars+tex_math_single_backslash"
 PDF_ENGINE = "xelatex"
@@ -156,7 +156,8 @@ def _build_pdf(profile: Profile, resolved: Path, work: Path) -> tuple[Path, list
     latex_dir.mkdir(exist_ok=True)
     staged = work / "out.pdf"
     args = _common_args(profile, resolved) + [
-        f"--include-in-header={layout}",
+        # Not --include-in-header: that would discard the manuscript's own header-includes.
+        "--metadata", f"makedoc-layout={layout}",
         f"--lua-filter={UNICODE_FILTER}",
         f"--pdf-engine={PDF_ENGINE}",
         f"--pdf-engine-opt=-output-directory={latex_dir}",
@@ -181,8 +182,50 @@ def _build_pdf(profile: Profile, resolved: Path, work: Path) -> tuple[Path, list
     return staged, warnings
 
 
+def _with_raster_images(resolved: Path, work: Path) -> Path:
+    """Word cannot display PDF images, so give the DOCX a 300 dpi PNG of each one."""
+    document = json.loads(resolved.read_text(encoding="utf-8"))
+    converted: dict[str, str] = {}
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            if node.get("t") == "Image" and node["c"][2][0].lower().endswith(".pdf"):
+                source = node["c"][2][0]
+                if source not in converted:
+                    converted[source] = _rasterize(Path(source), work / "raster" / str(len(converted)))
+                node["c"][2][0] = converted[source]
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(document["blocks"])
+    if not converted:
+        return resolved
+    target = work / "resolved_docx.json"
+    target.write_text(json.dumps(document), encoding="utf-8")
+    return target
+
+
+def _rasterize(source: Path, stem: Path) -> str:
+    if not shutil.which("pdftoppm"):
+        warn(f"pdftoppm (Poppler) is not installed, so {source.name} stays a PDF image, which Word "
+             "cannot display. Install Poppler or supply a PNG.")
+        return str(source)
+    stem.parent.mkdir(exist_ok=True)
+    proc = subprocess.run(
+        ["pdftoppm", "-png", "-r", "300", "-singlefile", str(source), str(stem)],
+        capture_output=True, text=True, check=False,
+    )
+    if proc.returncode != 0:
+        raise BuildError(f"Could not convert {source} to PNG for the DOCX:\n{proc.stderr.strip()}")
+    return f"{stem}.png"
+
+
 def _build_docx(profile: Profile, resolved: Path, work: Path) -> tuple[Path, list[str]]:
     staged = work / "out.docx"
+    resolved = _with_raster_images(resolved, work)
     warnings = _run_pandoc(_common_args(profile, resolved) + ["-o", str(staged)], "DOCX")
     normalize_docx(staged, profile)
     return staged, warnings

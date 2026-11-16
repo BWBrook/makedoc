@@ -181,11 +181,29 @@ Select profiles with `-p NAME` (repeatable) or `--all`. With neither, `default_p
 
 | `figures.placement` | Result |
 | --- | --- |
-| `pages` (default) | Figures move after the references, one per page, each with its label and caption. |
+| `pages` (default) | Figures move after the references, one per page, each as `Fig. 1. Caption` with the image. |
 | `captions_page` | A "Figure Captions" page lists all captions; each figure then has its own page with the label only. Common for submission. |
-| `inline` | Figures are placed at `<div id="figures"></div>` in the text (the id is `figures.placeholder_id`). If the placeholder is missing they go at the end, with a warning. |
+| `inline` | All figures are gathered at `<div id="figures"></div>` in the text (the id is `figures.placeholder_id`). If the placeholder is missing they go at the end, with a warning. |
+| `in_place` | Each figure stays where it is written, as `Fig. 1. Caption` with the image. Use it for a draft that reads with figures beside their text. |
 
-`figures.caption_position` is `top` or `bottom`.
+`figures.caption_position` is `top` or `bottom`. In the PDF a figure's caption and image always share a page, and an image too tall for the remaining space is scaled to fit.
+
+makedoc arranges figures written at the top level of the document. An image inside a fenced div, a list or a table is left to Pandoc, which gives it its own `Figure N:` caption; do not mix that with makedoc's numbering.
+
+Vector figures can be supplied as PDF. The PDF output embeds them as they are, and the DOCX gets a 300 dpi PNG.
+
+### LaTeX additions
+
+A YAML metadata block at the top of a source file can add preamble lines; they come after makedoc's layout:
+
+```markdown
+---
+header-includes:
+  - \usepackage{pdflscape}
+---
+```
+
+A raw block (```` ```{=latex} ````) in the body is passed to LaTeX and ignored by the DOCX.
 
 ## 5. Checks, warnings and what a green build means
 
