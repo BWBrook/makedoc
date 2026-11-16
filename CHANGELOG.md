@@ -18,7 +18,7 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 - A missing LaTeX package (`lineno`, `geometry`, `etoolbox`) fails the build. v1 warned and built without the feature.
 - DOCX output takes paper size, margins and page numbers from the profile, and carries title and author metadata.
 - `csl` is optional.
-- Each figure has one label. `pages` and `inline` placement print `Fig. 1. Caption` with the image; Pandoc's second `Figure 1:` caption, which v1 also printed, is gone. Caption and image share a page, the image is centred and scaled to the space left.
+- Each figure has one label. `pages` and `inline` placement print `Fig. 1. Caption` with the image; Pandoc's second `Figure 1:` caption, which v1 also printed, is gone. Caption and image share a page, the image is centred and scaled to fit. With line numbering on, each caption line is numbered and the image is not.
 - DOCX page breaks are `pageBreakBefore` on the paragraph that starts the page, not standalone paragraphs.
 - A manuscript's own `header-includes` metadata reaches the LaTeX preamble. It was dropped before.
 
@@ -28,7 +28,7 @@ makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) g
 - `fonts` profile key for the PDF main, sans, mono and math fonts.
 - `makedoc init` starter layout and `makedoc doctor` environment check.
 - `--all` and repeatable `-p` to act on several profiles in one call.
-- Manifest records the makedoc version, the manuscript repository's commit, figure image hashes and warnings.
+- Manifest records the makedoc version and installed commit, the manuscript repository's commit, figure image hashes and warnings.
 - A top-level `common:` config key for YAML anchors.
 - `figures.placement: in_place` leaves each figure where it is written.
 - PDF figure images are converted to PNG for the DOCX.

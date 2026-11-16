@@ -184,20 +184,29 @@ def unicode_fallback_block() -> list[str]:
 
 def figure_block() -> list[str]:
     return [
-        "% Used by filters/structure.lua. A figure is one unbreakable unit of caption and",
-        "% image; the image is centred and may use the page height the caption leaves.",
+        "% Used by filters/structure.lua. A figure is a caption and an image that share a",
+        "% page; the image is centred and may use the page height the caption leaves.",
+        "% The caption is set once in a box to measure it, then as ordinary paragraphs so",
+        "% that its lines take line numbers. The image line takes none.",
         "\\newsavebox{\\makedoccaptionbox}",
+        "\\newsavebox{\\makedocimagebox}",
         "\\long\\def\\makedocfiguretop#1\\makedocsep#2\\makedocend{\\makedocfigure{#1}{#2}{t}}",
         "\\long\\def\\makedocfigurebottom#1\\makedocsep#2\\makedocend{\\makedocfigure{#2}{#1}{b}}",
+        "\\newcommand{\\makedoccaption}[1]{{\\interlinepenalty=10000 \\noindent #1\\par}}",
         "\\newcommand{\\makedocfigure}[3]{%",
-        "  \\par\\addvspace{\\baselineskip}\\noindent",
-        "  \\begin{minipage}{\\linewidth}%",
-        "  \\begin{lrbox}{\\makedoccaptionbox}\\begin{minipage}{\\linewidth}#1\\end{minipage}\\end{lrbox}%",
-        "  \\if t#3\\usebox{\\makedoccaptionbox}\\par\\vspace{0.5\\baselineskip}\\fi",
-        "  {\\centering\\setlength{\\textheight}{\\dimexpr\\textheight-\\ht\\makedoccaptionbox"
-        "-\\dp\\makedoccaptionbox-3\\baselineskip\\relax}#2\\par}%",
-        "  \\if b#3\\vspace{0.5\\baselineskip}\\noindent\\usebox{\\makedoccaptionbox}\\par\\fi",
-        "  \\end{minipage}\\par\\addvspace{\\baselineskip}}",
+        "  \\par",
+        "  \\begin{lrbox}{\\makedoccaptionbox}\\begin{minipage}{\\linewidth}%",
+        "  \\renewcommand{\\label}[1]{}#1\\end{minipage}\\end{lrbox}%",
+        "  \\begin{lrbox}{\\makedocimagebox}\\begin{minipage}{\\linewidth}\\centering",
+        "  \\setlength{\\textheight}{\\dimexpr\\textheight-\\ht\\makedoccaptionbox"
+        "-\\dp\\makedoccaptionbox-4\\baselineskip\\relax}#2\\end{minipage}\\end{lrbox}%",
+        "  \\Needspace{\\dimexpr\\ht\\makedoccaptionbox+\\dp\\makedoccaptionbox"
+        "+\\ht\\makedocimagebox+\\dp\\makedocimagebox+2\\baselineskip\\relax}%",
+        "  \\addvspace{\\baselineskip}%",
+        "  \\if t#3\\makedoccaption{#1}\\nopagebreak\\vspace{0.5\\baselineskip}\\fi",
+        "  {\\csname nolinenumbers\\endcsname\\noindent\\usebox{\\makedocimagebox}\\par}%",
+        "  \\if b#3\\nopagebreak\\vspace{0.5\\baselineskip}\\makedoccaption{#1}\\fi",
+        "  \\addvspace{\\baselineskip}}",
     ]
 
 

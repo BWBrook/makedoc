@@ -359,6 +359,24 @@ def test_pdf_figures_carry_only_makedoc_labels(tiny_config, placement: str) -> N
 
 
 @needs_poppler
+@pytest.mark.parametrize("position", ["top", "bottom"])
+def test_figure_caption_lines_are_numbered_and_the_image_is_not(tiny_config, position: str) -> None:
+    figures = {"placement": "in_place", "caption_position": position}
+    config = tiny_config(extra={"figs": {"line_numbering": "continuous", "figures": figures}}, figs=FIGURE_BODY)
+    result = build_profile(load_profile(config, "figs"), config, ("pdf",))
+    layout = subprocess.run(["pdftotext", "-layout", str(result.outputs[0]), "-"],
+                            capture_output=True, text=True, check=True).stdout.replace("\f", "")
+    numbered = dict(re.findall(r"^ *(\d+) +(\S.*?) *$", layout, flags=re.M))
+    lines = {text: int(number) for number, text in numbered.items()}
+
+    # One number per text line, none for either image: the count runs without a gap.
+    assert sorted(lines.values()) == list(range(1, len(lines) + 1))
+    assert {"Fig. 1. Main caption.", "Fig. S1. Supplementary caption."} <= set(lines)
+    assert lines["Fig. 1. Main caption."] + 1 == lines["Closing paragraph."]
+    assert not result.warnings
+
+
+@needs_poppler
 def test_manuscript_header_includes_reach_the_pdf_preamble(tiny_config) -> None:
     config = tiny_config(wide=(
         "---\nheader-includes:\n  - \\usepackage{pdflscape}\n---\n\n# Wide\n\nPortrait text.\n\n"
@@ -390,8 +408,7 @@ def test_docx_uses_page_break_before_and_keeps_captions_with_images(tiny_config)
     def text_of(node) -> str:
         return "".join(t.text or "" for t in node.iterfind(".//w:t", W_NS))
 
-    for node, following in zip(body, body[1:]):
-        assert not (node.tag == w + "p" and is_break_only(node) and following.tag == w + "p"), text_of(following)
+    assert not [node for node in body if node.tag == w + "p" and is_break_only(node)]
     captions = [i for i, p in enumerate(body) if text_of(p).startswith("Fig. ")]
     assert [text_of(body[i]) for i in captions] == ["Fig. 1. Main caption.", "Fig. S1. Supplementary caption."]
     for i in captions:

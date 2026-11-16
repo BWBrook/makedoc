@@ -19,7 +19,7 @@ Nothing forces the move. v1 is frozen at the tag `v1.0.0`; a repository pinned t
 2. **Delete the workarounds** v1 needed (list below).
 3. **Run `makedoc check --all`**. It reports any config key v2 no longer accepts, with the fix.
 4. **Run `makedoc build --all`** and read the warnings. v1 hid them; v2 prints them. A build that now fails on a missing glyph was silently dropping that character before.
-5. **Look at the PDFs.** Pagination is unchanged for most text, but characters that used to vanish now take space.
+5. **Look at the PDFs.** Pagination is unchanged for most text, but characters that used to vanish now take space. Figure pages do change: each figure has one label, its caption and image stay on one page, and with line numbering on every caption line is numbered, so line numbers after the first figure can differ from v1 by a few.
 
 ## Command map
 
@@ -100,21 +100,22 @@ Outputs that v1 wrote under the makedoc checkout's `dist/<name>/` stay there. No
 - **DOCX images wider than the text area are scaled down** to fit the profile's margins.
 - **Citation keys containing `/`, `&`, `?` and similar** are read in full by the citation audit (for example DOI-style keys).
 - **Structure is read from the parsed document.** A figure line, placeholder or heading inside an HTML comment, a code block or a code span is never acted on. v1 matched lines of text and could extract a commented-out figure.
-- **A standalone image without an attribute block is a figure.** v1 moved only image lines that ended in `{...}`; an image paragraph with no attributes stayed where it was, as a captioned figure in the text. v2 treats any paragraph holding only an image as a figure and places it like the others. If the manuscript relied on the v1 behaviour, set `figures.placement: in_place`: every figure then stays where it is written, labelled `Fig. N.` with its caption.
+- **A standalone image without an attribute block is a figure.** v1 moved only image lines that ended in `{...}`; an image paragraph with no attributes stayed where it was, as a captioned figure in the text. v2 treats any paragraph holding only an image as a figure and places it like the others. If the manuscript relied on the v1 behaviour, set `figures.placement: in_place`: every figure then stays where it is written, labelled `Fig. N.` with its caption. v1 printed the caption of such a figure below the image, so add `caption_position: bottom` to keep that look. The figures do not float as v1's did: one that does not fit the rest of a page starts the next page, so pagination can differ by a page.
 - **One label per figure.** In `pages` and `inline` placement v1 printed its own `Fig. S1.` and, under the image, Pandoc's `Figure 1: caption`, with numbers that could disagree. v2 prints `Fig. S1. caption` once, above or below the image according to `caption_position`. Caption and image are kept on one page, the image is centred, and an image too tall for the space the caption leaves is scaled down.
 - **`header-includes` in the manuscript's YAML metadata reaches the LaTeX preamble.** v1 dropped it without a message. It is added after makedoc's own layout, so it can override it. For LaTeX that works after `\begin{document}`, a raw block (```` ```{=latex} ````) in a source file also works and is ignored by the DOCX.
 - **PDF images are converted to 300 dpi PNG for the DOCX**, because Word cannot display a PDF image. The PDF output still embeds the original.
 - **Review markup is expanded in figure captions** as well as in body text.
 - **DOCX layout follows the profile**: paper size, margins and page numbers, as well as line spacing and numbering. Title and author metadata are filled in.
 - **DOCX internals that scripts may match on have changed.** Image alt text (`descr`) is the caption, never the source path, and no local path is written anywhere in the file. Page breaks are `w:pageBreakBefore` on the paragraph that starts the page, not a paragraph of their own. Empty and image-only paragraphs carry `w:suppressLineNumbers`. XML namespace prefixes are the standard ones (`w:`), not `ns0:`. Run any DOCX post-processor you keep against a v2 file and check that it still does its work: one that matches the old shapes can pass while doing nothing.
-- **Blinded builds.** A profile without `author_metadata` produces a PDF with an empty Author field and a DOCX with no author; neither format contains local paths or user names.
+- **Blinded builds.** The PDF never carries author or title metadata, in any profile. The DOCX carries the authors only when the profile sets `author_metadata`. Neither format contains local paths or user names.
 - **A standalone supplement** (a profile whose figures are all supplementary) no longer gets a "Supplementary Information" divider page.
 - **The manifest schema changed.** A script that reads it needs these edits:
 
   | v1 key | v2 |
   | --- | --- |
-  | `git` (state of the makedoc checkout) | removed; `makedoc_version` is the version string |
-  | — | `manuscript_git: {sha, dirty}`, the manuscript repository |
+  | `git` (state of the makedoc checkout, with `branch`) | removed; `makedoc_version` is the version string and `makedoc_commit` the commit makedoc was installed from (`null` for an install that recorded none, such as a local checkout) |
+  | `config_path` | removed; the config file is `inputs[0]` |
+  | — | `manuscript_git: {sha, dirty}`, the manuscript repository; `null` when the config is not in a git repository. There is no branch field. |
   | `tool_versions.make` | removed; `pandoc`, `xelatex`, `python` remain |
   | `profile` | the resolved profile, absolute paths |
   | `inputs[]`, `outputs[]` | unchanged shape: `path`, `exists`, `size_bytes`, `sha256`. `inputs` now includes every figure image. |
@@ -127,13 +128,13 @@ The manifest is written during the build, so its DOCX hash describes the file ma
 
 ## Intermediate files
 
-`makedoc build --workdir DIR` keeps `prepared.md`, `resolved.json`, `layout.tex` and `latex/` (the xelatex log and aux files). With more than one profile each gets `DIR/<profile>/`. These names are stable within makedoc 2 and may be read by repository scripts, for example a page-length audit. Rebuild from the sources to change the output; do not edit the intermediates.
+`makedoc build --workdir DIR` keeps `prepared.md`, `resolved.json`, `layout.tex` and `latex/` (the xelatex log and aux files). With more than one profile each gets `DIR/<profile>/`. These names are stable within makedoc 2 and may be read by repository scripts, for example a page-length audit. Anything else in the directory (`structure.yaml`, `resolved_docx.json`, `raster/`) is internal and may change. Rebuild from the sources to change the output; do not edit the intermediates.
 
 ## Pins, old snapshots and collaborators
 
 - A repository pinned to a v1 commit keeps building from a checkout of that commit. `v1.0.0` is the last v1 state; older pinned commits that archived replays depend on are tagged `v1-pin-<sha>` so they stay reachable.
 - Tooling that replays an archived snapshot by mounting a makedoc checkout should stay on its v1 commit for those snapshots. Migrate only the live build.
-- Every machine that builds needs `uv`, Pandoc, xelatex and network access to GitHub on the first run (uvx caches makedoc afterwards). Tell collaborators before the pin changes.
+- Every machine that builds needs `uv`, Pandoc, xelatex, Poppler (`pdftoppm`) if any figure is a PDF, and network access to GitHub on the first run (uvx caches makedoc afterwards). Tell collaborators before the pin changes.
 
 ## A v2 wrapper Makefile
 

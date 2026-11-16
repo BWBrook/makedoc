@@ -289,10 +289,13 @@ def _breaks_before_paragraphs(root: ET.Element) -> None:
     if body is None:
         return
     children = list(body)
-    for index, paragraph in enumerate(children[:-1]):
-        following = children[index + 1]
-        if (not _is_page_break_only(paragraph) or following.tag != f"{{{W_NS}}}p"
-                or _is_page_break_only(following)):
+    bookmarks = (f"{{{W_NS}}}bookmarkStart", f"{{{W_NS}}}bookmarkEnd")
+    for index, paragraph in enumerate(children):
+        if not _is_page_break_only(paragraph):
+            continue
+        # Pandoc puts a heading's section bookmarks between the break and the heading.
+        following = next((node for node in children[index + 1:] if node.tag not in bookmarks), None)
+        if following is None or following.tag != f"{{{W_NS}}}p" or _is_page_break_only(following):
             continue
         props = following.find("w:pPr", NS)
         if props is None:

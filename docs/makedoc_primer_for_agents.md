@@ -6,7 +6,7 @@ You are in a repository that holds a scientific manuscript and want PDF and DOCX
 
 - The manuscript, figures, bibliography and build profile live in the manuscript repository.
 - makedoc is a command-line tool that the repository calls at a pinned version. Do not copy manuscript files into the makedoc repository, and do not vendor makedoc into the manuscript repository.
-- Requirements on the machine: [uv](https://docs.astral.sh/uv/), Pandoc 3 and a TeX distribution with `xelatex`. `makedoc doctor` reports what is missing and how to install it.
+- Requirements on the machine: [uv](https://docs.astral.sh/uv/), Pandoc 3 and a TeX distribution with `xelatex`; Poppler (`pdftoppm`) as well if any figure is a PDF. `makedoc doctor` reports what is missing and how to install it.
 
 Invoke makedoc pinned to a release:
 
@@ -184,9 +184,9 @@ Select profiles with `-p NAME` (repeatable) or `--all`. With neither, `default_p
 | `pages` (default) | Figures move after the references, one per page, each as `Fig. 1. Caption` with the image. |
 | `captions_page` | A "Figure Captions" page lists all captions; each figure then has its own page with the label only. Common for submission. |
 | `inline` | All figures are gathered at `<div id="figures"></div>` in the text (the id is `figures.placeholder_id`). If the placeholder is missing they go at the end, with a warning. |
-| `in_place` | Each figure stays where it is written, as `Fig. 1. Caption` with the image. Use it for a draft that reads with figures beside their text. |
+| `in_place` | Each figure stays where it is written, as `Fig. 1. Caption` with the image. Use it for a draft that reads with figures beside their text. A figure that does not fit the rest of a page starts the next one. |
 
-`figures.caption_position` is `top` or `bottom`. In the PDF a figure's caption and image always share a page, and an image too tall for the remaining space is scaled to fit.
+`figures.caption_position` is `top` or `bottom`. In the PDF a figure's caption and image always share a page, and an image too tall for the page is scaled to fit. With line numbering on, caption lines are numbered and the image is not.
 
 makedoc arranges figures written at the top level of the document. An image inside a fenced div, a list or a table is left to Pandoc, which gives it its own `Figure N:` caption; do not mix that with makedoc's numbering.
 

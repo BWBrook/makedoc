@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import subprocess
 import sys
@@ -43,6 +44,22 @@ def _first_line(command: list[str], cwd: Path | None = None) -> str:
     return lines[0].strip() if lines else ""
 
 
+def _installed_commit() -> str | None:
+    """The git commit makedoc was installed from, when the installer recorded one (PEP 610)."""
+    try:
+        record = importlib.metadata.distribution("makedoc").read_text("direct_url.json")
+        return json.loads(record or "{}").get("vcs_info", {}).get("commit_id")
+    except (importlib.metadata.PackageNotFoundError, ValueError, AttributeError):
+        return None
+
+
+def _manuscript_git(repo: Path) -> dict[str, Any] | None:
+    sha = _first_line(["git", "rev-parse", "HEAD"], cwd=repo)
+    if not sha:
+        return None
+    return {"sha": sha, "dirty": bool(_first_line(["git", "status", "--porcelain"], cwd=repo))}
+
+
 def manifest_path(profile: Profile) -> Path:
     return Path(profile.output_dir) / f"{profile.output_stem}_build_manifest.json"
 
@@ -60,10 +77,8 @@ def write_manifest(
     manifest = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "makedoc_version": __version__,
-        "manuscript_git": {
-            "sha": _first_line(["git", "rev-parse", "HEAD"], cwd=repo),
-            "dirty": bool(_first_line(["git", "status", "--porcelain"], cwd=repo)),
-        },
+        "makedoc_commit": _installed_commit(),
+        "manuscript_git": _manuscript_git(repo),
         "tool_versions": {
             "pandoc": _first_line(["pandoc", "--version"]),
             "xelatex": _first_line(["xelatex", "--version"]),

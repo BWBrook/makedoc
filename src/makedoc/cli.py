@@ -241,6 +241,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         else:
             print(f"MISSING  LaTeX package {package}")
             missing.append(package)
+    if shutil.which("pdftoppm"):
+        print("ok       pdftoppm (Poppler)")
+    else:
+        print("optional pdftoppm (Poppler): needed only to show PDF figures in the DOCX")
     if missing:
         platform = "darwin" if sys.platform == "darwin" else "linux"
         print(f"\nInstall hint: {INSTALL_HINTS[platform]}")

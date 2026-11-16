@@ -319,6 +319,19 @@ class NormalizeDocxStylesTests(unittest.TestCase):
             margins={side: 2.5 for side in ("top", "right", "bottom", "left")}))
         return list(ET.fromstring(output).find("w:body", NS))
 
+    def test_page_break_reaches_a_heading_across_its_section_bookmarks(self) -> None:
+        children = self._layout(
+            '<w:p><w:r><w:t>One.</w:t></w:r></w:p>'
+            '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+            '<w:bookmarkEnd w:id="9"/><w:bookmarkStart w:id="12" w:name="references"/>'
+            '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>References</w:t></w:r></w:p>'
+            '<w:bookmarkEnd w:id="12"/>'
+        )
+        self.assertEqual([child.tag.split("}")[1] for child in children],
+                         ["p", "bookmarkEnd", "bookmarkStart", "p", "bookmarkEnd", "sectPr"])
+        self.assertIsNotNone(children[3].find("w:pPr/w:pageBreakBefore", NS))
+        self.assertIsNone(children[0].find("w:pPr/w:keepNext", NS))
+
     def test_page_break_paragraph_becomes_page_break_before_on_the_next_paragraph(self) -> None:
         brk = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
         children = self._layout(
