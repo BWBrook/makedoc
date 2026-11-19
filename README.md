@@ -145,8 +145,8 @@ make test-review-markup
 External manuscript adoption guidance lives in
 `docs/review_markup_external_adoption.md`.
 
-DOCX review, comments, and source reconciliation belong to Wordmark; see
-`docs/docx_review_boundary.md`.
+DOCX review, comments, and source reconciliation are outside Makedoc; review
+at the source with scrivmark. See `docs/docx_review_boundary.md`.
 
 Figure placement regression:
 ```bash

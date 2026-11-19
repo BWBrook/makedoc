@@ -15,7 +15,7 @@ The recommended next step is a production-hardening goal, not a workflow
 redesign. The route works well enough to keep source of truth in Markdown and
 show visible additions, deletions, substitutions, and reviewer notes in
 generated outputs. It should remain clearly separate from true Microsoft Word
-Track Changes and the DOCX review workflow owned by Wordmark.
+Track Changes and from any DOCX review workflow.
 
 ## What Was Implemented
 
@@ -108,7 +108,7 @@ fixture lint, reference audit, build, and contract checks.
 
 - This is visible review markup, not true Word Track Changes.
 - It does not create entries in Word's Review pane.
-- It does not import DOCX edits back into Markdown; that workflow belongs to Wordmark.
+- It does not import DOCX edits back into Markdown.
 - The current transform is line-local and intentionally simple; markup tokens
   should stay on one source line.
 - The rendering uses robust Pandoc Markdown styling rather than red/green
@@ -127,5 +127,5 @@ Proceed with a follow-up production-hardening goal:
    feature will remain in the regression suite.
 4. Expand parser tests only as far as the agreed authoring contract requires.
 
-Do not add a DOCX-to-Markdown importer to Makedoc. Use Wordmark for DOCX
-review and source reconciliation.
+Do not add a DOCX-to-Markdown importer to Makedoc. Review at the source, with
+scrivmark.

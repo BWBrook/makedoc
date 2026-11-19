@@ -218,6 +218,6 @@ Ask Barry or the orchestrator before:
 - accepting visible markup in a journal submission output.
 
 DOCX review, comments, and source reconciliation are intentionally outside
-Makedoc. Use the Wordmark repository for that workflow; this Makedoc feature
+Makedoc. Review at the source with scrivmark; this Makedoc feature
 only renders visible review traces from Markdown source tokens. See
 `docs/docx_review_boundary.md` for the ownership decision.

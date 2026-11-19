@@ -51,7 +51,7 @@ content must not be copied into this repository.
 
 Makedoc owns source-driven manuscript preparation and document building. It
 does **not** own DOCX comments, native Word Track Changes, or DOCX-to-Markdown
-reconciliation. Those belong to the separate Wordmark project. See
+reconciliation. Review happens at the source, with scrivmark. See
 `docs/docx_review_boundary.md`.
 
 The retained `review_markup` feature is outbound only. Do not revive the
