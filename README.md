@@ -125,7 +125,7 @@ A top-level `common:` key is ignored by makedoc, so it can hold a YAML anchor sh
 - **Images.** A 16-bit PNG with an alpha channel fails the PDF build, because xelatex would embed it fully transparent. Re-save it as 8-bit.
 - **Code and comments.** makedoc arranges the document after Pandoc has parsed it, so anything inside a code block, a code span or an HTML comment is never treated as a figure, heading or placeholder. Lint and the citation audit skip those regions too.
 - **DOCX.** After Pandoc writes the DOCX, makedoc applies the profile's page size, margins, line spacing, line numbering and page numbers, sets headings to black, and fills in title and author metadata.
-- **Review markup** (off by default). `{++added++}`, `{--deleted--}`, `{~~old~>new~~}` and `{>>note<<}` on a single line render as bold bracketed traces. This is outbound only; Word comments and tracked changes belong to Wordmark ([docs/docx_review_boundary.md](docs/docx_review_boundary.md)).
+- **Review markup** (off by default). `{++added++}`, `{--deleted--}`, `{~~old~>new~~}` and `{>>note<<}` on a single line render as bold bracketed traces. This is outbound only; Word comments, tracked changes and DOCX-to-Markdown reconciliation are outside makedoc. Review at the source with scrivmark (`docs/docx_review_boundary.md`).
 
 ## Checks
 

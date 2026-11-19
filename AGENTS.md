@@ -38,7 +38,7 @@ The system Python may lack PyYAML; always go through `uv run`.
 3. **Manuscripts stay in their own repositories.** Do not copy manuscript content into this repository, and do not edit a manuscript repository while road-testing unless asked. Keep "the manuscript has a problem" separate from "makedoc has a problem".
 4. **The fixture is the regression contract.** When build behaviour changes, update the fixture or its tests in the same commit.
 5. **A passing build is not a checked document.** After a change to preparation, layout or DOCX handling, render the fixture and look at the pages.
-6. **Scope.** makedoc owns source preparation and building. Word comments, tracked changes and DOCX-to-Markdown reconciliation belong to Wordmark (`docs/docx_review_boundary.md`).
+6. **Scope.** makedoc owns source preparation and building. Word comments, tracked changes and DOCX-to-Markdown reconciliation are outside makedoc; review happens at the source with scrivmark (`docs/docx_review_boundary.md`).
 
 ## After a change
 

@@ -263,7 +263,7 @@ With `review_markup: {enabled: true}` in a profile, these single-line tokens ren
 | `{~~ old ~> new ~~}` | substitution |
 | `{>> note <<}` | reviewer note |
 
-Tokens cannot nest or span lines. This produces visible traces only. It does not create Word tracked changes; that workflow belongs to Wordmark.
+Tokens cannot nest or span lines. This produces visible traces only. It does not create Word tracked changes. For tracked changes and comment threads on the Markdown sources, use scrivmark.
 
 ## 10. Reporting a makedoc problem
 
