@@ -26,7 +26,7 @@ Nothing forces the move. v1 is frozen at the tag `v1.0.0`; a repository pinned t
 `MAKEDOC` below stands for however you invoke v2, normally:
 
 ```make
-MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
+MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.1 makedoc
 ```
 
 | v1 | v2 |
@@ -115,7 +115,7 @@ Outputs that v1 wrote under the makedoc checkout's `dist/<name>/` stay there. No
   | --- | --- |
   | `git` (state of the makedoc checkout, with `branch`) | removed; `makedoc_version` is the version string and `makedoc_commit` the commit makedoc was installed from (`null` for an install that recorded none, such as a local checkout) |
   | `config_path` | removed; the config file is `inputs[0]` |
-  | — | `manuscript_git: {sha, dirty}`, the manuscript repository as it was when the build started, so makedoc's own outputs do not count as changes (build every profile in one call with `--all`: a second `makedoc build` call sees the first call's outputs if they are tracked or not ignored); `null` when the config is not in a git repository. There is no branch field. |
+  | — | `manuscript_git: {sha, dirty}`, the manuscript repository. `dirty` ignores the PDF, DOCX and manifest files that the config's profiles write, so tracked or unignored outputs do not count as changes. `null` when the config is not in a git repository or the repository has no commit. There is no branch field. |
   | `tool_versions.make` | removed; `pandoc`, `xelatex`, `python` remain |
   | `profile` | the resolved profile, absolute paths |
   | `inputs[]`, `outputs[]` | unchanged shape: `path`, `exists`, `size_bytes`, `sha256`. `inputs` now includes every figure image. |
@@ -141,7 +141,7 @@ The manifest is written during the build, so its DOCX hash describes the file ma
 For a repository with `settings/build.yaml` beside the Makefile and several profiles:
 
 ```make
-MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
+MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.1 makedoc
 
 .PHONY: all check
 all:

@@ -18,13 +18,13 @@ sudo apt-get install pandoc texlive-xetex texlive-latex-extra texlive-fonts-reco
 Run makedoc with [uv](https://docs.astral.sh/uv/), pinned to a release, with nothing to install or keep in step:
 
 ```bash
-uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc --version
+uvx --from git+https://github.com/BWBrook/makedoc@v2.0.1 makedoc --version
 ```
 
 The examples below write `makedoc` for that prefix. To put the command on your PATH instead:
 
 ```bash
-uv tool install git+https://github.com/BWBrook/makedoc@v2.0.0
+uv tool install git+https://github.com/BWBrook/makedoc@v2.0.1
 ```
 
 ## Quick start
@@ -139,7 +139,7 @@ A top-level `common:` key is ignored by makedoc, so it can hold a YAML anchor sh
 
 Bibliography entries nobody cites are counted but do not fail.
 
-`makedoc build` does not run these checks, so a draft with unfinished citations still builds. It reports Pandoc and LaTeX warnings (an undefined figure link, a missing image), and `--strict` makes them fail.
+`makedoc build` does not run these checks, so a draft with unfinished citations still builds. It reports Pandoc and LaTeX warnings (an undefined figure link, for example), and `--strict` makes them fail. A missing figure image fails the build; `makedoc check` does not look at image files.
 
 ## Reproducibility
 

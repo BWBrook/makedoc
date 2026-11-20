@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import hashlib
 import importlib.metadata
 import json
@@ -13,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .profile import Profile
+from .profile import Profile, load_config, load_profile, profile_names
 
 
 def sha256_file(path: Path) -> str:
@@ -54,17 +53,40 @@ def _installed_commit() -> str | None:
         return None
 
 
-@functools.lru_cache(maxsize=None)
-def manuscript_git(repo: Path) -> dict[str, Any] | None:
-    """The manuscript repository's commit and whether it had uncommitted changes.
+def _build_products(config_path: Path) -> set[Path]:
+    """Every file a build of any profile in this config writes."""
+    products: set[Path] = set()
+    for name in profile_names(load_config(config_path)):
+        try:
+            profile = load_profile(config_path, name)
+        except ValueError:
+            continue
+        out = Path(profile.output_dir).resolve()
+        products.update(out / f"{profile.output_stem}{suffix}"
+                        for suffix in (".pdf", ".docx", "_build_manifest.json"))
+    return products
 
-    Cached per process and first called before a build writes anything, so that
-    makedoc's own outputs do not make a clean repository look dirty.
-    """
+
+def manuscript_git(config_path: Path) -> dict[str, Any] | None:
+    """The manuscript repository's commit, and whether anything but build products has changed."""
+    repo = config_path.resolve().parent
     sha = _first_line(["git", "rev-parse", "HEAD"], cwd=repo)
-    if not sha:
+    top = _first_line(["git", "rev-parse", "--show-toplevel"], cwd=repo)
+    if not sha or not top:
         return None
-    return {"sha": sha, "dirty": bool(_first_line(["git", "status", "--porcelain"], cwd=repo))}
+    status = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+                            check=False, capture_output=True, text=True, cwd=repo).stdout
+    products = _build_products(config_path)
+    entries = iter(status.split("\0"))
+    dirty = False
+    for entry in entries:
+        if not entry:
+            continue
+        if entry[0] in "RC":
+            next(entries, None)  # The path it was renamed or copied from.
+        if (Path(top) / entry[3:]).resolve() not in products:
+            dirty = True
+    return {"sha": sha, "dirty": dirty}
 
 
 def manifest_path(profile: Profile) -> Path:
@@ -74,7 +96,6 @@ def manifest_path(profile: Profile) -> Path:
 def write_manifest(
     profile: Profile, config_path: Path, outputs: list[Path], warnings: list[str], images: list[Path]
 ) -> Path:
-    repo = config_path.resolve().parent
     inputs = [config_path.resolve(), *(Path(item) for item in profile.manuscript_sources)]
     inputs.extend(images)
     for optional in (profile.author_metadata, profile.bibliography, profile.csl):
@@ -85,7 +106,7 @@ def write_manifest(
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "makedoc_version": __version__,
         "makedoc_commit": _installed_commit(),
-        "manuscript_git": manuscript_git(repo),
+        "manuscript_git": manuscript_git(config_path),
         "tool_versions": {
             "pandoc": _first_line(["pandoc", "--version"]),
             "xelatex": _first_line(["xelatex", "--version"]),

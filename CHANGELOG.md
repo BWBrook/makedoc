@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.1 (2026-11-20)
+
+### Fixed
+
+- The manifest's `manuscript_git.dirty` ignores the PDF, DOCX and manifest files that the config's profiles write. A repository that tracks its built outputs was recorded as dirty on every second build.
+- `manuscript_git` is `null` in a repository with no commit.
+- Docs: a missing figure image fails `makedoc build`; `makedoc check` does not look at image files.
+
 ## 2.0.0 (2026-11-20)
 
 makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) gives the v1 to v2 steps.

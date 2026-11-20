@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .docx import normalize_docx
 from .layout import render_layout
-from .manifest import manuscript_git, write_manifest
+from .manifest import write_manifest
 import yaml
 
 from .prepare import prepare_markdown, structure_metadata
@@ -243,7 +243,6 @@ def build_profile(
     directory. Outputs are moved into place only after each format succeeds.
     """
     require_tools(formats)
-    manuscript_git(config_path.resolve().parent)  # Record the state before anything is written.
     with collect_warnings() as own_warnings, _work_directory(workdir) as work:
         try:
             resolved, structure_warnings = _resolve(profile, work)

@@ -11,7 +11,7 @@ You are in a repository that holds a scientific manuscript and want PDF and DOCX
 Invoke makedoc pinned to a release:
 
 ```bash
-uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc <command>
+uvx --from git+https://github.com/BWBrook/makedoc@v2.0.1 makedoc <command>
 ```
 
 The rest of this primer writes `makedoc` for that. Put the prefix in one place, such as a `MAKEDOC` variable in the repository's Makefile, so the pin is changed in one line.
@@ -207,7 +207,7 @@ A raw block (```` ```{=latex} ````) in the body is passed to LaTeX and ignored b
 
 ## 5. Checks, warnings and what a green build means
 
-`makedoc check` fails on an invalid config, a missing input file, a `[REF]` placeholder, a hand-typed author–year citation, a table row with the wrong number of cells, or a cited key missing from the bibliography. Uncited bibliography entries are counted, not failed.
+`makedoc check` fails on an invalid config, a missing input file, a `[REF]` placeholder, a hand-typed author–year citation, a table row with the wrong number of cells, or a cited key missing from the bibliography. Uncited bibliography entries are counted, not failed. It does not look at figure image files: a missing image is caught by `makedoc build`.
 
 `makedoc build` does not run those checks, so drafts with unfinished citations still build. It prints every Pandoc and LaTeX warning as `warning [profile]: ...`. Use `--strict` for a submission build so that a warning is a failure.
 
@@ -224,7 +224,7 @@ The makedoc version is fixed by the tag in the `uvx --from ...@TAG` spec; use a 
 ## 7. A wrapper Makefile
 
 ```make
-MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.0 makedoc
+MAKEDOC := uvx --from git+https://github.com/BWBrook/makedoc@v2.0.1 makedoc
 
 .PHONY: all check
 all:

@@ -441,7 +441,18 @@ def test_manifest_dirty_flag_ignores_the_outputs_of_the_build(tiny_config, tmp_p
 
     assert main(["build", "-c", str(config), "--all", "--docx"]) == 0
 
-    for name in ("one", "two"):
-        manifest = json.loads((tmp_path / name / f"{name}_build_manifest.json").read_text(encoding="utf-8"))
-        assert manifest["manuscript_git"]["dirty"] is False
-        assert len(manifest["manuscript_git"]["sha"]) == 40
+    def recorded(name: str) -> dict:
+        return json.loads((tmp_path / name / f"{name}_build_manifest.json").read_text(encoding="utf-8"))["manuscript_git"]
+
+    assert [recorded(name)["dirty"] for name in ("one", "two")] == [False, False]
+    assert len(recorded("one")["sha"]) == 40
+
+    # Tracked outputs that a rebuild changes are still not source changes; an edited source is.
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "outputs"], check=True)
+    assert main(["build", "-c", str(config), "-p", "one", "--docx"]) == 0
+    assert main(["build", "-c", str(config), "-p", "two", "--docx"]) == 0
+    assert recorded("two")["dirty"] is False
+    (tmp_path / "one.md").write_text("# One\n\nEdited.\n", encoding="utf-8")
+    assert main(["build", "-c", str(config), "-p", "two", "--docx"]) == 0
+    assert recorded("two")["dirty"] is True
