@@ -1,6 +1,6 @@
 [project]
 name = "makedoc"
-version = "2.0.0.dev0"
+version = "2.0.0"
 description = "Build journal-ready PDF and DOCX manuscripts from Markdown, a bibliography and a YAML profile."
 readme = "README.md"
 license = "MIT"

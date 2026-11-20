@@ -430,3 +430,18 @@ def test_docx_receives_png_for_pdf_figure(tiny_config, tmp_path: Path) -> None:
         assert media and all(name.endswith(".png") for name in media), media
         assert archive.read(media[0])[:8] == b"\x89PNG\r\n\x1a\n"
     assert not any("pdftoppm" in warning for warning in result.warnings)
+
+
+def test_manifest_dirty_flag_ignores_the_outputs_of_the_build(tiny_config, tmp_path: Path) -> None:
+    config = tiny_config(one="# One\n\nText.\n", two="# Two\n\nText.\n")
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.org", "-C", str(tmp_path)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "sources"], check=True)
+
+    assert main(["build", "-c", str(config), "--all", "--docx"]) == 0
+
+    for name in ("one", "two"):
+        manifest = json.loads((tmp_path / name / f"{name}_build_manifest.json").read_text(encoding="utf-8"))
+        assert manifest["manuscript_git"]["dirty"] is False
+        assert len(manifest["manuscript_git"]["sha"]) == 40

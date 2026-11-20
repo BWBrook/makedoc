@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-20)
 
 makedoc becomes an installable command-line tool. [MIGRATING.md](MIGRATING.md) gives the v1 to v2 steps.
 

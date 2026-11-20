@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import importlib.metadata
 import json
@@ -53,7 +54,13 @@ def _installed_commit() -> str | None:
         return None
 
 
-def _manuscript_git(repo: Path) -> dict[str, Any] | None:
+@functools.lru_cache(maxsize=None)
+def manuscript_git(repo: Path) -> dict[str, Any] | None:
+    """The manuscript repository's commit and whether it had uncommitted changes.
+
+    Cached per process and first called before a build writes anything, so that
+    makedoc's own outputs do not make a clean repository look dirty.
+    """
     sha = _first_line(["git", "rev-parse", "HEAD"], cwd=repo)
     if not sha:
         return None
@@ -78,7 +85,7 @@ def write_manifest(
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "makedoc_version": __version__,
         "makedoc_commit": _installed_commit(),
-        "manuscript_git": _manuscript_git(repo),
+        "manuscript_git": manuscript_git(repo),
         "tool_versions": {
             "pandoc": _first_line(["pandoc", "--version"]),
             "xelatex": _first_line(["xelatex", "--version"]),
