@@ -115,7 +115,7 @@ Outputs that v1 wrote under the makedoc checkout's `dist/<name>/` stay there. No
   | --- | --- |
   | `git` (state of the makedoc checkout, with `branch`) | removed; `makedoc_version` is the version string and `makedoc_commit` the commit makedoc was installed from (`null` for an install that recorded none, such as a local checkout) |
   | `config_path` | removed; the config file is `inputs[0]` |
-  | — | `manuscript_git: {sha, dirty}`, the manuscript repository as it was when the build started, so makedoc's own outputs do not count as changes; `null` when the config is not in a git repository. There is no branch field. |
+  | — | `manuscript_git: {sha, dirty}`, the manuscript repository as it was when the build started, so makedoc's own outputs do not count as changes (build every profile in one call with `--all`: a second `makedoc build` call sees the first call's outputs if they are tracked or not ignored); `null` when the config is not in a git repository. There is no branch field. |
   | `tool_versions.make` | removed; `pandoc`, `xelatex`, `python` remain |
   | `profile` | the resolved profile, absolute paths |
   | `inputs[]`, `outputs[]` | unchanged shape: `path`, `exists`, `size_bytes`, `sha256`. `inputs` now includes every figure image. |
